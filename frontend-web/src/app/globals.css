@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-soft-white font-poppins text-gray-800;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-poppins font-bold;
+  }
+}
+
+@layer components {
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .section-padding {
+    @apply py-16 md:py-24 lg:py-32;
+  }
+
+  .gradient-bg {
+    @apply bg-gradient-to-br from-pastel-blue-50 via-soft-white to-pastel-blue-100;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-2xl hover:-translate-y-2;
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-sm bg-white/70 border border-white/30 shadow-lg;
+  }
+}
+
+/* Tambahkan ini di globals.css */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.shadow-3xl {
+  box-shadow: 0 30px 60px -15px rgba(74, 154, 230, 0.3);
+}
+
+.shadow-4xl {
+  box-shadow: 0 40px 80px -20px rgba(74, 154, 230, 0.4);
+}
+
+/* Animasi untuk partikel */
+@keyframes float-particle {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  50% { transform: translateY(-30px) translateX(20px); }
+}
+
+/* Efek teks neon */
+.text-neon {
+  text-shadow: 0 0 10px rgba(74, 154, 230, 0.3),
+               0 0 20px rgba(74, 154, 230, 0.2),
+               0 0 40px rgba(74, 154, 230, 0.1);
+}
