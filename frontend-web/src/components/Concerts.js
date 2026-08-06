@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -151,18 +151,58 @@ const cardVariants = {
 };
 
 export default function Concerts() {
+  const [concertsState, setConcertsState] = useState(concerts);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
   const [liked, setLiked] = useState({});
   const [hoveredId, setHoveredId] = useState(null);
   const [selectedGenre, setSelectedGenre] = useState('Semua');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  useEffect(() => {
+    const fetchTickets = async () => {
+      try {
+        setIsLoadingApi(true);
+        const { fetchApi } = await import('@/utils/api');
+        const response = await fetchApi('/tickets');
+        if (response.success && Array.isArray(response.data) && response.data.length > 0) {
+          const mapped = response.data.map((t, idx) => ({
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            date: t.date,
+            time: t.time || '19:00 WIB',
+            location: t.venue,
+            price: t.formatted_price || `Rp ${Number(t.price).toLocaleString('id-ID')}`,
+            image: t.poster || concerts[idx % concerts.length]?.image || 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&h=600&fit=crop&crop=center',
+            available: t.available || t.quota || 100,
+            rating: Number(t.rating) || 4.8,
+            category: t.category || 'Pop',
+            featured: Boolean(t.featured),
+            color: concerts[idx % concerts.length]?.color || 'from-rose-400/80 to-orange-400/80',
+            gradient: concerts[idx % concerts.length]?.gradient || 'from-rose-50 to-orange-50/60',
+            border: concerts[idx % concerts.length]?.border || 'border-rose-200/30',
+            tag: t.tag || '🔥 Popular',
+          }));
+          setConcertsState(mapped);
+        }
+      } catch (err) {
+        console.warn('Menggunakan fallback data konser lokal:', err.message);
+      } finally {
+        setIsLoadingApi(false);
+      }
+    };
+
+    fetchTickets();
+  }, []);
+
   // Pisahkan konser menjadi trending (featured) dan mendatang (non-featured)
-  const trendingConcerts = concerts.filter(c => c.featured);
-  const upcomingConcerts = concerts.filter(c => !c.featured);
+  const trendingConcerts = concertsState.filter(c => c.featured);
+  const upcomingConcerts = concertsState.filter(c => !c.featured);
+  const allDisplayConcerts = concertsState;
 
   // Terapkan filter genre
   const filteredTrending = selectedGenre === 'Semua'
-    ? trendingConcerts
+    ? (trendingConcerts.length > 0 ? trendingConcerts : allDisplayConcerts)
     : trendingConcerts.filter(c => c.category === selectedGenre);
 
   const filteredUpcoming = selectedGenre === 'Semua'

@@ -106,25 +106,49 @@ const ShimmerBackground = () => {
   return <canvas ref={canvasRef} className="absolute inset-0 z-0 pointer-events-none" />;
 };
 
+import { useRouter } from "next/navigation";
+import { setToken, setUser, fetchApi } from "@/utils/api";
+
 export default function RegisterPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const passwordsMatch = password === confirmPassword && password.length > 0;
   const isFormValid = name && email && passwordsMatch;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormValid) return;
+    setErrorMsg("");
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      const response = await fetchApi("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (response.success && response.token) {
+        setToken(response.token);
+        if (response.user) {
+          setUser(response.user);
+        }
+        router.push("/");
+      } else {
+        setErrorMsg(response.message || "Gagal membuat akun.");
+      }
+    } catch (error) {
+      setErrorMsg(error.message || "Gagal mendaftar. Periksa koneksi backend Anda.");
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -212,6 +236,14 @@ export default function RegisterPage() {
             <div className="w-12 h-px bg-gradient-to-r from-indigo-300/50 to-blue-300/50 mx-auto mt-3" />
             <p className="mt-4 text-sm text-white/40 font-light">Mulai perjalanan musikmu di sini</p>
           </div>
+
+          {/* ===== ERROR ALERT ===== */}
+          {errorMsg && (
+            <div className="mb-4 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-center gap-2 backdrop-blur-md">
+              <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
           {/* ===== FORM ===== */}
           <form onSubmit={handleSubmit} className="space-y-4 relative">

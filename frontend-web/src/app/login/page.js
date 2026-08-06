@@ -106,18 +106,42 @@ const ShimmerBackground = () => {
   return <canvas ref={canvasRef} className="absolute inset-0 z-0 pointer-events-none" />;
 };
 
+import { useRouter } from "next/navigation";
+import { setToken, setUser, fetchApi } from "@/utils/api";
+
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
     setIsLoading(true);
-    setTimeout(() => {
+
+    try {
+      const response = await fetchApi("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.success && response.token) {
+        setToken(response.token);
+        if (response.user) {
+          setUser(response.user);
+        }
+        router.push("/");
+      } else {
+        setErrorMsg(response.message || "Gagal masuk. Periksa email dan password.");
+      }
+    } catch (error) {
+      setErrorMsg(error.message || "Gagal masuk. Periksa koneksi backend Anda.");
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -212,6 +236,14 @@ export default function LoginPage() {
             <div className="w-12 h-px bg-gradient-to-r from-blue-300/50 to-indigo-300/50 mx-auto mt-3" />
             <p className="mt-4 text-sm text-white/40 font-light">Masuk ke akun TicketVerse Anda</p>
           </div>
+
+          {/* ===== ERROR ALERT ===== */}
+          {errorMsg && (
+            <div className="mb-6 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-center gap-2 backdrop-blur-md">
+              <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
           {/* ===== FORM ===== */}
           <form onSubmit={handleSubmit} className="space-y-5 relative">
