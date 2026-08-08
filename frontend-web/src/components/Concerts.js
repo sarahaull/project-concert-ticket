@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -15,8 +15,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { StarIcon, HeartIcon, FireIcon } from '@heroicons/react/24/solid';
 
-// Data konser dengan tambahan K-Pop
-const concerts = [
+// Data konser fallback (statis)
+const staticConcerts = [
   {
     id: 1,
     title: 'Konser Rock Festival 2026',
@@ -127,8 +127,8 @@ const concerts = [
   },
 ];
 
-// Daftar genre unik untuk filter
-const genres = ['Semua', ...new Set(concerts.map(c => c.category))];
+// Daftar genre unik untuk filter (akan di-update dari data)
+const fallbackGenres = ['Semua', ...new Set(staticConcerts.map(c => c.category))];
 
 const cardVariants = {
   hidden: { opacity: 0, y: 60, scale: 0.94 },
@@ -154,12 +154,11 @@ export default function Concerts() {
   const [liked, setLiked] = useState({});
   const [hoveredId, setHoveredId] = useState(null);
   const [selectedGenre, setSelectedGenre] = useState('Semua');
+  const [concertsState, setConcertsState] = useState(staticConcerts);
+  const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [genres, setGenres] = useState(fallbackGenres);
 
-<<<<<<< HEAD
-  // Pisahkan konser menjadi trending (featured) dan mendatang (non-featured)
-  const trendingConcerts = concerts.filter(c => c.featured);
-  const upcomingConcerts = concerts.filter(c => !c.featured);
-=======
+  // Ambil data dari API
   useEffect(() => {
     const fetchTickets = async () => {
       try {
@@ -175,20 +174,24 @@ export default function Concerts() {
             time: t.time || '19:00 WIB',
             location: t.venue,
             price: t.formatted_price || `Rp ${Number(t.price).toLocaleString('id-ID')}`,
-            image: t.poster || concerts[idx % concerts.length]?.image || 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&h=600&fit=crop&crop=center',
+            image: t.poster || staticConcerts[idx % staticConcerts.length]?.image || 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&h=600&fit=crop&crop=center',
             available: t.available || t.quota || 100,
             rating: Number(t.rating) || 4.8,
             category: t.category || 'Pop',
             featured: Boolean(t.featured),
-            color: concerts[idx % concerts.length]?.color || 'from-rose-400/80 to-orange-400/80',
-            gradient: concerts[idx % concerts.length]?.gradient || 'from-rose-50 to-orange-50/60',
-            border: concerts[idx % concerts.length]?.border || 'border-rose-200/30',
+            color: staticConcerts[idx % staticConcerts.length]?.color || 'from-rose-400/80 to-orange-400/80',
+            gradient: staticConcerts[idx % staticConcerts.length]?.gradient || 'from-rose-50 to-orange-50/60',
+            border: staticConcerts[idx % staticConcerts.length]?.border || 'border-rose-200/30',
             tag: t.tag || '🔥 Popular',
           }));
           setConcertsState(mapped);
+          // Update genre list dari data API
+          const newGenres = ['Semua', ...new Set(mapped.map(c => c.category))];
+          setGenres(newGenres);
         }
       } catch (err) {
         console.warn('Menggunakan fallback data konser lokal:', err.message);
+        // Tetap pakai staticConcerts
       } finally {
         setIsLoadingApi(false);
       }
@@ -197,10 +200,14 @@ export default function Concerts() {
     fetchTickets();
   }, []);
 
+  // Update genres jika concertsState berubah (misal dari API)
+  useEffect(() => {
+    const newGenres = ['Semua', ...new Set(concertsState.map(c => c.category))];
+    setGenres(newGenres);
+  }, [concertsState]);
+
   const trendingConcerts = concertsState.filter(c => c.featured);
   const upcomingConcerts = concertsState.filter(c => !c.featured);
-  const allDisplayConcerts = concertsState;
->>>>>>> b1ebdba (update landing page dan tampilan user)
 
   const filteredTrending = selectedGenre === 'Semua'
     ? trendingConcerts
@@ -462,7 +469,7 @@ export default function Concerts() {
               <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse delay-300" />
             </div>
             <span className="text-[10px] sm:text-sm font-semibold text-sapphire tracking-wide">
-              🎫 {concerts.length} Konser Mendatang
+              🎫 {concertsState.length} Konser Mendatang
             </span>
           </motion.div>
 

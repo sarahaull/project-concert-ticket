@@ -1,45 +1,24 @@
-
-<<<<<<< HEAD
+// app/page.js
 import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
 import Features from '@/components/Features';
-import Concerts from '@/components/Concerts';
-import Testimonials from '@/components/Testimonials';
+import HowToBook from '@/components/HowToBook';
 import Stats from '@/components/Stats';
-import HowToBook from "@/components/HowToBook";
+import Testimonials from '@/components/Testimonials';
 import CTA from '@/components/CTA';
 import Footer from '@/components/Footer';
 
 export default function Home() {
   return (
-    <main className="min-h-screen">
-=======
-"use client";
-
-import Navbar from "@/components/Navbar";
-import Hero from "@/components/Hero";
-import Features from "@/components/Features";
-import Concerts from "@/components/Concerts";
-import Testimonials from "@/components/Testimonials";
-import Stats from "@/components/Stats";
-import HowToBook from "@/components/HowToBook";
-import CTA from "@/components/CTA";
-import Footer from "@/components/Footer";
-
-export default function Home() {
-  return (
-    <main className="min-h-screen bg-[#0a0e1a] text-white">
->>>>>>> b1ebdba (update landing page dan tampilan user)
+    <main className="min-h-screen bg-ivory text-navy">
       <Navbar />
       <Hero />
-      <Stats />
-      <Concerts />
       <Features />
-      <Testimonials />
       <HowToBook />
+      <Stats />
+      <Testimonials />
       <CTA />
       <Footer />
     </main>
   );
 }
-
