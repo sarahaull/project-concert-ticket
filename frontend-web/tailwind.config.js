@@ -8,6 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        // ===== WARNA YANG SUDAH ADA =====
         'pastel-blue': {
           50: '#F0F7FF',
           100: '#D6E8FF',
@@ -18,6 +19,13 @@ export default {
           600: '#3A7AB8',
         },
         'soft-white': '#FAFCFE',
+
+        // ===== PALET DARI GAMBAR (TAMBAHKAN INI) =====
+        navy: '#112250',
+        sapphire: '#3B507D',
+        'warm-taupe': '#BEB7A7',
+        champagne: '#E7E2CE',
+        ivory: '#F5F4F0',
       },
       fontFamily: {
         'poppins': ['Poppins', 'sans-serif'],

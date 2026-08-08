@@ -154,13 +154,54 @@ export default function Concerts() {
   const [liked, setLiked] = useState({});
   const [hoveredId, setHoveredId] = useState(null);
   const [selectedGenre, setSelectedGenre] = useState('Semua');
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+<<<<<<< HEAD
   // Pisahkan konser menjadi trending (featured) dan mendatang (non-featured)
   const trendingConcerts = concerts.filter(c => c.featured);
   const upcomingConcerts = concerts.filter(c => !c.featured);
+=======
+  useEffect(() => {
+    const fetchTickets = async () => {
+      try {
+        setIsLoadingApi(true);
+        const { fetchApi } = await import('@/utils/api');
+        const response = await fetchApi('/tickets');
+        if (response.success && Array.isArray(response.data) && response.data.length > 0) {
+          const mapped = response.data.map((t, idx) => ({
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            date: t.date,
+            time: t.time || '19:00 WIB',
+            location: t.venue,
+            price: t.formatted_price || `Rp ${Number(t.price).toLocaleString('id-ID')}`,
+            image: t.poster || concerts[idx % concerts.length]?.image || 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&h=600&fit=crop&crop=center',
+            available: t.available || t.quota || 100,
+            rating: Number(t.rating) || 4.8,
+            category: t.category || 'Pop',
+            featured: Boolean(t.featured),
+            color: concerts[idx % concerts.length]?.color || 'from-rose-400/80 to-orange-400/80',
+            gradient: concerts[idx % concerts.length]?.gradient || 'from-rose-50 to-orange-50/60',
+            border: concerts[idx % concerts.length]?.border || 'border-rose-200/30',
+            tag: t.tag || '🔥 Popular',
+          }));
+          setConcertsState(mapped);
+        }
+      } catch (err) {
+        console.warn('Menggunakan fallback data konser lokal:', err.message);
+      } finally {
+        setIsLoadingApi(false);
+      }
+    };
 
-  // Terapkan filter genre
+    fetchTickets();
+  }, []);
+
+  const trendingConcerts = concertsState.filter(c => c.featured);
+  const upcomingConcerts = concertsState.filter(c => !c.featured);
+  const allDisplayConcerts = concertsState;
+>>>>>>> b1ebdba (update landing page dan tampilan user)
+
   const filteredTrending = selectedGenre === 'Semua'
     ? trendingConcerts
     : trendingConcerts.filter(c => c.category === selectedGenre);
@@ -173,7 +214,6 @@ export default function Concerts() {
     setLiked((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Fungsi untuk render grid konser (digunakan dua kali)
   const renderConcertGrid = (concertsList, emptyMessage = 'Tidak ada konser') => (
     <AnimatePresence mode="wait">
       <motion.div
@@ -192,7 +232,7 @@ export default function Concerts() {
             transition: { staggerChildren: 0.03, staggerDirection: -1 },
           },
         }}
-        className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8"
       >
         {concertsList.map((concert, index) => (
           <motion.div
@@ -206,18 +246,18 @@ export default function Concerts() {
           >
             <motion.div
               whileHover={{ y: -6, transition: { duration: 0.3 } }}
-              className={`relative bg-white/80 backdrop-blur-xl rounded-3xl overflow-hidden shadow-2xl shadow-slate-200/40 border ${concert.border} transition-all duration-500 hover:shadow-3xl hover:shadow-pastel-blue-200/50`}
+              className="relative bg-white/80 backdrop-blur-xl rounded-2xl md:rounded-3xl overflow-hidden shadow-xl shadow-navy/10 border border-warm-taupe/30 transition-all duration-500 hover:shadow-2xl hover:shadow-sapphire/20"
             >
               {/* Glow efek saat hover */}
               <div
-                className={`absolute -inset-0.5 bg-gradient-to-r ${concert.color} opacity-0 group-hover:opacity-30 rounded-3xl blur-2xl transition-opacity duration-700 -z-10`}
+                className={`absolute -inset-0.5 bg-gradient-to-r ${concert.color} opacity-0 group-hover:opacity-30 rounded-2xl md:rounded-3xl blur-2xl transition-opacity duration-700 -z-10`}
               />
 
               {/* Background gradasi halus di card */}
               <div className={`absolute inset-0 bg-gradient-to-br ${concert.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-700 -z-5`} />
 
               {/* Image Container */}
-              <div className="relative h-56 md:h-64 overflow-hidden">
+              <div className="relative h-48 sm:h-56 md:h-64 overflow-hidden">
                 <Image
                   src={concert.image}
                   alt={concert.title}
@@ -226,26 +266,26 @@ export default function Concerts() {
                     hoveredId === concert.id ? 'scale-110' : 'scale-100'
                   }`}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-slate-900/10 to-transparent" />
-                
+                <div className="absolute inset-0 bg-gradient-to-t from-navy/60 via-navy/10 to-transparent" />
+
                 {/* Overlay warna kategori saat hover */}
                 <div
                   className={`absolute inset-0 bg-gradient-to-br ${concert.color} opacity-0 group-hover:opacity-30 transition-opacity duration-700`}
                 />
 
                 {/* Featured & Tags */}
-                <div className="absolute top-4 left-4 flex flex-wrap items-center gap-2 z-10">
+                <div className="absolute top-3 left-3 flex flex-wrap items-center gap-1.5 z-10">
                   {concert.featured && (
                     <motion.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg shadow-amber-400/30"
+                      className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 text-white text-[9px] sm:text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg shadow-amber-400/30"
                     >
-                      <FireIcon className="w-3.5 h-3.5" />
+                      <FireIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       Trending
                     </motion.div>
                   )}
-                  <span className="bg-black/40 backdrop-blur-sm text-white text-[10px] font-medium px-3 py-1.5 rounded-full border border-white/20">
+                  <span className="bg-navy/40 backdrop-blur-sm text-ivory text-[9px] sm:text-[10px] font-medium px-2.5 py-1 rounded-full border border-warm-taupe/30">
                     {concert.tag}
                   </span>
                 </div>
@@ -254,44 +294,44 @@ export default function Concerts() {
                 <motion.button
                   whileTap={{ scale: 0.7 }}
                   onClick={() => toggleLike(concert.id)}
-                  className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/80 backdrop-blur-md border border-white/50 shadow-lg flex items-center justify-center hover:bg-white transition-all duration-300"
+                  className="absolute top-3 right-3 z-10 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/80 backdrop-blur-md border border-white/50 shadow-lg flex items-center justify-center hover:bg-white transition-all duration-300"
                 >
                   <HeartIcon
-                    className={`w-5 h-5 transition-all duration-300 ${
+                    className={`w-4 h-4 sm:w-5 sm:h-5 transition-all duration-300 ${
                       liked[concert.id]
                         ? 'text-rose-500 fill-rose-500 scale-110'
-                        : 'text-slate-400 hover:text-rose-400'
+                        : 'text-warm-taupe hover:text-rose-400'
                     }`}
                   />
                 </motion.button>
 
                 {/* Rating */}
-                <div className="absolute top-4 right-14 z-10 flex items-center gap-1.5 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/20">
-                  <StarIcon className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-white text-xs font-bold">{concert.rating}</span>
+                <div className="absolute top-3 right-14 z-10 flex items-center gap-1 bg-navy/40 backdrop-blur-sm px-2 py-1 rounded-full border border-warm-taupe/30">
+                  <StarIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
+                  <span className="text-ivory text-[10px] sm:text-xs font-bold">{concert.rating}</span>
                 </div>
 
                 {/* Info bawah gambar */}
-                <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-end justify-between gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <span
-                      className={`bg-gradient-to-r ${concert.color} text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg backdrop-blur-sm`}
+                      className={`bg-gradient-to-r ${concert.color} text-white text-[9px] sm:text-xs font-bold px-2.5 py-1 rounded-full shadow-lg backdrop-blur-sm`}
                     >
                       {concert.category}
                     </span>
-                    <span className="flex items-center gap-1.5 text-white/90 text-xs font-medium bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
-                      <UsersIcon className="w-3.5 h-3.5" />
-                      {concert.available} tiket
+                    <span className="flex items-center gap-1 text-ivory/90 text-[9px] sm:text-xs font-medium bg-navy/30 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                      <UsersIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                      {concert.available}
                     </span>
                   </div>
                   <motion.div
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: hoveredId === concert.id ? 1 : 0, x: hoveredId === concert.id ? 0 : 10 }}
                     transition={{ duration: 0.3 }}
-                    className="bg-white/95 backdrop-blur-xl px-4 py-2 rounded-2xl shadow-2xl border border-white/50"
+                    className="bg-white/95 backdrop-blur-xl px-3 py-1.5 rounded-xl shadow-2xl border border-white/50"
                   >
-                    <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Mulai dari</p>
-                    <p className="text-sm font-extrabold text-pastel-blue-600">
+                    <p className="text-[7px] sm:text-[8px] font-medium text-warm-taupe uppercase tracking-wider">Mulai dari</p>
+                    <p className="text-xs sm:text-sm font-extrabold text-sapphire">
                       {concert.price.split(' - ')[0]}
                     </p>
                   </motion.div>
@@ -300,43 +340,43 @@ export default function Concerts() {
                 {/* K-Pop Special Badge */}
                 {concert.category === 'K-Pop' && (
                   <div className="absolute -top-1 -right-1 z-10">
-                    <div className="w-10 h-10 bg-gradient-to-br from-pink-400 to-rose-500 rounded-full flex items-center justify-center shadow-2xl shadow-pink-400/40">
-                      <span className="text-lg">🇰🇷</span>
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-pink-400 to-rose-500 rounded-full flex items-center justify-center shadow-2xl shadow-pink-400/40">
+                      <span className="text-base sm:text-lg">🇰🇷</span>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Content */}
-              <div className="p-5 md:p-6 space-y-3">
+              <div className="p-4 sm:p-5 md:p-6 space-y-2.5 sm:space-y-3">
                 <div>
                   <h3
-                    className={`text-lg md:text-xl font-bold text-slate-800 transition-colors duration-300 line-clamp-1 ${
-                      hoveredId === concert.id ? 'text-pastel-blue-600' : ''
+                    className={`text-base sm:text-lg md:text-xl font-bold text-navy transition-colors duration-300 line-clamp-1 ${
+                      hoveredId === concert.id ? 'text-sapphire' : ''
                     }`}
                   >
                     {concert.title}
                   </h3>
-                  <p className="text-sm text-pastel-blue-500 font-medium mt-0.5 flex items-center gap-1.5 truncate">
-                    <MusicalNoteIcon className="w-4 h-4 flex-shrink-0" />
+                  <p className="text-xs sm:text-sm text-sapphire/70 font-medium mt-0.5 flex items-center gap-1.5 truncate">
+                    <MusicalNoteIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                     <span className="truncate">{concert.artist}</span>
                   </p>
                 </div>
 
-                <div className="space-y-1.5 text-sm text-slate-500">
+                <div className="space-y-1.5 text-xs sm:text-sm text-warm-taupe/80">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-xl bg-slate-50/80 flex items-center justify-center flex-shrink-0 border border-slate-100/50">
-                      <CalendarIcon className="w-3.5 h-3.5 text-pastel-blue-400" />
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-champagne/50 flex items-center justify-center flex-shrink-0 border border-warm-taupe/20">
+                      <CalendarIcon className="w-3.5 h-3.5 text-sapphire" />
                     </div>
-                    <span className="text-xs">
-                      {concert.date} <span className="text-slate-300">•</span> {concert.time}
+                    <span className="text-[11px] sm:text-xs truncate">
+                      {concert.date} <span className="text-warm-taupe/40">•</span> {concert.time}
                     </span>
                   </div>
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-xl bg-slate-50/80 flex items-center justify-center flex-shrink-0 border border-slate-100/50">
-                      <MapPinIcon className="w-3.5 h-3.5 text-pastel-blue-400" />
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-champagne/50 flex items-center justify-center flex-shrink-0 border border-warm-taupe/20">
+                      <MapPinIcon className="w-3.5 h-3.5 text-sapphire" />
                     </div>
-                    <span className="text-xs truncate">{concert.location}</span>
+                    <span className="text-[11px] sm:text-xs truncate">{concert.location}</span>
                   </div>
                 </div>
 
@@ -346,12 +386,12 @@ export default function Concerts() {
                   whileTap={{ scale: 0.97 }}
                   className="relative group/btn mt-2"
                 >
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-pastel-blue-400 to-pastel-blue-600 rounded-xl blur opacity-0 group-hover/btn:opacity-50 transition duration-300" />
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-sapphire to-navy rounded-xl blur opacity-0 group-hover/btn:opacity-30 transition duration-300" />
                   <Link
                     href={`/booking/${concert.id}`}
-                    className="relative flex items-center justify-center gap-2.5 w-full bg-gradient-to-r from-pastel-blue-400 to-pastel-blue-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-pastel-blue-200/40 hover:shadow-xl hover:shadow-pastel-blue-300/50 transition-all duration-300 overflow-hidden"
+                    className="relative flex items-center justify-center gap-2 w-full bg-gradient-to-r from-sapphire to-navy text-ivory py-2.5 sm:py-3 rounded-xl font-bold text-xs sm:text-sm shadow-lg shadow-sapphire/20 hover:shadow-xl hover:shadow-sapphire/30 transition-all duration-300 overflow-hidden"
                   >
-                    <span className="relative z-10 flex items-center gap-2.5">
+                    <span className="relative z-10 flex items-center gap-2">
                       <TicketIcon className="w-4 h-4" />
                       Pesan Tiket
                       <motion.span
@@ -363,7 +403,7 @@ export default function Concerts() {
                       </motion.span>
                     </span>
                     <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-pastel-blue-500 via-pastel-blue-400 to-pastel-blue-600"
+                      className="absolute inset-0 bg-gradient-to-r from-sapphire via-navy to-sapphire"
                       initial={{ x: '-100%' }}
                       whileHover={{ x: '100%' }}
                       transition={{ duration: 0.6, ease: 'easeInOut' }}
@@ -381,16 +421,16 @@ export default function Concerts() {
   return (
     <section
       id="concerts"
-      className="relative py-20 md:py-28 lg:py-36 overflow-hidden"
+      className="relative py-12 sm:py-16 md:py-20 lg:py-28 overflow-hidden"
       style={{
-        background: 'radial-gradient(ellipse at 20% 50%, #F0F7FF 0%, #FFFFFF 40%, #E8F4FD 80%, #D6E8FF 100%)',
+        background: 'radial-gradient(ellipse at 20% 50%, #F8F4F0 0%, #FFFFFF 40%, #F0EDE8 80%, #E8E0D8 100%)',
       }}
     >
       {/* Dekorasi Background Premium */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-5%] w-[600px] h-[600px] bg-gradient-to-br from-pastel-blue-200/30 to-purple-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-[-10%] right-[-5%] w-[700px] h-[700px] bg-gradient-to-tl from-pastel-blue-300/20 to-pink-200/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-pastel-blue-100/10 rounded-full blur-3xl" />
+        <div className="absolute top-[-10%] left-[-5%] w-[500px] sm:w-[600px] h-[500px] sm:h-[600px] bg-gradient-to-br from-sapphire/10 to-champagne/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-[-10%] right-[-5%] w-[600px] sm:w-[700px] h-[600px] sm:h-[700px] bg-gradient-to-tl from-sapphire/10 to-rose-200/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] sm:w-[800px] h-[600px] sm:h-[800px] bg-champagne/20 rounded-full blur-3xl" />
         <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
@@ -400,28 +440,28 @@ export default function Concerts() {
         />
       </div>
 
-      <div className="container-custom relative z-10">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10 max-w-7xl">
         {/* Header Premium */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, ease: 'easeOut' }}
-          className="text-center max-w-3xl mx-auto mb-12 md:mb-16"
+          className="text-center max-w-3xl mx-auto mb-10 sm:mb-12 md:mb-16"
         >
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             whileInView={{ scale: 1, opacity: 1 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2, type: 'spring', bounce: 0.4 }}
-            className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-white/70 backdrop-blur-xl border border-white/50 shadow-xl shadow-pastel-blue-200/20 mb-5"
+            className="inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-3 rounded-full bg-white/70 backdrop-blur-xl border border-warm-taupe/20 shadow-xl shadow-navy/5 mb-4 sm:mb-5"
           >
             <div className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse delay-150" />
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse delay-300" />
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse delay-150" />
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse delay-300" />
             </div>
-            <span className="text-sm font-semibold text-pastel-blue-700 tracking-wide">
+            <span className="text-[10px] sm:text-sm font-semibold text-sapphire tracking-wide">
               🎫 {concerts.length} Konser Mendatang
             </span>
           </motion.div>
@@ -431,10 +471,10 @@ export default function Concerts() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.3, duration: 0.6 }}
-            className="text-4xl md:text-5xl lg:text-6xl font-black leading-[1.1] text-slate-800"
+            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black leading-[1.1] text-navy"
           >
             Temukan{' '}
-            <span className="bg-gradient-to-r from-pastel-blue-400 via-pastel-blue-500 to-pastel-blue-700 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
+            <span className="bg-gradient-to-r from-sapphire via-sapphire/80 to-navy bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
               Konser
             </span>{' '}
             Favoritmu
@@ -445,7 +485,7 @@ export default function Concerts() {
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
             transition={{ delay: 0.5, duration: 0.6 }}
-            className="text-lg text-slate-500/80 leading-relaxed mt-4 max-w-2xl mx-auto"
+            className="text-sm sm:text-base md:text-lg text-warm-taupe/80 leading-relaxed mt-3 sm:mt-4 max-w-2xl mx-auto px-2"
           >
             Dari K-Pop hingga Rock, temukan konser impianmu dan pesan tiket sekarang juga!
           </motion.p>
@@ -456,41 +496,39 @@ export default function Concerts() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.6, duration: 0.5 }}
-            className="mt-8 flex flex-wrap items-center justify-center gap-2"
+            className="mt-6 sm:mt-8 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2"
           >
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {genres.map((genre) => (
-                <motion.button
-                  key={genre}
-                  whileHover={{ scale: 1.05, y: -2 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setSelectedGenre(genre)}
-                  className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 ${
-                    selectedGenre === genre
-                      ? 'bg-gradient-to-r from-pastel-blue-400 to-pastel-blue-600 text-white shadow-xl shadow-pastel-blue-300/40'
-                      : 'bg-white/60 backdrop-blur-sm text-slate-600 hover:bg-white/90 border border-slate-200/50'
-                  }`}
-                >
-                  {genre === 'K-Pop' ? '🇰🇷 K-Pop' : genre}
-                </motion.button>
-              ))}
-            </div>
+            {genres.map((genre) => (
+              <motion.button
+                key={genre}
+                whileHover={{ scale: 1.05, y: -2 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setSelectedGenre(genre)}
+                className={`px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-full text-[10px] sm:text-sm font-semibold transition-all duration-300 ${
+                  selectedGenre === genre
+                    ? 'bg-gradient-to-r from-sapphire to-navy text-ivory shadow-xl shadow-sapphire/30'
+                    : 'bg-white/60 backdrop-blur-sm text-navy hover:bg-white/90 border border-warm-taupe/30'
+                }`}
+              >
+                {genre === 'K-Pop' ? '🇰🇷 K-Pop' : genre}
+              </motion.button>
+            ))}
           </motion.div>
         </motion.div>
 
         {/* Bagian 1: Konser Trending */}
         {filteredTrending.length > 0 && (
-          <div className="mb-16">
+          <div className="mb-12 sm:mb-16">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6 }}
-              className="flex items-center gap-3 mb-6"
+              className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6"
             >
-              <FireIcon className="w-8 h-8 text-orange-500" />
-              <h3 className="text-2xl md:text-3xl font-bold text-slate-800">Konser Trending</h3>
-              <div className="h-0.5 flex-1 bg-gradient-to-r from-orange-300 to-transparent" />
+              <FireIcon className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500" />
+              <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-navy">Konser Trending</h3>
+              <div className="h-0.5 flex-1 bg-gradient-to-r from-amber-300 to-transparent" />
             </motion.div>
             {renderConcertGrid(filteredTrending, 'Tidak ada konser trending untuk genre ini')}
           </div>
@@ -503,11 +541,11 @@ export default function Concerts() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="flex items-center gap-3 mb-6"
+            className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6"
           >
-            <CalendarIcon className="w-8 h-8 text-pastel-blue-500" />
-            <h3 className="text-2xl md:text-3xl font-bold text-slate-800">Konser Mendatang</h3>
-            <div className="h-0.5 flex-1 bg-gradient-to-r from-pastel-blue-300 to-transparent" />
+            <CalendarIcon className="w-6 h-6 sm:w-8 sm:h-8 text-sapphire" />
+            <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-navy">Konser Mendatang</h3>
+            <div className="h-0.5 flex-1 bg-gradient-to-r from-sapphire/50 to-transparent" />
           </motion.div>
           {renderConcertGrid(filteredUpcoming, 'Tidak ada konser mendatang untuk genre ini')}
         </div>
@@ -518,12 +556,12 @@ export default function Concerts() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.6, duration: 0.6 }}
-          className="text-center mt-12"
+          className="text-center mt-10 sm:mt-12"
         >
           <motion.div whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
             <Link
               href="#"
-              className="group inline-flex items-center gap-3 px-8 py-4 rounded-full bg-white/80 backdrop-blur-xl text-pastel-blue-600 font-bold border-2 border-pastel-blue-200/50 shadow-xl shadow-pastel-blue-200/20 hover:shadow-2xl hover:bg-white transition-all duration-300"
+              className="group inline-flex items-center gap-2 sm:gap-3 px-5 sm:px-8 py-3 sm:py-4 rounded-full bg-white/80 backdrop-blur-xl text-sapphire font-bold text-sm sm:text-base border-2 border-sapphire/20 shadow-xl shadow-sapphire/10 hover:shadow-2xl hover:bg-white transition-all duration-300"
             >
               <span>Lihat Semua Konser</span>
               <motion.span
@@ -549,7 +587,7 @@ export default function Concerts() {
           animation: gradient 4s ease infinite;
         }
         .shadow-3xl {
-          box-shadow: 0 30px 60px -15px rgba(74, 154, 230, 0.25);
+          box-shadow: 0 30px 60px -15px rgba(26, 42, 108, 0.15);
         }
         .line-clamp-1 {
           display: -webkit-box;

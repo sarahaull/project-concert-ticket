@@ -1,156 +1,258 @@
 'use client';
 
 import { motion, useInView } from 'framer-motion';
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import {
   FaUsers,
   FaTicketAlt,
   FaCalendarAlt,
   FaMapMarkerAlt,
 } from 'react-icons/fa';
+import { Sparkles, ArrowUpRight } from 'lucide-react';
 
 const stats = [
   {
     icon: FaUsers,
-    value: '50.000+',
+    value: 50000,
     label: 'Pengguna Aktif',
-    color: 'from-blue-300 to-blue-400',
-    bg: 'bg-blue-100/50',
-    iconBg: 'bg-blue-400/20',
+    suffix: '+',
+    gradient: 'from-navy via-sapphire to-navy',
+    bgGrad: 'bg-gradient-to-br from-navy to-sapphire',
+    accent: 'navy',
   },
   {
     icon: FaTicketAlt,
-    value: '200+',
+    value: 200,
     label: 'Konser Sukses',
-    color: 'from-indigo-300 to-indigo-400',
-    bg: 'bg-indigo-100/50',
-    iconBg: 'bg-indigo-400/20',
+    suffix: '+',
+    gradient: 'from-sapphire via-navy to-sapphire',
+    bgGrad: 'bg-gradient-to-br from-sapphire to-navy',
+    accent: 'sapphire',
   },
   {
     icon: FaCalendarAlt,
-    value: '150+',
+    value: 150,
     label: 'Event Tahunan',
-    color: 'from-cyan-300 to-cyan-400',
-    bg: 'bg-cyan-100/50',
-    iconBg: 'bg-cyan-400/20',
+    suffix: '+',
+    gradient: 'from-navy via-sapphire to-navy',
+    bgGrad: 'bg-gradient-to-br from-navy to-sapphire',
+    accent: 'navy',
   },
   {
     icon: FaMapMarkerAlt,
-    value: '30+',
+    value: 30,
     label: 'Kota di Indonesia',
-    color: 'from-purple-300 to-purple-400',
-    bg: 'bg-purple-100/50',
-    iconBg: 'bg-purple-400/20',
+    suffix: '+',
+    gradient: 'from-sapphire via-navy to-sapphire',
+    bgGrad: 'bg-gradient-to-br from-sapphire to-navy',
+    accent: 'sapphire',
   },
 ];
 
-export default function Stats() {
+const Counter = ({ target, suffix }) => {
+  const [count, setCount] = useState(0);
   const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, amount: 0.2 });
+  const inView = useInView(ref, { once: true, margin: '-50px' });
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.2,
-      },
-    },
-  };
+  useEffect(() => {
+    if (inView) {
+      let start = 0;
+      const duration = 2000;
+      const step = Math.max(1, Math.floor(target / 60));
+      const interval = Math.floor(duration / 60);
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 30, scale: 0.9 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        type: 'spring',
-        stiffness: 300,
-        damping: 20,
-        duration: 0.6,
-      },
-    },
-  };
+      const timer = setInterval(() => {
+        start += step;
+        if (start >= target) {
+          setCount(target);
+          clearInterval(timer);
+        } else {
+          setCount(start);
+        }
+      }, interval);
+
+      return () => clearInterval(timer);
+    }
+  }, [inView, target]);
 
   return (
-    <section
+    <span ref={ref} className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight">
+      {count.toLocaleString()}
+      {suffix}
+    </span>
+  );
+};
+
+const StatCard = ({ stat, index }) => {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: '-80px' });
+  const Icon = stat.icon;
+
+  return (
+    <motion.div
       ref={ref}
-      className="relative py-16 md:py-24 overflow-hidden"
-      style={{
-        background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 40%, #dbeafe 100%)',
+      initial={{ opacity: 0, y: 50, scale: 0.9 }}
+      animate={inView ? { opacity: 1, y: 0, scale: 1 } : {}}
+      transition={{ duration: 0.7, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{
+        y: -12,
+        scale: 1.05,
+        transition: { duration: 0.3, type: 'spring', stiffness: 300, damping: 20 },
       }}
+      className="group relative"
     >
-      {/* Dekorasi Orbs */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-20 -left-20 w-80 h-80 bg-blue-200/30 rounded-full blur-3xl" />
-        <div className="absolute -bottom-20 -right-20 w-80 h-80 bg-indigo-200/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-200/20 rounded-full blur-3xl" />
+      <div className="relative rounded-2xl bg-white/80 backdrop-blur-md border-2 border-warm-taupe/20 shadow-lg hover:shadow-2xl hover:shadow-sapphire/20 transition-all duration-500 p-6 md:p-8 overflow-hidden">
+
+        {/* Background gradien */}
+        <div
+          className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-0 group-hover:opacity-[0.08] transition-opacity duration-700 rounded-2xl`}
+        />
+        <div className="absolute -inset-4 bg-gradient-to-r from-sapphire/5 via-transparent to-navy/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-2xl" />
+
+        {/* Lingkaran dekoratif */}
+        <div className="absolute -top-16 -right-16 w-48 h-48 bg-gradient-to-br from-sapphire/10 to-navy/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
+        <div className="absolute -bottom-20 -left-20 w-56 h-56 bg-gradient-to-tr from-navy/10 to-sapphire/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
+
+        {/* ===== IKON DENGAN GRADIEN BACKGROUND (PASTI MUNCUL) ===== */}
+        <div className="relative -mt-2 mb-4">
+          {/* Shadow glow di belakang ikon */}
+          <div className="absolute -inset-4 rounded-2xl bg-gradient-to-r from-navy/20 to-sapphire/20 blur-2xl opacity-0 group-hover:opacity-80 transition-opacity duration-700" />
+
+          {/* Kotak ikon dengan background gradien solid */}
+          <div className={`relative w-20 h-20 rounded-2xl ${stat.bgGrad} shadow-lg group-hover:shadow-2xl transition-all duration-500 flex items-center justify-center border-2 border-white/30`}>
+            {/* Efek glossy */}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-white/20 via-transparent to-white/5 pointer-events-none" />
+            
+            {/* IKON WARNA PUTIH (PASTI TERLIHAT) */}
+            <Icon className="w-9 h-9 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.3)] group-hover:scale-110 transition-transform duration-500" />
+            
+            {/* Glow luar */}
+            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-navy/30 via-sapphire/20 to-navy/30 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 -z-10" />
+          </div>
+
+          {/* Dekorasi sudut */}
+          <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-gradient-to-br ${stat.gradient} opacity-30 group-hover:opacity-60 transition-opacity duration-500 blur-sm`} />
+          <div className={`absolute -top-1 -left-1 w-3 h-3 rounded-full bg-gradient-to-br ${stat.gradient} opacity-20 group-hover:opacity-40 transition-opacity duration-500 blur-sm`} />
+        </div>
+
+        {/* ===== ANGKA ===== */}
+        <div className="relative z-10">
+          <div className={`text-4xl md:text-5xl lg:text-6xl font-black bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent drop-shadow-[0_2px_4px_rgba(17,34,80,0.1)]`}>
+            <Counter target={stat.value} suffix={stat.suffix} />
+          </div>
+          <p className="text-sm font-semibold text-sapphire/60 mt-1 group-hover:text-sapphire transition-colors duration-300">
+            {stat.label}
+          </p>
+        </div>
+
+        {/* ===== GARIS AKSEK ===== */}
+        <div
+          className={`relative z-10 mt-4 h-1 w-16 bg-gradient-to-r ${stat.gradient} rounded-full group-hover:w-full transition-all duration-700 ease-out`}
+        />
+
+        {/* ===== TOMBOL "LIHAT DETAIL" ===== */}
+        <div className="relative z-10 mt-3 flex items-center gap-1 text-xs font-bold text-sapphire/30 group-hover:text-sapphire transition-colors duration-300">
+          <span>Lihat detail</span>
+          <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300" />
+        </div>
+
+        {/* ===== BADGE ===== */}
+        <div className="absolute bottom-4 right-4 px-3 py-1 rounded-full bg-white/60 backdrop-blur-sm border border-warm-taupe/10 text-[10px] font-bold text-warm-taupe/40 group-hover:text-sapphire/40 transition-colors duration-300">
+          #{String(index + 1).padStart(2, '0')}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+export default function Stats() {
+  const sectionRef = useRef(null);
+  const inView = useInView(sectionRef, { once: true, margin: '-80px' });
+
+  return (
+    <section ref={sectionRef} className="relative py-24 md:py-32 px-4 overflow-hidden bg-ivory">
+      {/* Background */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-ivory via-champagne/5 to-ivory" />
+        <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-navy/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/3" />
+        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-sapphire/5 rounded-full blur-3xl translate-x-1/2 translate-y-1/3" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-champagne/30 rounded-full blur-3xl" />
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #112250 1px, transparent 0)', backgroundSize: '40px 40px' }} />
       </div>
 
-      {/* Container */}
-      <div className="relative z-10 max-w-6xl mx-auto px-4">
-        {/* Heading minimalis */}
+      <div className="relative z-10 max-w-6xl mx-auto">
+        {/* Header */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="text-center mb-12"
+          initial={{ opacity: 0, y: 30 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.8 }}
+          className="text-center max-w-2xl mx-auto mb-14 md:mb-20"
         >
-          <span className="inline-block px-4 py-1.5 rounded-full bg-white/60 backdrop-blur-sm border border-white/60 text-xs font-medium text-blue-500 tracking-wider uppercase shadow-sm">
-            ✦ Prestasi Kami
-          </span>
-          <h2 className="mt-4 text-3xl md:text-4xl font-light text-slate-700">
-            <span className="font-semibold text-slate-800">Tumbuh Bersama</span> Komunitas
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={inView ? { opacity: 1, scale: 1 } : {}}
+            transition={{ delay: 0.2, duration: 0.6 }}
+            className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-white/60 backdrop-blur-md border border-warm-taupe/20 shadow-lg shadow-navy/5 mb-6"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-bold text-navy/80 tracking-[0.2em] uppercase">
+              Prestasi Kami
+            </span>
+          </motion.div>
+
+          <h2 className="text-4xl sm:text-5xl md:text-6xl font-black text-navy leading-tight tracking-tight">
+            Tumbuh Bersama{' '}
+            <span className="bg-gradient-to-r from-navy via-sapphire to-navy bg-clip-text text-transparent bg-[length:200%_auto] animate-shimmer">
+              Komunitas
+            </span>
           </h2>
-          <div className="w-16 h-0.5 bg-gradient-to-r from-blue-300 to-indigo-300 mx-auto mt-3 rounded-full" />
+
+          <div className="flex items-center justify-center gap-3 mt-5">
+            <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-sapphire/60 to-transparent rounded-full" />
+            <span className="text-amber-400 text-sm">✦</span>
+            <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-sapphire/60 to-transparent rounded-full" />
+          </div>
+
+          <p className="mt-5 text-base sm:text-lg text-sapphire/70 max-w-xl mx-auto">
+            Bergabunglah dengan ribuan pengguna yang telah merasakan kemudahan memesan tiket di ConcertTi.
+          </p>
         </motion.div>
 
-        {/* Grid Statistik */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate={isInView ? 'visible' : 'hidden'}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6"
-        >
+        {/* Grid Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
           {stats.map((stat, index) => (
-            <motion.div
-              key={index}
-              variants={itemVariants}
-              whileHover={{
-                y: -8,
-                scale: 1.02,
-                transition: { duration: 0.2, type: 'spring', stiffness: 400 },
-              }}
-              className="group relative bg-white/50 backdrop-blur-md rounded-2xl p-6 text-center border border-white/60 shadow-sm hover:shadow-xl transition-shadow duration-300"
-            >
-              {/* Lingkaran latar belakang ikon */}
-              <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${stat.bg} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-
-              {/* Ikon */}
-              <div
-                className={`relative z-10 w-14 h-14 rounded-2xl bg-gradient-to-br ${stat.color} mx-auto mb-4 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow duration-300`}
-              >
-                <stat.icon className="w-6 h-6 text-white" />
-              </div>
-
-              {/* Nilai */}
-              <p className="relative z-10 text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
-                {stat.value}
-              </p>
-
-              {/* Label */}
-              <p className="relative z-10 text-sm text-slate-500 font-medium mt-1">
-                {stat.label}
-              </p>
-
-              {/* Garis dekoratif di bawah */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-blue-300/50 to-indigo-300/50 group-hover:w-12 transition-all duration-500 rounded-full" />
-            </motion.div>
+            <StatCard key={index} stat={stat} index={index} />
           ))}
+        </div>
+
+        {/* Footer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={inView ? { opacity: 1 } : {}}
+          transition={{ delay: 0.8, duration: 0.6 }}
+          className="text-center mt-14"
+        >
+          <div className="inline-flex items-center gap-4 text-xs text-warm-taupe/50 font-medium tracking-widest uppercase">
+            <span className="w-12 h-px bg-gradient-to-r from-transparent via-warm-taupe/30 to-transparent" />
+            <span className="flex items-center gap-2">
+              <span className="w-1 h-1 rounded-full bg-sapphire/30" />
+              Terpercaya oleh ribuan pengguna
+              <span className="w-1 h-1 rounded-full bg-sapphire/30" />
+            </span>
+            <span className="w-12 h-px bg-gradient-to-r from-transparent via-warm-taupe/30 to-transparent" />
+          </div>
         </motion.div>
       </div>
+
+      <style jsx>{`
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        .animate-shimmer {
+          animation: shimmer 4s linear infinite;
+        }
+      `}</style>
     </section>
   );
 }
