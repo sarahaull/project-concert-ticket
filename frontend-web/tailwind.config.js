@@ -20,12 +20,74 @@ export default {
         },
         'soft-white': '#FAFCFE',
 
-        // ===== PALET DARI GAMBAR (TAMBAHKAN INI) =====
         navy: '#112250',
         sapphire: '#3B507D',
         'warm-taupe': '#BEB7A7',
         champagne: '#E7E2CE',
         ivory: '#F5F4F0',
+
+        // ===== WINTER BLUE PALETTE (BARU) =====
+        // Moonlight #F0ECDD
+        moonlight: {
+          DEFAULT: '#F0ECDD',
+          50: '#FDFCF8',
+          100: '#F0ECDD',
+          200: '#E5DFC9',
+          300: '#D8D0B4',
+          400: '#C5BA97',
+        },
+
+        // Frost Blue #8BA3C5
+        'frost-blue': {
+          DEFAULT: '#8BA3C5',
+          50: '#F3F6FA',
+          100: '#E1E9F3',
+          200: '#C6D5E6',
+          300: '#A9BED8',
+          400: '#8BA3C5',
+          500: '#6B88B0',
+          600: '#4F6A94',
+          700: '#3D5375',
+        },
+
+        // Steel #495B7D
+        steel: {
+          DEFAULT: '#495B7D',
+          50: '#EEF1F6',
+          100: '#D5DCE7',
+          200: '#AAB8CC',
+          300: '#7F93AF',
+          400: '#5F7392',
+          500: '#495B7D',
+          600: '#3A4965',
+          700: '#2C384D',
+        },
+
+        // Storm #23354D
+        storm: {
+          DEFAULT: '#23354D',
+          50: '#E8ECF2',
+          100: '#C7D0DE',
+          200: '#8FA0BD',
+          300: '#5A7097',
+          400: '#3D4F70',
+          500: '#23354D',
+          600: '#1B2A3D',
+          700: '#131E2C',
+        },
+
+        // Oxford Blue #02122F
+        'oxford-blue': {
+          DEFAULT: '#02122F',
+          50: '#E6E9F0',
+          100: '#BFC7D9',
+          200: '#8A96B3',
+          300: '#55658C',
+          400: '#2A3B62',
+          500: '#02122F',
+          600: '#020E25',
+          700: '#010A1B',
+        },
       },
       fontFamily: {
         'poppins': ['Poppins', 'sans-serif'],
