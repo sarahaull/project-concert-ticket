@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -20,7 +21,14 @@ import {
   ShieldCheck,
   Ticket,
   XCircle,
+  Copy,
+  UserRound,
+  Mail,
 } from "lucide-react";
+
+// =====================================================
+// API CONFIGURATION
+// =====================================================
 
 const API_BASE = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -30,6 +38,10 @@ const API_BASE = (
 
 const ORDER_API = `${API_BASE}/api/orders`;
 const PAYMENT_STATUS_API = `${API_BASE}/api/payments/midtrans-status`;
+
+// =====================================================
+// HELPER
+// =====================================================
 
 function formatRupiah(value) {
   return new Intl.NumberFormat("id-ID", {
@@ -41,6 +53,21 @@ function formatRupiah(value) {
 
 function formatDate(value) {
   if (!value) return "-";
+
+  // Handle MySQL DATE: YYYY-MM-DD without timezone conversion.
+  if (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    const [year, month, day] = value.split("-").map(Number);
+
+    return new Intl.DateTimeFormat("id-ID", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      timeZone: "Asia/Jakarta",
+    }).format(new Date(year, month - 1, day));
+  }
 
   const date = new Date(value);
 
@@ -79,7 +106,10 @@ function normalizeStatus(status) {
 
 function firstValue(...values) {
   return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      value !== ""
   );
 }
 
@@ -88,257 +118,214 @@ function parseNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function normalizeOrder(order) {
-  if (!order || typeof order !== "object") {
+async function readResponse(response) {
+  const text = await response.text();
+
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("Respons server tidak valid.");
+  }
+}
+
+// =====================================================
+// NORMALIZE ORDER
+// Sesuai response getAllOrders() backend customer
+// =====================================================
+
+function normalizeOrder(rawOrder) {
+  if (!rawOrder || typeof rawOrder !== "object") {
     return null;
   }
 
-  const rawDetails =
-    order.order_details ||
-    order.orderDetails ||
-    order.details ||
-    order.items ||
+  const detailsRaw =
+    rawOrder.order_details ||
+    rawOrder.orderDetails ||
+    rawOrder.details ||
     [];
 
-  const details = Array.isArray(rawDetails)
-    ? rawDetails
-    : rawDetails
-      ? [rawDetails]
+  const details = Array.isArray(detailsRaw)
+    ? detailsRaw
+    : detailsRaw
+      ? [detailsRaw]
       : [];
 
-  const firstDetail = details[0] || {};
-
-  const event =
-    order.event ||
-    order.events ||
-    firstDetail.event ||
-    firstDetail.events ||
-    {};
-
-  const category =
-    order.ticket_category ||
-    order.ticketCategory ||
-    order.category ||
-    firstDetail.ticket_category ||
-    firstDetail.ticketCategory ||
-    firstDetail.category ||
-    {};
-
-  const venue =
-    order.venue ||
-    order.venues ||
-    event.venue ||
-    event.venues ||
-    firstDetail.venue ||
-    firstDetail.venues ||
-    {};
-
-  const quantityFromDetails = details.reduce((sum, detail) => {
-    return sum + parseNumber(detail.quantity);
-  }, 0);
+  const quantityFromDetails = details.reduce(
+    (total, detail) => total + parseNumber(detail.quantity),
+    0
+  );
 
   const quantity = parseNumber(
     firstValue(
-      order.quantity,
-      order.total_quantity,
-      order.totalQuantity,
+      rawOrder.quantity,
+      rawOrder.total_quantity,
+      rawOrder.totalQuantity,
       quantityFromDetails,
       0
     )
   );
 
-  const total = parseNumber(
-    firstValue(
-      order.total_price,
-      order.totalPrice,
-      order.total_amount,
-      order.totalAmount,
-      order.total,
-      order.subtotal,
-      0
-    )
+  const detailSubtotal = details.reduce(
+    (total, detail) => {
+      const subtotal = parseNumber(detail.subtotal);
+
+      if (subtotal > 0) return total + subtotal;
+
+      return (
+        total +
+        parseNumber(detail.price) *
+          parseNumber(detail.quantity)
+      );
+    },
+    0
   );
 
   const categoryPrice = parseNumber(
     firstValue(
-      order.category_price,
-      order.ticket_price,
-      order.ticketPrice,
-      firstDetail.price,
-      firstDetail.unit_price,
-      firstDetail.unitPrice,
-      category.price,
+      details[0]?.price,
+      rawOrder.ticket_price,
+      rawOrder.category_price,
       0
     )
   );
 
   return {
-    ...order,
+    ...rawOrder,
 
-    // ID dan kode pesanan
     id: firstValue(
-      order.id,
-      order.order_id,
-      order.orderId
+      rawOrder.id,
+      rawOrder.order_id,
+      rawOrder.orderId
     ),
+
+    user_id: rawOrder.user_id,
 
     order_code: firstValue(
-      order.order_code,
-      order.orderCode,
-      order.code
+      rawOrder.order_code,
+      rawOrder.orderCode,
+      rawOrder.code
     ),
 
-    // Status pembayaran
     payment_status: firstValue(
-      order.payment_status,
-      order.paymentStatus,
-      order.transaction_status,
-      order.transactionStatus,
-      order.status
+      rawOrder.payment_status,
+      rawOrder.paymentStatus,
+      rawOrder.transaction_status,
+      rawOrder.transactionStatus,
+      rawOrder.status
     ),
 
     payment_method: firstValue(
-      order.payment_method,
-      order.paymentMethod,
-      order.payment_type,
-      order.paymentType,
-      order.bank
+      rawOrder.payment_method,
+      rawOrder.paymentMethod,
+      rawOrder.payment_type,
+      rawOrder.paymentType,
+      rawOrder.bank
     ),
 
-    // Informasi acara
     event_id: firstValue(
-      order.event_id,
-      order.eventId,
-      event.id,
-      event.event_id,
-      event.eventId,
-      firstDetail.event_id,
-      firstDetail.eventId
+      rawOrder.event_id,
+      rawOrder.eventId
     ),
 
     event_name: firstValue(
-      order.event_name,
-      order.eventName,
-      order.event_title,
-      order.eventTitle,
-      event.event_name,
-      event.eventName,
-      event.title,
-      event.name,
-      firstDetail.event_name,
-      firstDetail.eventName
+      rawOrder.event_name,
+      rawOrder.eventName,
+      rawOrder.event_title,
+      rawOrder.eventTitle
     ),
 
     artist_name: firstValue(
-      order.artist_name,
-      order.artistName,
-      event.artist_name,
-      event.artistName,
-      event.artist?.name,
-      event.artists?.artist_name,
-      event.artists?.name
+      rawOrder.artist_name,
+      rawOrder.artistName
     ),
 
     event_date: firstValue(
-      order.event_date,
-      order.eventDate,
-      order.tanggal_acara,
-      order.tanggalAcara,
-      event.event_date,
-      event.eventDate,
-      event.tanggal_acara,
-      event.tanggalAcara,
-      event.date,
-      firstDetail.event_date,
-      firstDetail.eventDate
+      rawOrder.event_date,
+      rawOrder.eventDate,
+      rawOrder.tanggal_acara
     ),
 
     event_time: firstValue(
-      order.event_time,
-      order.eventTime,
-      order.waktu_acara,
-      order.waktuAcara,
-      event.event_time,
-      event.eventTime,
-      event.waktu_acara,
-      event.waktuAcara,
-      event.time,
-      firstDetail.event_time,
-      firstDetail.eventTime
+      rawOrder.event_time,
+      rawOrder.eventTime,
+      rawOrder.waktu_acara
     ),
 
-    // Informasi lokasi
     venue_name: firstValue(
-      order.venue_name,
-      order.venueName,
-      order.location,
-      order.lokasi,
-      event.venue_name,
-      event.venueName,
-      event.location,
-      event.lokasi,
-      venue.venue_name,
-      venue.venueName,
-      venue.name,
-      venue.location,
-      firstDetail.venue_name,
-      firstDetail.venueName
+      rawOrder.venue_name,
+      rawOrder.venueName,
+      rawOrder.location,
+      rawOrder.lokasi
     ),
 
     city: firstValue(
-      order.city,
-      order.venue_city,
-      order.venueCity,
-      order.kota,
-      event.city,
-      event.venue_city,
-      event.venueCity,
-      event.kota,
-      venue.city,
-      venue.venue_city,
-      venue.venueCity,
-      firstDetail.city,
-      firstDetail.venue_city
+      rawOrder.city,
+      rawOrder.venue_city,
+      rawOrder.venueCity,
+      rawOrder.kota
     ),
 
-    // Informasi kategori tiket
     category_name: firstValue(
-      order.category_name,
-      order.ticket_category_name,
-      order.categoryName,
-      order.ticketCategoryName,
-      category.category_name,
-      category.categoryName,
-      category.name,
-      firstDetail.category_name,
-      firstDetail.ticket_category_name,
-      firstDetail.categoryName,
-      firstDetail.ticketCategoryName
+      rawOrder.category_name,
+      rawOrder.ticket_category_name,
+      rawOrder.categoryName,
+      rawOrder.ticketCategoryName,
+      details
+        .map((detail) => detail.category_name)
+        .filter(Boolean)
+        .join(", ")
     ),
 
     category_price: categoryPrice,
 
-    // Jumlah dan total pembayaran
     quantity,
 
-    total_price: total,
+    total_price: parseNumber(
+      firstValue(
+        rawOrder.total_price,
+        rawOrder.totalPrice,
+        rawOrder.total_amount,
+        rawOrder.totalAmount,
+        rawOrder.total,
+        0
+      )
+    ),
 
-    // Tanggal transaksi
+    subtotal: detailSubtotal,
+
     order_date: firstValue(
-      order.order_date,
-      order.orderDate,
-      order.created_at,
-      order.createdAt
+      rawOrder.order_date,
+      rawOrder.orderDate,
+      rawOrder.created_at,
+      rawOrder.createdAt
     ),
 
     updated_at: firstValue(
-      order.updated_at,
-      order.updatedAt
+      rawOrder.updated_at,
+      rawOrder.updatedAt
+    ),
+
+    fullname: firstValue(
+      rawOrder.fullname,
+      rawOrder.buyer?.fullname,
+      rawOrder.user?.fullname
+    ),
+
+    email: firstValue(
+      rawOrder.email,
+      rawOrder.buyer?.email,
+      rawOrder.user?.email
     ),
 
     details,
   };
 }
+
+// =====================================================
+// STATUS CONFIGURATION
+// =====================================================
 
 function getStatusConfig(status) {
   switch (normalizeStatus(status)) {
@@ -356,8 +343,10 @@ function getStatusConfig(status) {
     case "pending":
       return {
         label: "Menunggu Pembayaran",
-        description: "Menunggu konfirmasi pembayaran dari Midtrans.",
-        className: "border-amber-200 bg-amber-50 text-amber-700",
+        description:
+          "Menunggu konfirmasi pembayaran dari Midtrans.",
+        className:
+          "border-amber-200 bg-amber-50 text-amber-700",
         icon: Clock3,
       };
 
@@ -366,7 +355,8 @@ function getStatusConfig(status) {
       return {
         label: "Dibatalkan",
         description: "Pesanan telah dibatalkan.",
-        className: "border-red-200 bg-red-50 text-red-700",
+        className:
+          "border-red-200 bg-red-50 text-red-700",
         icon: XCircle,
       };
 
@@ -374,7 +364,8 @@ function getStatusConfig(status) {
       return {
         label: "Kadaluarsa",
         description: "Batas waktu pembayaran telah berakhir.",
-        className: "border-slate-200 bg-slate-100 text-slate-600",
+        className:
+          "border-slate-200 bg-slate-100 text-slate-600",
         icon: AlertCircle,
       };
 
@@ -383,7 +374,8 @@ function getStatusConfig(status) {
       return {
         label: "Pembayaran Gagal",
         description: "Pembayaran tidak berhasil diproses.",
-        className: "border-red-200 bg-red-50 text-red-700",
+        className:
+          "border-red-200 bg-red-50 text-red-700",
         icon: AlertCircle,
       };
 
@@ -391,7 +383,8 @@ function getStatusConfig(status) {
       return {
         label: status || "Status Tidak Diketahui",
         description: "Status transaksi belum dapat dikenali.",
-        className: "border-slate-200 bg-slate-100 text-slate-600",
+        className:
+          "border-slate-200 bg-slate-100 text-slate-600",
         icon: Info,
       };
   }
@@ -403,9 +396,9 @@ function getStatusDetails(status) {
     case "success":
     case "settlement":
       return {
-        title: "Pembayaran berhasil!",
+        title: "Pembayaran berhasil dikonfirmasi!",
         description:
-          "Transaksi kamu telah dikonfirmasi. Kamu dapat membuka halaman Tiket Saya untuk memeriksa tiket yang sudah diterbitkan.",
+          "Pembayaran kamu telah diterima oleh Midtrans. Tiket dapat diperiksa melalui halaman Tiket Saya setelah proses penerbitan tiket selesai.",
         className:
           "border-emerald-200 bg-emerald-50 text-emerald-900",
         icon: CheckCircle2,
@@ -415,18 +408,20 @@ function getStatusDetails(status) {
       return {
         title: "Pesanan menunggu pembayaran",
         description:
-          "Selesaikan pembayaran sesuai instruksi transaksi. Status akan diperbarui setelah Midtrans mengonfirmasi pembayaran.",
-        className: "border-amber-200 bg-amber-50 text-amber-900",
+          "Transaksi sudah dibuat, tetapi pembayaran belum dikonfirmasi. Selesaikan pembayaran sesuai instruksi Midtrans. Status pesanan akan diperbarui setelah backend menerima konfirmasi.",
+        className:
+          "border-amber-200 bg-amber-50 text-amber-900",
         icon: Clock3,
       };
 
     case "cancelled":
     case "canceled":
       return {
-        title: "Pesanan dibatalkan",
+        title: "Pesanan telah dibatalkan",
         description:
-          "Transaksi ini telah dibatalkan. Jika ingin membeli tiket, silakan buat pesanan baru.",
-        className: "border-red-200 bg-red-50 text-red-900",
+          "Transaksi ini telah dibatalkan sehingga tiket belum diterbitkan. Silakan membuat pesanan baru jika ingin membeli tiket.",
+        className:
+          "border-red-200 bg-red-50 text-red-900",
         icon: XCircle,
       };
 
@@ -434,8 +429,9 @@ function getStatusDetails(status) {
       return {
         title: "Pembayaran telah kedaluwarsa",
         description:
-          "Batas waktu pembayaran sudah berakhir. Kamu dapat kembali mencari acara dan membuat pesanan baru.",
-        className: "border-slate-200 bg-slate-100 text-slate-800",
+          "Batas waktu pembayaran sudah berakhir. Silakan kembali mencari acara dan membuat pesanan baru.",
+        className:
+          "border-slate-200 bg-slate-100 text-slate-800",
         icon: AlertCircle,
       };
 
@@ -444,8 +440,9 @@ function getStatusDetails(status) {
       return {
         title: "Pembayaran tidak berhasil",
         description:
-          "Transaksi tidak berhasil diproses. Periksa status transaksi sebelum mencoba melakukan pembayaran kembali.",
-        className: "border-red-200 bg-red-50 text-red-900",
+          "Transaksi tidak berhasil diproses. Silakan periksa status transaksi sebelum membuat pesanan baru.",
+        className:
+          "border-red-200 bg-red-50 text-red-900",
         icon: AlertCircle,
       };
 
@@ -454,11 +451,16 @@ function getStatusDetails(status) {
         title: "Status transaksi belum diketahui",
         description:
           "Informasi status pembayaran belum tersedia atau menggunakan status yang belum dikenali.",
-        className: "border-slate-200 bg-slate-50 text-slate-800",
+        className:
+          "border-slate-200 bg-slate-50 text-slate-800",
         icon: Info,
       };
   }
 }
+
+// =====================================================
+// MAIN PAGE
+// =====================================================
 
 export default function OrderDetailPage() {
   const params = useParams();
@@ -472,6 +474,110 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [statusWarning, setStatusWarning] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+
+  // ---------------------------------------------------
+  // Ambil daftar pesanan customer dari backend.
+  //
+  // Backend getAllOrders() sudah membatasi data customer
+  // berdasarkan user_id dari token.
+  //
+  // Tidak menggunakan GET /orders/:id karena controller
+  // detail saat ini belum melakukan validasi kepemilikan.
+  // ---------------------------------------------------
+
+  const getOrdersFromBackend = useCallback(async (token) => {
+    const response = await fetch(ORDER_API, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    const data = await readResponse(response);
+
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      router.replace("/login");
+      throw new Error("Sesi login berakhir. Silakan login kembali.");
+    }
+
+    if (response.status === 403) {
+      throw new Error(
+        "Akun ini tidak memiliki akses ke riwayat pesanan customer."
+      );
+    }
+
+    if (!response.ok || data.success === false) {
+      throw new Error(
+        data.message || "Gagal mengambil data pesanan."
+      );
+    }
+
+    const rawOrders = Array.isArray(data.orders)
+      ? data.orders
+      : Array.isArray(data.data)
+        ? data.data
+        : [];
+
+    return rawOrders
+      .map(normalizeOrder)
+      .filter(Boolean);
+  }, [router]);
+
+  // ---------------------------------------------------
+  // Sinkronisasi status Midtrans
+  //
+  // PENTING:
+  // Endpoint backend menerima order_code,
+  // bukan ID numerik order.
+  // ---------------------------------------------------
+
+  const synchronizePaymentStatus = useCallback(
+    async (token, orderCode) => {
+      if (!orderCode) {
+        throw new Error("Kode pesanan tidak tersedia.");
+      }
+
+      const response = await fetch(
+        `${PAYMENT_STATUS_API}/${encodeURIComponent(orderCode)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+        }
+      );
+
+      const data = await readResponse(response);
+
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        router.replace("/login");
+        throw new Error("Sesi login berakhir. Silakan login kembali.");
+      }
+
+      if (!response.ok || data.success === false) {
+        throw new Error(
+          data.message || "Gagal memeriksa status pembayaran."
+        );
+      }
+
+      return data;
+    },
+    [router]
+  );
+
+  // ---------------------------------------------------
+  // FETCH DETAIL ORDER
+  // ---------------------------------------------------
 
   const fetchOrder = useCallback(
     async (showLoading = false) => {
@@ -489,6 +595,8 @@ export default function OrderDetailPage() {
         }
 
         setError("");
+        setStatusWarning("");
+        setCopyMessage("");
 
         const token = localStorage.getItem("token");
 
@@ -497,156 +605,101 @@ export default function OrderDetailPage() {
           return;
         }
 
-        const response = await fetch(
-          `${ORDER_API}/${encodeURIComponent(orderId)}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/json",
-            },
-            cache: "no-store",
-          }
+        // 1. Ambil pesanan milik customer yang sedang login.
+        let orders = await getOrdersFromBackend(token);
+
+        let currentOrder = orders.find(
+          (item) => String(item.id) === String(orderId)
         );
 
-        const responseText = await response.text();
-
-        let data = {};
-
-        try {
-          data = responseText ? JSON.parse(responseText) : {};
-        } catch {
-          throw new Error("Respons server tidak valid.");
-        }
-
-        if (response.status === 401) {
-          localStorage.removeItem("token");
-          localStorage.removeItem("user");
-          router.replace("/login");
-          return;
-        }
-
-        if (response.status === 403) {
+        if (!currentOrder) {
           throw new Error(
-            "Kamu tidak memiliki izin untuk melihat pesanan ini."
+            "Pesanan tidak ditemukan pada akun kamu."
           );
         }
 
-        if (response.status === 404) {
-          throw new Error("Pesanan tidak ditemukan.");
-        }
-
-        if (!response.ok || data.success === false) {
-          throw new Error(
-            data.message || "Gagal mengambil detail pesanan."
-          );
-        }
-
-        const rawOrder =
-          data.order ||
-          data.data?.order ||
-          data.data?.order_detail ||
-          data.data ||
-          (Array.isArray(data.orders)
-            ? data.orders.find(
-                (item) => String(item.id) === String(orderId)
-              )
-            : null) ||
-          (data.id !== undefined ? data : null);
-
-        if (!rawOrder || typeof rawOrder !== "object") {
-          throw new Error(
-            "Data pesanan tidak ditemukan pada respons server."
-          );
-        }
-
-        const normalized = normalizeOrder(rawOrder);
-
-        if (!normalized) {
-          throw new Error("Format data pesanan tidak valid.");
-        }
-
-        setOrder(normalized);
-
+        // 2. Jika pending, periksa status aktual melalui Midtrans.
         if (
-          normalizeStatus(normalized.payment_status) === "pending" &&
-          normalized.id
+          normalizeStatus(currentOrder.payment_status) === "pending" &&
+          currentOrder.order_code
         ) {
           try {
-            const statusResponse = await fetch(
-              `${PAYMENT_STATUS_API}/${encodeURIComponent(normalized.id)}`,
-              {
-                method: "GET",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  Accept: "application/json",
-                },
-                cache: "no-store",
-              }
+            await synchronizePaymentStatus(
+              token,
+              currentOrder.order_code
             );
 
-            if (statusResponse.ok) {
-              const latestResponse = await fetch(
-                `${ORDER_API}/${encodeURIComponent(orderId)}`,
-                {
-                  method: "GET",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: "application/json",
-                  },
-                  cache: "no-store",
-                }
-              );
+            // 3. Ambil ulang daftar pesanan setelah sinkronisasi.
+            // Backend akan mengembalikan status terbaru dari database.
+            orders = await getOrdersFromBackend(token);
 
-              if (latestResponse.ok) {
-                const latestData = await latestResponse.json();
+            const latestOrder = orders.find(
+              (item) => String(item.id) === String(orderId)
+            );
 
-                const latestRawOrder =
-                  latestData.order ||
-                  latestData.data?.order ||
-                  latestData.data ||
-                  (Array.isArray(latestData.orders)
-                    ? latestData.orders.find(
-                        (item) =>
-                          String(item.id) === String(orderId)
-                      )
-                    : null) ||
-                  (latestData.id !== undefined
-                    ? latestData
-                    : null);
-
-                if (latestRawOrder) {
-                  const latestOrder = normalizeOrder(latestRawOrder);
-
-                  if (latestOrder) {
-                    setOrder(latestOrder);
-                  }
-                }
-              }
+            if (latestOrder) {
+              currentOrder = latestOrder;
             }
           } catch (statusError) {
             console.error(
-              "CHECK PAYMENT STATUS ERROR:",
+              "PAYMENT STATUS SYNC ERROR:",
               statusError
+            );
+
+            setStatusWarning(
+              statusError.message ||
+                "Status pembayaran belum dapat diperbarui dari Midtrans."
             );
           }
         }
+
+        setOrder(currentOrder);
       } catch (err) {
         console.error("GET ORDER DETAIL ERROR:", err);
+
         setError(
-          err.message || "Terjadi kesalahan saat mengambil detail pesanan."
+          err.message ||
+            "Terjadi kesalahan saat mengambil detail pesanan."
         );
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [orderId, router]
+    [
+      orderId,
+      router,
+      getOrdersFromBackend,
+      synchronizePaymentStatus,
+    ]
   );
 
   useEffect(() => {
     fetchOrder(true);
   }, [fetchOrder]);
+
+  // ---------------------------------------------------
+  // AUTO REFRESH UNTUK PESANAN PENDING
+  // ---------------------------------------------------
+
+  useEffect(() => {
+    if (
+      !order ||
+      normalizeStatus(order.payment_status) !== "pending"
+    ) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      fetchOrder(false);
+    }, 20000);
+
+    return () => window.clearInterval(interval);
+  }, [order?.id, order?.payment_status, fetchOrder]);
+
+  // ---------------------------------------------------
+  // DERIVED DATA
+  // ---------------------------------------------------
 
   const status = useMemo(
     () => getStatusConfig(order?.payment_status),
@@ -661,9 +714,17 @@ export default function OrderDetailPage() {
   const StatusIcon = status.icon;
   const StatusDetailsIcon = statusDetails.icon;
 
-  const isPaid = ["paid", "success", "settlement"].includes(
-    normalizeStatus(order?.payment_status)
+  const normalizedStatus = normalizeStatus(
+    order?.payment_status
   );
+
+  const isPaid = [
+    "paid",
+    "success",
+    "settlement",
+  ].includes(normalizedStatus);
+
+  const isPending = normalizedStatus === "pending";
 
   const eventName =
     order?.event_name || "Informasi acara belum tersedia";
@@ -673,16 +734,47 @@ export default function OrderDetailPage() {
 
   const quantity = parseNumber(order?.quantity);
   const total = parseNumber(order?.total_price);
-  const categoryPrice = parseNumber(order?.category_price);
 
-  const calculatedSubtotal =
-    categoryPrice > 0 && quantity > 0
-      ? categoryPrice * quantity
-      : total;
+  const categoryPrice = parseNumber(
+    order?.category_price
+  );
+
+  const subtotal =
+    parseNumber(order?.subtotal) > 0
+      ? parseNumber(order?.subtotal)
+      : categoryPrice * quantity;
+
+  const serviceFee = Math.max(total - subtotal, 0);
+
+  // ---------------------------------------------------
+  // COPY ORDER CODE
+  // ---------------------------------------------------
+
+  const handleCopyOrderCode = async () => {
+    if (!order?.order_code) return;
+
+    try {
+      await navigator.clipboard.writeText(order.order_code);
+      setCopyMessage("Kode pesanan berhasil disalin.");
+
+      window.setTimeout(() => {
+        setCopyMessage("");
+      }, 2500);
+    } catch (err) {
+      console.error("COPY ORDER CODE ERROR:", err);
+      setCopyMessage(
+        "Tidak dapat menyalin kode pesanan dari browser."
+      );
+    }
+  };
+
+  // =====================================================
+  // LOADING STATE
+  // =====================================================
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
         <div className="w-full max-w-md rounded-2xl border border-[#D8D0C4]/30 bg-white p-8 text-center shadow-lg">
           <Loader2
             size={38}
@@ -701,9 +793,13 @@ export default function OrderDetailPage() {
     );
   }
 
+  // =====================================================
+  // ERROR STATE
+  // =====================================================
+
   if (error || !order) {
     return (
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-2xl px-4">
         <Link
           href="/orders"
           className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-[#3B507D] transition hover:text-[#112250]"
@@ -747,8 +843,13 @@ export default function OrderDetailPage() {
     );
   }
 
+  // =====================================================
+  // MAIN CONTENT
+  // =====================================================
+
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 w-full text-[#112250]">
+      {/* HEADER */}
       <section className="mb-6 overflow-hidden rounded-2xl border border-[#D8D0C4]/30 bg-white shadow-lg">
         <div className="border-b border-[#D8D0C4]/30 bg-gradient-to-r from-[#112250]/5 via-white to-[#E5C27A]/10 p-5 sm:p-6">
           <Link
@@ -793,8 +894,28 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
+      {/* WARNING SINKRONISASI */}
+      {statusWarning && (
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+          <AlertCircle size={19} className="mt-0.5 shrink-0" />
+
+          <div>
+            <p className="text-sm font-bold">
+              Status pembayaran belum tersinkronisasi
+            </p>
+
+            <p className="mt-1 text-xs leading-5">
+              {statusWarning} Data pesanan tetap ditampilkan berdasarkan
+              informasi terakhir yang tersimpan di backend.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid items-start gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+        {/* LEFT CONTENT */}
+        <div className="min-w-0 space-y-5 lg:col-span-2">
+          {/* EVENT AND ORDER INFORMATION */}
           <section className="overflow-hidden rounded-2xl border border-[#D8D0C4]/30 bg-white shadow-lg">
             <div className="border-b border-[#D8D0C4]/30 p-5 sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -808,11 +929,30 @@ export default function OrderDetailPage() {
                       Kode Pesanan
                     </p>
 
-                    <p className="mt-1 break-all text-sm font-extrabold text-[#112250]">
-                      {order.order_code || `ORDER-${order.id}`}
-                    </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <p className="break-all text-sm font-extrabold text-[#112250]">
+                        {order.order_code || `ORDER-${order.id}`}
+                      </p>
 
-                    <h2 className="mt-3 text-lg font-extrabold leading-snug text-[#112250] sm:text-xl">
+                      {order.order_code && (
+                        <button
+                          type="button"
+                          onClick={handleCopyOrderCode}
+                          title="Salin kode pesanan"
+                          className="rounded-lg p-1.5 text-[#3B507D] transition hover:bg-[#112250]/5"
+                        >
+                          <Copy size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {copyMessage && (
+                      <p className="mt-1 text-xs font-medium text-emerald-600">
+                        {copyMessage}
+                      </p>
+                    )}
+
+                    <h2 className="mt-3 break-words text-lg font-extrabold leading-snug text-[#112250] sm:text-xl">
                       {eventName}
                     </h2>
 
@@ -835,6 +975,7 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="p-5 sm:p-6">
+              {/* PAYMENT STATUS */}
               <div
                 className={`rounded-xl border p-4 sm:p-5 ${statusDetails.className}`}
               >
@@ -845,7 +986,9 @@ export default function OrderDetailPage() {
                   />
 
                   <div>
-                    <h3 className="font-bold">{statusDetails.title}</h3>
+                    <h3 className="font-bold">
+                      {statusDetails.title}
+                    </h3>
 
                     <p className="mt-1 text-sm leading-6 opacity-90">
                       {statusDetails.description}
@@ -854,13 +997,14 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
+              {/* EVENT INFORMATION */}
               <div className="mt-6">
                 <h3 className="flex items-center gap-2 text-sm font-extrabold text-[#112250]">
                   <CalendarDays size={16} className="text-[#3B507D]" />
                   Informasi Acara
                 </h3>
 
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="mt-4 grid gap-5 sm:grid-cols-2">
                   <DetailInfo
                     icon={<CalendarDays size={18} />}
                     label="Tanggal Acara"
@@ -891,57 +1035,124 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
+              {/* TICKET INFORMATION */}
               <div className="mt-7 border-t border-[#D8D0C4]/30 pt-6">
                 <h3 className="flex items-center gap-2 text-sm font-extrabold text-[#112250]">
                   <Ticket size={16} className="text-[#3B507D]" />
                   Informasi Tiket
                 </h3>
 
-                <div className="mt-4 rounded-xl border border-[#D8D0C4]/40 bg-[#F7F8FA]/70 p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#3B507D] shadow-sm">
-                        <Ticket size={20} />
+                <div className="mt-4 overflow-hidden rounded-xl border border-[#D8D0C4]/40 bg-[#F7F8FA]/70">
+                  {order.details.length > 0 ? (
+                    order.details.map((detail, index) => (
+                      <div
+                        key={detail.id || `${detail.ticket_category_id}-${index}`}
+                        className="border-b border-[#D8D0C4]/30 p-4 last:border-b-0 sm:p-5"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#3B507D] shadow-sm">
+                              <Ticket size={20} />
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="break-words font-bold text-[#112250]">
+                                {detail.category_name ||
+                                  categoryName}
+                              </p>
+
+                              <p className="mt-1 text-sm text-[#9B907F]">
+                                {parseNumber(detail.quantity)} tiket
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <p className="text-xs text-[#9B907F]">
+                              Harga satuan
+                            </p>
+
+                            <p className="mt-1 text-sm font-bold text-[#112250]">
+                              {formatRupiah(detail.price)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between border-t border-[#D8D0C4]/40 pt-3">
+                          <span className="text-sm text-[#9B907F]">
+                            Subtotal kategori
+                          </span>
+
+                          <span className="text-sm font-bold text-[#112250]">
+                            {formatRupiah(
+                              parseNumber(detail.subtotal) ||
+                                parseNumber(detail.price) *
+                                  parseNumber(detail.quantity)
+                            )}
+                          </span>
+                        </div>
                       </div>
-
-                      <div className="min-w-0">
-                        <p className="break-words font-bold text-[#112250]">
-                          {categoryName}
-                        </p>
-
-                        <p className="mt-1 text-sm text-[#9B907F]">
-                          {quantity} tiket
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 text-right">
-                      <p className="text-xs text-[#9B907F]">
-                        Harga satuan
+                    ))
+                  ) : (
+                    <div className="p-5">
+                      <p className="font-bold text-[#112250]">
+                        {categoryName}
                       </p>
 
-                      <p className="mt-1 text-sm font-bold text-[#112250]">
-                        {categoryPrice > 0
-                          ? formatRupiah(categoryPrice)
-                          : "-"}
+                      <p className="mt-1 text-sm text-[#9B907F]">
+                        {quantity} tiket
                       </p>
-                    </div>
-                  </div>
 
-                  <div className="mt-4 flex items-center justify-between border-t border-[#D8D0C4]/40 pt-4">
-                    <span className="text-sm text-[#9B907F]">
-                      Jumlah tiket
+                      {categoryPrice > 0 && (
+                        <p className="mt-2 text-sm font-semibold text-[#3B507D]">
+                          {formatRupiah(categoryPrice)} / tiket
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between border-t border-[#D8D0C4]/40 bg-white px-4 py-4 sm:px-5">
+                    <span className="text-sm font-semibold text-[#3B507D]">
+                      Total tiket
                     </span>
 
-                    <span className="text-sm font-bold text-[#112250]">
+                    <span className="text-sm font-extrabold text-[#112250]">
                       {quantity} tiket
                     </span>
                   </div>
                 </div>
               </div>
+
+              {/* BUYER INFORMATION */}
+              {(order.fullname || order.email) && (
+                <div className="mt-7 border-t border-[#D8D0C4]/30 pt-6">
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold text-[#112250]">
+                    <UserRound
+                      size={16}
+                      className="text-[#3B507D]"
+                    />
+                    Informasi Pemesan
+                  </h3>
+
+                  <div className="mt-4 grid gap-5 sm:grid-cols-2">
+                    <DetailInfo
+                      icon={<UserRound size={18} />}
+                      label="Nama Pemesan"
+                      value={order.fullname || "-"}
+                    />
+
+                    <DetailInfo
+                      icon={<Mail size={18} />}
+                      label="Email Pemesan"
+                      value={order.email || "-"}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
+          {/* TRANSACTION INFORMATION */}
           <section className="rounded-2xl border border-[#D8D0C4]/30 bg-white p-5 shadow-lg sm:p-6">
             <h2 className="flex items-center gap-2 text-base font-extrabold text-[#112250]">
               <Receipt size={17} className="text-[#3B507D]" />
@@ -957,6 +1168,12 @@ export default function OrderDetailPage() {
                 icon={<Receipt size={18} />}
                 label="ID Pesanan"
                 value={String(order.id ?? "-")}
+              />
+
+              <DetailInfo
+                icon={<Receipt size={18} />}
+                label="Kode Pesanan"
+                value={order.order_code || "-"}
               />
 
               <DetailInfo
@@ -980,11 +1197,19 @@ export default function OrderDetailPage() {
                     : "-"
                 }
               />
+
+              <DetailInfo
+                icon={<ShieldCheck size={18} />}
+                label="Status Transaksi"
+                value={status.label}
+              />
             </div>
           </section>
         </div>
 
-        <aside className="space-y-5 lg:sticky lg:top-24">
+        {/* RIGHT SIDEBAR */}
+        <aside className="min-w-0 space-y-5 lg:sticky lg:top-24">
+          {/* PAYMENT SUMMARY */}
           <section className="rounded-2xl border border-[#D8D0C4]/30 bg-white p-5 shadow-lg sm:p-6">
             <div className="flex items-center gap-2">
               <CreditCard size={20} className="text-[#3B507D]" />
@@ -995,16 +1220,24 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="mt-6 space-y-4">
-              <PriceRow label="Kategori Tiket" value={categoryName} />
+              <PriceRow
+                label="Kategori Tiket"
+                value={categoryName}
+              />
 
               <PriceRow
-                label="Jumlah"
+                label="Jumlah Tiket"
                 value={`${quantity} tiket`}
               />
 
               <PriceRow
-                label="Harga Tiket"
-                value={formatRupiah(calculatedSubtotal)}
+                label="Subtotal Tiket"
+                value={formatRupiah(subtotal)}
+              />
+
+              <PriceRow
+                label="Biaya Layanan"
+                value={formatRupiah(serviceFee)}
               />
 
               <div className="border-t border-dashed border-[#D8D0C4]/50 pt-4">
@@ -1020,14 +1253,17 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            <div
-              className={`mt-5 rounded-xl border p-3.5 ${status.className}`}
-            >
+            <div className={`mt-5 rounded-xl border p-3.5 ${status.className}`}>
               <div className="flex items-start gap-2.5">
-                <StatusIcon size={18} className="mt-0.5 shrink-0" />
+                <StatusIcon
+                  size={18}
+                  className="mt-0.5 shrink-0"
+                />
 
                 <div>
-                  <p className="text-sm font-bold">{status.label}</p>
+                  <p className="text-sm font-bold">
+                    {status.label}
+                  </p>
 
                   <p className="mt-1 text-xs leading-5 opacity-90">
                     {status.description}
@@ -1047,6 +1283,21 @@ export default function OrderDetailPage() {
               </Link>
             )}
 
+            {isPending && (
+              <button
+                type="button"
+                onClick={() => fetchOrder(false)}
+                disabled={refreshing}
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:shadow-lg disabled:opacity-60"
+              >
+                <RefreshCw
+                  size={17}
+                  className={refreshing ? "animate-spin" : ""}
+                />
+                Periksa Pembayaran
+              </button>
+            )}
+
             <Link
               href="/orders"
               className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#D8D0C4]/40 bg-white px-5 py-3 text-sm font-bold text-[#3B507D] transition hover:bg-[#F7F8FA]"
@@ -1056,6 +1307,7 @@ export default function OrderDetailPage() {
             </Link>
           </section>
 
+          {/* PAYMENT SECURITY INFO */}
           <section className="rounded-2xl border border-[#E5C27A]/40 bg-gradient-to-br from-[#E5C27A]/15 to-[#F7F8FA] p-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#3B507D] shadow-sm">
@@ -1068,17 +1320,21 @@ export default function OrderDetailPage() {
                 </h3>
 
                 <p className="mt-2 text-xs leading-6 text-[#3B507D]/80">
-                  Status transaksi diperoleh dari backend. Pembayaran
-                  dinyatakan berhasil setelah status dikonfirmasi oleh
-                  Midtrans, bukan hanya berdasarkan halaman pembayaran.
+                  Status transaksi diperiksa melalui backend TicketVerse
+                  dan Midtrans. Pembayaran dinyatakan berhasil setelah
+                  status dikonfirmasi oleh server.
                 </p>
               </div>
             </div>
           </section>
 
+          {/* HELP */}
           <section className="rounded-2xl border border-[#D8D0C4]/30 bg-white p-5 shadow-lg">
             <div className="flex items-start gap-3">
-              <Info size={19} className="mt-0.5 shrink-0 text-[#9B907F]" />
+              <Info
+                size={19}
+                className="mt-0.5 shrink-0 text-[#9B907F]"
+              />
 
               <div>
                 <h3 className="text-sm font-bold text-[#112250]">
@@ -1092,20 +1348,19 @@ export default function OrderDetailPage() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    if (order.order_code) {
-                      navigator.clipboard
-                        .writeText(order.order_code)
-                        .catch((err) =>
-                          console.error("COPY ORDER CODE ERROR:", err)
-                        );
-                    }
-                  }}
+                  onClick={handleCopyOrderCode}
                   disabled={!order.order_code}
-                  className="mt-3 text-xs font-bold text-[#3B507D] transition hover:text-[#112250] disabled:opacity-50"
+                  className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-[#3B507D] transition hover:text-[#112250] disabled:opacity-50"
                 >
+                  <Copy size={14} />
                   Salin Kode Pesanan
                 </button>
+
+                {copyMessage && (
+                  <p className="mt-2 text-xs font-medium text-emerald-600">
+                    {copyMessage}
+                  </p>
+                )}
               </div>
             </div>
           </section>
@@ -1122,10 +1377,16 @@ export default function OrderDetailPage() {
   );
 }
 
+// =====================================================
+// REUSABLE COMPONENTS
+// =====================================================
+
 function DetailInfo({ icon, label, value }) {
   return (
     <div className="flex min-w-0 items-start gap-3">
-      <div className="mt-0.5 shrink-0 text-[#3B507D]">{icon}</div>
+      <div className="mt-0.5 shrink-0 text-[#3B507D]">
+        {icon}
+      </div>
 
       <div className="min-w-0">
         <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9B907F]">
@@ -1143,7 +1404,9 @@ function DetailInfo({ icon, label, value }) {
 function PriceRow({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <span className="text-sm text-[#9B907F]">{label}</span>
+      <span className="text-sm text-[#9B907F]">
+        {label}
+      </span>
 
       <span className="max-w-[60%] break-words text-right text-sm font-semibold text-[#112250]">
         {value || "-"}

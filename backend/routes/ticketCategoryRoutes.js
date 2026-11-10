@@ -1,28 +1,25 @@
 const express = require("express");
-
 const router = express.Router();
+
+const verifyToken = require("../middleware/auth");
 
 const {
   getTicketCategories,
   getTicketCategoryById,
+  getTicketCategoriesByEvent,
   createTicketCategory,
   updateTicketCategory,
   deleteTicketCategory,
 } = require("../controllers/ticketCategoryController");
 
-// Ambil semua kategori tiket
+// PUBLIC: Customer boleh melihat kategori tiket
 router.get("/", getTicketCategories);
-
-// Ambil kategori tiket berdasarkan ID
+router.get("/event/:eventId", getTicketCategoriesByEvent);
 router.get("/:id", getTicketCategoryById);
 
-// Tambah kategori tiket
-router.post("/", createTicketCategory);
-
-// Update kategori tiket
-router.put("/:id", updateTicketCategory);
-
-// Hapus kategori tiket
-router.delete("/:id", deleteTicketCategory);
+// PROTECTED: Hanya pengguna terautentikasi
+router.post("/", verifyToken, createTicketCategory);
+router.put("/:id", verifyToken, updateTicketCategory);
+router.delete("/:id", verifyToken, deleteTicketCategory);
 
 module.exports = router;

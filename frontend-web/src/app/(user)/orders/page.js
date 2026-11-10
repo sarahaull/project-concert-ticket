@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -19,8 +20,11 @@ import {
   Info,
   MapPin,
   CircleDollarSign,
-  Sparkles,
 } from "lucide-react";
+
+// ============================================================
+// API CONFIGURATION
+// ============================================================
 
 const API_BASE = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -30,6 +34,10 @@ const API_BASE = (
 
 const ORDER_API = `${API_BASE}/api/orders`;
 const PAYMENT_STATUS_API = `${API_BASE}/api/payments/midtrans-status`;
+
+// ============================================================
+// HELPER
+// ============================================================
 
 function formatRupiah(value) {
   return new Intl.NumberFormat("id-ID", {
@@ -57,6 +65,7 @@ function formatDate(value) {
 function formatTime(value) {
   if (!value) return "-";
 
+  // Format jam dari database MySQL, misalnya 19:30:00
   if (typeof value === "string" && /^\d{2}:\d{2}/.test(value)) {
     return value.slice(0, 5);
   }
@@ -83,6 +92,10 @@ function firstValue(...values) {
   );
 }
 
+// ============================================================
+// NORMALISASI DATA ORDER DARI BACKEND
+// ============================================================
+
 function normalizeOrder(order) {
   const details =
     order.order_details ||
@@ -97,23 +110,44 @@ function normalizeOrder(order) {
       ? [details]
       : [];
 
-  const firstDetail = detailList[0] || {};
-
   const event =
     order.event ||
     order.events ||
-    firstDetail.event ||
-    firstDetail.events ||
     {};
 
-  const category =
-    order.ticket_category ||
-    order.ticketCategory ||
-    order.category ||
-    firstDetail.ticket_category ||
-    firstDetail.ticketCategory ||
-    firstDetail.category ||
-    {};
+  const detailQuantity = detailList.reduce((total, detail) => {
+    return total + (Number(detail.quantity) || 0);
+  }, 0);
+
+  const quantity =
+    Number(
+      firstValue(
+        order.quantity,
+        order.total_quantity,
+        order.totalQuantity,
+        detailQuantity,
+        0
+      )
+    ) || 0;
+
+  const categoryNames = detailList
+    .map((detail) =>
+      firstValue(
+        detail.category_name,
+        detail.ticket_category_name,
+        detail.categoryName,
+        detail.ticketCategoryName
+      )
+    )
+    .filter(Boolean);
+
+  const categoryName = firstValue(
+    order.category_name,
+    order.ticket_category_name,
+    order.categoryName,
+    order.ticketCategoryName,
+    [...new Set(categoryNames)].join(", ")
+  );
 
   const eventName = firstValue(
     order.event_name,
@@ -123,84 +157,71 @@ function normalizeOrder(order) {
     event.event_name,
     event.eventName,
     event.title,
-    event.name,
-    firstDetail.event_name,
-    firstDetail.eventName
+    event.name
   );
 
-  const categoryName = firstValue(
-    order.category_name,
-    order.ticket_category_name,
-    order.categoryName,
-    order.ticketCategoryName,
-    category.category_name,
-    category.categoryName,
-    category.name,
-    firstDetail.category_name,
-    firstDetail.ticket_category_name,
-    firstDetail.categoryName,
-    firstDetail.ticketCategoryName
-  );
-
-  const detailQuantity = detailList.reduce((total, detail) => {
-    return total + (Number(detail.quantity) || 0);
-  }, 0);
-
-  const quantity = Number(
-    firstValue(
-      order.quantity,
-      order.total_quantity,
-      order.totalQuantity,
-      detailQuantity,
-      0
-    )
-  ) || 0;
-
-  const total = Number(
-    firstValue(
-      order.total_price,
-      order.totalPrice,
-      order.total,
-      order.subtotal,
-      0
-    )
-  ) || 0;
+  const totalPrice =
+    Number(
+      firstValue(
+        order.total_price,
+        order.totalPrice,
+        order.total,
+        0
+      )
+    ) || 0;
 
   return {
     ...order,
+
     id: order.id,
+
     order_code: firstValue(
       order.order_code,
       order.orderCode,
       order.code
     ),
+
     payment_status: firstValue(
       order.payment_status,
       order.paymentStatus,
       order.status
     ),
+
+    event_id: firstValue(
+      order.event_id,
+      order.eventId,
+      event.id
+    ),
+
     event_name: eventName,
+
     category_name: categoryName,
+
     quantity,
-    total_price: total,
+
+    total_price: totalPrice,
+
     order_date: firstValue(
       order.order_date,
       order.orderDate,
       order.created_at,
       order.createdAt
     ),
+
     event_date: firstValue(
       order.event_date,
       order.eventDate,
       event.event_date,
       event.eventDate
     ),
+
     event_time: firstValue(
       order.event_time,
       order.eventTime,
       event.event_time,
       event.eventTime
     ),
+
     venue_name: firstValue(
       order.venue_name,
       order.venueName,
@@ -209,121 +230,183 @@ function normalizeOrder(order) {
       event.venueName,
       event.location
     ),
+
+    city: order.city || "",
+
     details: detailList,
   };
 }
 
+// ============================================================
+// STATUS PEMBAYARAN
+// ============================================================
+
+function isPaidStatus(status) {
+  return ["paid", "success", "settlement"].includes(
+    normalizeStatus(status)
+  );
+}
+
+function isPendingStatus(status) {
+  return normalizeStatus(status) === "pending";
+}
+
+function isCancelledStatus(status) {
+  return ["cancelled", "canceled"].includes(
+    normalizeStatus(status)
+  );
+}
+
+function isFailedStatus(status) {
+  return ["failed", "deny"].includes(
+    normalizeStatus(status)
+  );
+}
+
 function getStatusConfig(status) {
-  switch (normalizeStatus(status)) {
-    case "paid":
-    case "success":
-    case "settlement":
-      return {
-        label: "Pembayaran Berhasil",
-        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-        icon: CheckCircle2,
-      };
-
-    case "pending":
-      return {
-        label: "Menunggu Pembayaran",
-        className: "border-amber-200 bg-amber-50 text-amber-700",
-        icon: Clock3,
-      };
-
-    case "cancelled":
-    case "canceled":
-      return {
-        label: "Dibatalkan",
-        className: "border-red-200 bg-red-50 text-red-700",
-        icon: XCircle,
-      };
-
-    case "expired":
-      return {
-        label: "Kadaluarsa",
-        className: "border-slate-200 bg-slate-100 text-slate-600",
-        icon: AlertCircle,
-      };
-
-    case "failed":
-    case "deny":
-      return {
-        label: "Pembayaran Gagal",
-        className: "border-red-200 bg-red-50 text-red-700",
-        icon: AlertCircle,
-      };
-
-    default:
-      return {
-        label: status || "Status Tidak Diketahui",
-        className: "border-slate-200 bg-slate-100 text-slate-600",
-        icon: Receipt,
-      };
+  if (isPaidStatus(status)) {
+    return {
+      label: "Pembayaran Berhasil",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      icon: CheckCircle2,
+    };
   }
+
+  if (isPendingStatus(status)) {
+    return {
+      label: "Menunggu Pembayaran",
+      className: "border-amber-200 bg-amber-50 text-amber-700",
+      icon: Clock3,
+    };
+  }
+
+  if (isCancelledStatus(status)) {
+    return {
+      label: "Dibatalkan",
+      className: "border-red-200 bg-red-50 text-red-700",
+      icon: XCircle,
+    };
+  }
+
+  if (normalizeStatus(status) === "expired") {
+    return {
+      label: "Kedaluwarsa",
+      className: "border-slate-200 bg-slate-100 text-slate-600",
+      icon: AlertCircle,
+    };
+  }
+
+  if (isFailedStatus(status)) {
+    return {
+      label: "Pembayaran Gagal",
+      className: "border-red-200 bg-red-50 text-red-700",
+      icon: AlertCircle,
+    };
+  }
+
+  return {
+    label: status || "Status Tidak Diketahui",
+    className: "border-slate-200 bg-slate-100 text-slate-600",
+    icon: Receipt,
+  };
 }
 
 function getStatusDescription(status) {
-  switch (normalizeStatus(status)) {
-    case "paid":
-    case "success":
-    case "settlement":
-      return {
-        title: "Pembayaran berhasil dikonfirmasi",
-        description:
-          "Pembayaran kamu telah diterima. Tiket dapat dilihat melalui halaman Tiket Saya setelah tiket berhasil diterbitkan.",
-        className: "border-emerald-200 bg-emerald-50 text-emerald-800",
-        icon: CheckCircle2,
-      };
-
-    case "pending":
-      return {
-        title: "Pesanan sedang menunggu pembayaran",
-        description:
-          "Transaksi sudah dibuat, tetapi pembayaran belum dikonfirmasi oleh Midtrans. Setelah pembayaran berhasil, status pesanan dan penerbitan tiket akan diperbarui secara otomatis.",
-        className: "border-amber-200 bg-amber-50 text-amber-800",
-        icon: Clock3,
-      };
-
-    case "cancelled":
-    case "canceled":
-      return {
-        title: "Pesanan telah dibatalkan",
-        description:
-          "Transaksi ini telah dibatalkan sehingga tiket belum dapat diterbitkan.",
-        className: "border-red-200 bg-red-50 text-red-800",
-        icon: XCircle,
-      };
-
-    case "expired":
-      return {
-        title: "Batas waktu pembayaran telah berakhir",
-        description:
-          "Pesanan sudah melewati batas waktu pembayaran. Silakan melakukan pemesanan baru jika ingin membeli tiket.",
-        className: "border-slate-200 bg-slate-100 text-slate-700",
-        icon: AlertCircle,
-      };
-
-    case "failed":
-    case "deny":
-      return {
-        title: "Pembayaran tidak berhasil",
-        description:
-          "Transaksi belum berhasil diproses. Silakan lakukan pemesanan kembali jika ingin membeli tiket.",
-        className: "border-red-200 bg-red-50 text-red-800",
-        icon: AlertCircle,
-      };
-
-    default:
-      return {
-        title: "Status pesanan belum diketahui",
-        description:
-          "Status transaksi belum dapat dikenali. Silakan muat ulang halaman.",
-        className: "border-slate-200 bg-slate-50 text-slate-700",
-        icon: Info,
-      };
+  if (isPaidStatus(status)) {
+    return {
+      title: "Pembayaran berhasil dikonfirmasi",
+      description:
+        "Pembayaran kamu telah diterima. Tiket dapat dilihat melalui halaman Tiket Saya setelah tiket berhasil diterbitkan oleh sistem.",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      icon: CheckCircle2,
+    };
   }
+
+  if (isPendingStatus(status)) {
+    return {
+      title: "Pesanan sedang menunggu pembayaran",
+      description:
+        "Transaksi sudah dibuat, tetapi pembayaran belum dikonfirmasi oleh Midtrans. Status pesanan akan diperbarui setelah sistem menerima konfirmasi pembayaran.",
+      className: "border-amber-200 bg-amber-50 text-amber-800",
+      icon: Clock3,
+    };
+  }
+
+  if (isCancelledStatus(status)) {
+    return {
+      title: "Pesanan telah dibatalkan",
+      description:
+        "Transaksi ini telah dibatalkan sehingga tiket belum dapat diterbitkan.",
+      className: "border-red-200 bg-red-50 text-red-800",
+      icon: XCircle,
+    };
+  }
+
+  if (normalizeStatus(status) === "expired") {
+    return {
+      title: "Batas waktu pembayaran telah berakhir",
+      description:
+        "Pesanan sudah melewati batas waktu pembayaran. Silakan melakukan pemesanan baru jika ingin membeli tiket.",
+      className: "border-slate-200 bg-slate-100 text-slate-700",
+      icon: AlertCircle,
+    };
+  }
+
+  if (isFailedStatus(status)) {
+    return {
+      title: "Pembayaran tidak berhasil",
+      description:
+        "Transaksi belum berhasil diproses. Silakan lakukan pemesanan kembali jika ingin membeli tiket.",
+      className: "border-red-200 bg-red-50 text-red-800",
+      icon: AlertCircle,
+    };
+  }
+
+  return {
+    title: "Status pesanan belum diketahui",
+    description:
+      "Status transaksi belum dapat dikenali. Silakan perbarui data atau hubungi administrator jika masalah berlanjut.",
+    className: "border-slate-200 bg-slate-50 text-slate-700",
+    icon: Info,
+  };
 }
+
+// ============================================================
+// API RESPONSE HELPER
+// ============================================================
+
+async function parseApiResponse(response) {
+  const responseText = await response.text();
+
+  let data = {};
+
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    throw new Error("Respons server tidak valid.");
+  }
+
+  if (response.status === 401) {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    window.location.href = "/login";
+
+    throw new Error("Sesi login berakhir. Silakan login kembali.");
+  }
+
+  if (!response.ok || data.success === false) {
+    throw new Error(
+      data.message || `Permintaan gagal (${response.status}).`
+    );
+  }
+
+  return data;
+}
+
+// ============================================================
+// HALAMAN ORDERS
+// ============================================================
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState([]);
@@ -333,121 +416,210 @@ export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  const fetchOrders = useCallback(async (showLoading = true) => {
-    try {
-      if (showLoading) {
-        setLoading(true);
-      } else {
-        setRefreshing(true);
-      }
+  // Mencegah request bertumpuk karena interval dan tombol refresh.
+  const requestInProgress = useRef(false);
+  const mountedRef = useRef(false);
 
-      setError("");
+  // ==========================================================
+  // AMBIL TOKEN
+  // ==========================================================
 
-      const token = localStorage.getItem("token");
+  const getAuthToken = useCallback(() => {
+    if (typeof window === "undefined") return null;
 
-      if (!token) {
-        window.location.href = "/login";
-        return;
-      }
-
-      const response = await fetch(ORDER_API, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        cache: "no-store",
-      });
-
-      const responseText = await response.text();
-
-      let data = {};
-
-      try {
-        data = responseText ? JSON.parse(responseText) : {};
-      } catch {
-        throw new Error("Respons server tidak valid.");
-      }
-
-      if (response.status === 401) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        window.location.href = "/login";
-        return;
-      }
-
-      if (!response.ok || data.success === false) {
-        throw new Error(data.message || "Gagal mengambil data pesanan.");
-      }
-
-      const rawOrders = Array.isArray(data.orders)
-        ? data.orders
-        : Array.isArray(data.data)
-          ? data.data
-          : [];
-
-      const normalizedOrders = rawOrders.map(normalizeOrder);
-
-      setOrders(normalizedOrders);
-
-      const pendingOrders = normalizedOrders.filter(
-        (order) =>
-          normalizeStatus(order.payment_status) === "pending" &&
-          order.order_code
-      );
-
-      if (pendingOrders.length > 0) {
-        await Promise.allSettled(
-          pendingOrders.map((order) =>
-            fetch(
-              `${PAYMENT_STATUS_API}/${encodeURIComponent(order.order_code)}`,
-              {
-                method: "GET",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  Accept: "application/json",
-                },
-                cache: "no-store",
-              }
-            )
-          )
-        );
-
-        const updatedResponse = await fetch(ORDER_API, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-          cache: "no-store",
-        });
-
-        if (updatedResponse.ok) {
-          const updatedData = await updatedResponse.json();
-
-          if (Array.isArray(updatedData.orders)) {
-            setOrders(updatedData.orders.map(normalizeOrder));
-          }
-        }
-      }
-    } catch (err) {
-      console.error("GET ORDERS ERROR:", err);
-      setError(err.message || "Terjadi kesalahan saat mengambil pesanan.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    return localStorage.getItem("token");
   }, []);
 
-  useEffect(() => {
-    fetchOrders(true);
+  // ==========================================================
+  // GET ORDER LIST
+  // Endpoint backend: GET /api/orders
+  // ==========================================================
 
-    const interval = setInterval(() => {
-      fetchOrders(false);
+  const requestOrders = useCallback(async (token) => {
+    const response = await fetch(ORDER_API, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    const data = await parseApiResponse(response);
+
+    const rawOrders = Array.isArray(data.orders)
+      ? data.orders
+      : Array.isArray(data.data)
+        ? data.data
+        : [];
+
+    return rawOrders.map(normalizeOrder);
+  }, []);
+
+  // ==========================================================
+  // CHECK MIDTRANS STATUS
+  //
+  // Endpoint backend:
+  // GET /api/payments/midtrans-status/:orderCode
+  //
+  // Catatan:
+  // Parameter yang dikirim adalah order_code,
+  // bukan ID numerik pesanan.
+  // ==========================================================
+
+  const checkPendingPayment = useCallback(
+    async (orderCode, token) => {
+      if (!orderCode) return null;
+
+      try {
+        const response = await fetch(
+          `${PAYMENT_STATUS_API}/${encodeURIComponent(orderCode)}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            },
+            cache: "no-store",
+          }
+        );
+
+        const data = await parseApiResponse(response);
+
+        if (!data.success) return null;
+
+        return {
+          order_code: data.order_code || orderCode,
+          payment_status: data.payment_status,
+          transaction_status: data.transaction_status,
+          payment_method: data.payment_method,
+        };
+      } catch (err) {
+        // Jika Midtrans sedang tidak dapat dihubungi,
+        // riwayat pesanan tetap ditampilkan.
+        console.warn(
+          `Gagal memeriksa status ${orderCode}:`,
+          err.message
+        );
+
+        return null;
+      }
+    },
+    []
+  );
+
+  // ==========================================================
+  // REFRESH ORDER LIST
+  // ==========================================================
+
+  const fetchOrders = useCallback(
+    async (showLoading = true, checkPayments = true) => {
+      if (requestInProgress.current) return;
+
+      requestInProgress.current = true;
+
+      try {
+        if (showLoading) {
+          setLoading(true);
+        } else {
+          setRefreshing(true);
+        }
+
+        setError("");
+
+        const token = getAuthToken();
+
+        if (!token) {
+          window.location.href = "/login";
+          return;
+        }
+
+        // 1. Ambil daftar pesanan dari backend.
+        const currentOrders = await requestOrders(token);
+
+        if (!mountedRef.current) return;
+
+        setOrders(currentOrders);
+
+        // 2. Periksa status transaksi yang masih Pending.
+        const pendingOrders = currentOrders.filter(
+          (order) =>
+            isPendingStatus(order.payment_status) &&
+            order.order_code
+        );
+
+        if (checkPayments && pendingOrders.length > 0) {
+          const statusResults = await Promise.allSettled(
+            pendingOrders.map((order) =>
+              checkPendingPayment(order.order_code, token)
+            )
+          );
+
+          const hasStatusResponse = statusResults.some(
+            (result) =>
+              result.status === "fulfilled" &&
+              result.value !== null
+          );
+
+          // 3. Ambil ulang daftar pesanan setelah pemeriksaan Midtrans.
+          // Backend melakukan sinkronisasi status transaksi di endpoint
+          // midtrans-status, sehingga GET /orders berikutnya akan
+          // mengambil status terbaru dari database.
+          if (hasStatusResponse && mountedRef.current) {
+            const updatedOrders = await requestOrders(token);
+
+            if (mountedRef.current) {
+              setOrders(updatedOrders);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("GET ORDERS ERROR:", err);
+
+        if (mountedRef.current) {
+          setError(
+            err.message ||
+              "Terjadi kesalahan saat mengambil riwayat pesanan."
+          );
+        }
+      } finally {
+        requestInProgress.current = false;
+
+        if (mountedRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }
+    },
+    [
+      getAuthToken,
+      requestOrders,
+      checkPendingPayment,
+    ]
+  );
+
+  // ==========================================================
+  // INITIAL LOAD + AUTO REFRESH
+  // ==========================================================
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    fetchOrders(true, true);
+
+    const interval = window.setInterval(() => {
+      fetchOrders(false, true);
     }, 15000);
 
-    return () => clearInterval(interval);
+    return () => {
+      mountedRef.current = false;
+      window.clearInterval(interval);
+    };
   }, [fetchOrders]);
+
+  // ==========================================================
+  // FILTER ORDERS
+  // ==========================================================
 
   const filteredOrders = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -455,16 +627,27 @@ export default function OrdersPage() {
     return orders.filter((order) => {
       const status = normalizeStatus(order.payment_status);
 
-      const matchesStatus =
-        filterStatus === "all" ||
-        (filterStatus === "paid" &&
-          ["paid", "success", "settlement"].includes(status)) ||
-        (filterStatus === "pending" && status === "pending") ||
-        (filterStatus === "cancelled" &&
-          ["cancelled", "canceled"].includes(status)) ||
-        (filterStatus === "expired" && status === "expired") ||
-        (filterStatus === "failed" &&
-          ["failed", "deny"].includes(status));
+      let matchesStatus = filterStatus === "all";
+
+      if (filterStatus === "paid") {
+        matchesStatus = isPaidStatus(status);
+      }
+
+      if (filterStatus === "pending") {
+        matchesStatus = isPendingStatus(status);
+      }
+
+      if (filterStatus === "cancelled") {
+        matchesStatus = isCancelledStatus(status);
+      }
+
+      if (filterStatus === "expired") {
+        matchesStatus = status === "expired";
+      }
+
+      if (filterStatus === "failed") {
+        matchesStatus = isFailedStatus(status);
+      }
 
       const searchableText = [
         order.order_code,
@@ -482,37 +665,49 @@ export default function OrdersPage() {
     });
   }, [orders, search, filterStatus]);
 
+  // ==========================================================
+  // SUMMARY COUNTS
+  // ==========================================================
+
   const statusCounts = useMemo(() => {
-    const count = (statuses) =>
+    const count = (callback) =>
       orders.filter((order) =>
-        statuses.includes(normalizeStatus(order.payment_status))
+        callback(order.payment_status)
       ).length;
 
     return {
       all: orders.length,
-      paid: count(["paid", "success", "settlement"]),
-      pending: count(["pending"]),
-      cancelled: count(["cancelled", "canceled"]),
-      expired: count(["expired"]),
-      failed: count(["failed", "deny"]),
+      paid: count(isPaidStatus),
+      pending: count(isPendingStatus),
+      cancelled: count(isCancelledStatus),
+      expired: count(
+        (status) => normalizeStatus(status) === "expired"
+      ),
+      failed: count(isFailedStatus),
     };
   }, [orders]);
 
+  // ==========================================================
+  // TOTAL TRANSAKSI BERHASIL
+  // ==========================================================
+
   const totalPaid = useMemo(() => {
     return orders
-      .filter((order) =>
-        ["paid", "success", "settlement"].includes(
-          normalizeStatus(order.payment_status)
-        )
-      )
+      .filter((order) => isPaidStatus(order.payment_status))
       .reduce(
-        (total, order) => total + Number(order.total_price || 0),
+        (total, order) =>
+          total + Number(order.total_price || 0),
         0
       );
   }, [orders]);
 
+  // ==========================================================
+  // RENDER
+  // ==========================================================
+
   return (
     <div className="w-full min-w-0 text-[#112250]">
+      {/* HEADER */}
       <section className="relative isolate mb-6 overflow-hidden rounded-2xl border border-[#D8D0C4]/40 bg-gradient-to-br from-[#112250] via-[#1A326A] to-[#3B507D] shadow-lg">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(229,194,122,0.15),transparent_50%)]" />
 
@@ -529,17 +724,17 @@ export default function OrdersPage() {
               </h1>
 
               <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
-                Pantau seluruh transaksi, status pembayaran, dan informasi
-                pemesanan tiket acara kamu.
+                Pantau seluruh transaksi, status pembayaran, dan
+                informasi pemesanan tiket acara kamu.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => fetchOrders(false)}
-                disabled={refreshing}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/20 disabled:opacity-60"
+                onClick={() => fetchOrders(false, true)}
+                disabled={refreshing || loading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw
                   size={15}
@@ -560,6 +755,7 @@ export default function OrdersPage() {
         </div>
       </section>
 
+      {/* SUMMARY */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           icon={<Receipt size={21} />}
@@ -593,11 +789,12 @@ export default function OrdersPage() {
             statusCounts.expired +
             statusCounts.failed
           }
-          description="Dibatalkan, kadaluarsa, atau gagal"
+          description="Dibatalkan, kedaluwarsa, atau gagal"
           className="bg-red-50 text-red-600"
         />
       </div>
 
+      {/* SEARCH AND FILTER */}
       <section className="mt-6 mb-7 rounded-2xl border border-[#D8D0C4]/40 bg-white p-4 shadow-lg sm:p-5">
         <div className="flex flex-col gap-4">
           <div className="relative w-full">
@@ -648,7 +845,7 @@ export default function OrdersPage() {
               active={filterStatus === "expired"}
               onClick={() => setFilterStatus("expired")}
             >
-              Kadaluarsa ({statusCounts.expired})
+              Kedaluwarsa ({statusCounts.expired})
             </FilterButton>
 
             <FilterButton
@@ -661,6 +858,7 @@ export default function OrdersPage() {
         </div>
       </section>
 
+      {/* LOADING */}
       {loading && (
         <div className="flex min-h-[350px] items-center justify-center rounded-2xl border border-[#D8D0C4]/40 bg-white shadow-lg">
           <div className="text-center">
@@ -680,6 +878,7 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* ERROR */}
       {!loading && error && (
         <div className="rounded-2xl border border-red-200 bg-white p-6 shadow-lg">
           <div className="flex items-start gap-3">
@@ -698,7 +897,7 @@ export default function OrdersPage() {
 
               <button
                 type="button"
-                onClick={() => fetchOrders(true)}
+                onClick={() => fetchOrders(true, true)}
                 className="mt-4 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-4 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-md"
               >
                 Coba Lagi
@@ -708,6 +907,7 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* EMPTY STATE */}
       {!loading && !error && filteredOrders.length === 0 && (
         <div className="rounded-2xl border border-[#D8D0C4]/40 bg-white px-6 py-16 text-center shadow-lg">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-500">
@@ -738,6 +938,7 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* ORDER LIST */}
       {!loading && !error && filteredOrders.length > 0 && (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
@@ -768,6 +969,10 @@ export default function OrdersPage() {
   );
 }
 
+// ============================================================
+// ORDER CARD
+// ============================================================
+
 function OrderCard({ order }) {
   const status = getStatusConfig(order.payment_status);
   const statusInfo = getStatusDescription(order.payment_status);
@@ -783,13 +988,8 @@ function OrderCard({ order }) {
 
   const quantity = Number(order.quantity) || 0;
   const total = Number(order.total_price) || 0;
-  const orderDate = order.order_date;
 
-  const isPaid = [
-    "paid",
-    "success",
-    "settlement",
-  ].includes(normalizeStatus(order.payment_status));
+  const isPaid = isPaidStatus(order.payment_status);
 
   const hasIncompleteData =
     !order.event_name ||
@@ -799,6 +999,7 @@ function OrderCard({ order }) {
   return (
     <article className="group overflow-hidden rounded-2xl border border-[#D8D0C4]/40 bg-white shadow-lg transition duration-300 hover:-translate-y-1 hover:border-[#112250]/20 hover:shadow-2xl">
       <div className="p-5 sm:p-6">
+        {/* CARD HEADER */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#112250]/5 text-[#3B507D]">
@@ -828,12 +1029,18 @@ function OrderCard({ order }) {
           </div>
         </div>
 
+        {/* PAYMENT STATUS DESCRIPTION */}
         <div className={`mt-5 rounded-xl border p-4 ${statusInfo.className}`}>
           <div className="flex items-start gap-3">
-            <DescriptionIcon size={19} className="mt-0.5 shrink-0" />
+            <DescriptionIcon
+              size={19}
+              className="mt-0.5 shrink-0"
+            />
 
             <div>
-              <p className="text-sm font-bold">{statusInfo.title}</p>
+              <p className="text-sm font-bold">
+                {statusInfo.title}
+              </p>
 
               <p className="mt-1 text-xs leading-6 opacity-90 sm:text-sm">
                 {statusInfo.description}
@@ -842,17 +1049,20 @@ function OrderCard({ order }) {
           </div>
         </div>
 
+        {/* INCOMPLETE DATA WARNING */}
         {hasIncompleteData && (
           <div className="mt-4 flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3 text-orange-800">
             <Info size={17} className="mt-0.5 shrink-0" />
 
             <p className="text-xs leading-5">
-              Sebagian informasi detail tiket belum tersedia pada respons
-              server. Periksa kembali relasi detail pesanan pada backend.
+              Sebagian informasi detail tiket belum tersedia pada
+              respons server. Periksa kembali data relasi detail
+              pesanan pada backend.
             </p>
           </div>
         )}
 
+        {/* ORDER INFORMATION */}
         <div className="mt-6 grid gap-5 border-t border-[#D8D0C4]/30 pt-5 sm:grid-cols-2 xl:grid-cols-4">
           <OrderInfo
             icon={<Ticket size={18} />}
@@ -869,7 +1079,7 @@ function OrderCard({ order }) {
           <OrderInfo
             icon={<CalendarDays size={18} />}
             label="Tanggal Pemesanan"
-            value={formatDate(orderDate)}
+            value={formatDate(order.order_date)}
           />
 
           <OrderInfo
@@ -879,7 +1089,11 @@ function OrderCard({ order }) {
           />
         </div>
 
-        {(order.event_date || order.event_time || order.venue_name) && (
+        {/* EVENT INFORMATION */}
+        {(order.event_date ||
+          order.event_time ||
+          order.venue_name ||
+          order.city) && (
           <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl bg-[#F7F8FA] px-4 py-3.5">
             {order.event_date && (
               <div className="flex items-center gap-2 text-sm text-[#3B507D]">
@@ -895,16 +1109,63 @@ function OrderCard({ order }) {
               </div>
             )}
 
-            {order.venue_name && (
+            {(order.venue_name || order.city) && (
               <div className="flex items-center gap-2 text-sm text-[#3B507D]">
                 <MapPin size={16} className="text-[#112250]" />
-                <span>{order.venue_name}</span>
+                <span>
+                  {[order.venue_name, order.city]
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
               </div>
             )}
           </div>
         )}
+
+        {/* DETAIL CATEGORY BREAKDOWN */}
+        {Array.isArray(order.details) && order.details.length > 1 && (
+          <div className="mt-5 overflow-hidden rounded-xl border border-[#D8D0C4]/40">
+            <div className="border-b border-[#D8D0C4]/30 bg-[#F7F8FA] px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#3B507D]">
+                Rincian Kategori Tiket
+              </p>
+            </div>
+
+            <div className="divide-y divide-[#D8D0C4]/30">
+              {order.details.map((detail, index) => (
+                <div
+                  key={detail.id || `${detail.ticket_category_id}-${index}`}
+                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-[#112250]">
+                      {detail.category_name ||
+                        detail.ticket_category_name ||
+                        "Kategori tiket"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-[#9B907F]">
+                      {Number(detail.quantity) || 0} tiket
+                      {" "}×{" "}
+                      {formatRupiah(detail.price)}
+                    </p>
+                  </div>
+
+                  <p className="text-sm font-bold text-[#112250]">
+                    {formatRupiah(
+                      detail.subtotal ||
+                        Number(detail.price || 0) *
+                          Number(detail.quantity || 0)
+                    )}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* CARD FOOTER */}
       <div className="flex flex-col gap-4 border-t border-[#D8D0C4]/30 bg-gradient-to-r from-[#F7F8FA] to-[#E5C27A]/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div>
           <p className="text-xs font-medium text-[#9B907F]">
@@ -942,11 +1203,23 @@ function OrderCard({ order }) {
   );
 }
 
-function SummaryCard({ icon, label, value, description, className }) {
+// ============================================================
+// SUMMARY CARD
+// ============================================================
+
+function SummaryCard({
+  icon,
+  label,
+  value,
+  description,
+  className,
+}) {
   return (
     <div className="group rounded-2xl border border-[#D8D0C4]/40 bg-white p-5 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl">
       <div className="flex items-start justify-between">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${className}`}>
+        <div
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${className}`}
+        >
           {icon}
         </div>
 
@@ -956,16 +1229,24 @@ function SummaryCard({ icon, label, value, description, className }) {
         />
       </div>
 
-      <p className="mt-5 text-sm font-medium text-[#9B907F]">{label}</p>
+      <p className="mt-5 text-sm font-medium text-[#9B907F]">
+        {label}
+      </p>
 
       <p className="mt-1 text-3xl font-extrabold tracking-tight text-[#112250]">
         {value}
       </p>
 
-      <p className="mt-2 text-xs text-[#9B907F]">{description}</p>
+      <p className="mt-2 text-xs text-[#9B907F]">
+        {description}
+      </p>
     </div>
   );
 }
+
+// ============================================================
+// FILTER BUTTON
+// ============================================================
 
 function FilterButton({ active, onClick, children }) {
   return (
@@ -983,10 +1264,16 @@ function FilterButton({ active, onClick, children }) {
   );
 }
 
+// ============================================================
+// ORDER INFO
+// ============================================================
+
 function OrderInfo({ icon, label, value }) {
   return (
     <div className="flex min-w-0 items-start gap-3">
-      <div className="mt-0.5 shrink-0 text-[#3B507D]">{icon}</div>
+      <div className="mt-0.5 shrink-0 text-[#3B507D]">
+        {icon}
+      </div>
 
       <div className="min-w-0">
         <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#9B907F]">

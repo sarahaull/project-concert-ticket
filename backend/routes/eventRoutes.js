@@ -1,6 +1,8 @@
-const express = require("express");
 
+const express = require("express");
 const router = express.Router();
+
+const verifyToken = require("../middleware/auth");
 
 const {
   getEvents,
@@ -10,19 +12,13 @@ const {
   deleteEvent,
 } = require("../controllers/eventController");
 
-// Ambil semua event
+// Event publik
 router.get("/", getEvents);
-
-// Ambil event berdasarkan ID
 router.get("/:id", getEventById);
 
-// Tambah event
-router.post("/", createEvent);
-
-// Update event
-router.put("/:id", updateEvent);
-
-// Hapus event
-router.delete("/:id", deleteEvent);
+// Event yang membutuhkan autentikasi
+router.post("/", verifyToken, createEvent);
+router.put("/:id", verifyToken, updateEvent);
+router.delete("/:id", verifyToken, deleteEvent);
 
 module.exports = router;

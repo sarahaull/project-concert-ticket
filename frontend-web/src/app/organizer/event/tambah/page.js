@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,8 +21,95 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-const API_URL =
+/* =========================================================
+   API CONFIGURATION
+========================================================= */
+
+const RAW_API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+const API_ROOT = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/i, "");
+const API_BASE = `${API_ROOT}/api`;
+
+// Sesuaikan dengan endpoint upload yang tersedia di backend.
+const UPLOAD_POSTER_ENDPOINT = `${API_BASE}/uploads/event-poster`;
+
+const ALLOWED_STATUSES = [
+  "Coming Soon",
+  "Available",
+  "Limited",
+  "Sold Out",
+];
+
+const INITIAL_FORM = {
+  category_id: "",
+  artist_id: "",
+  venue_id: "",
+  event_name: "",
+  description: "",
+  poster: "",
+  event_date: "",
+  event_time: "",
+  ticket_sale_start: "",
+  ticket_sale_end: "",
+  status: "Coming Soon",
+};
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const getToken = () => {
+  if (typeof window === "undefined") return "";
+
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    ""
+  );
+};
+
+const parseResponse = async (response) => {
+  const data = await response.json().catch(() => null);
+
+  if (!data) {
+    throw new Error("Response backend tidak valid.");
+  }
+
+  if (!response.ok || data.success === false) {
+    throw new Error(
+      data.message ||
+        data.error ||
+        `Request gagal dengan status ${response.status}.`
+    );
+  }
+
+  return data;
+};
+
+const getErrorMessage = (error) =>
+  error?.message || "Terjadi kesalahan pada server.";
+
+const getList = (data, key) => {
+  if (Array.isArray(data?.[key])) return data[key];
+  if (Array.isArray(data?.data?.[key])) return data.data[key];
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+};
+
+const getImageUrl = (path) => {
+  if (!path) return "";
+
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  return `${API_ROOT}/${String(path).replace(/^\/+/, "")}`;
+};
+
+/* =========================================================
+   COMPONENT
+========================================================= */
 
 export default function TambahEventPage() {
   const router = useRouter();
@@ -42,94 +130,111 @@ export default function TambahEventPage() {
     message: "",
   });
 
-  const [form, setForm] = useState({
-    category_id: "",
-    artist_id: "",
-    venue_id: "",
-    event_name: "",
-    description: "",
-    poster: "",
-    event_date: "",
-    event_time: "",
-    ticket_sale_start: "",
-    ticket_sale_end: "",
-    status: "Coming Soon",
-  });
+  const [form, setForm] = useState(INITIAL_FORM);
 
-  // ==========================================
-  // LOAD DATA
-  // ==========================================
+  /* =========================================================
+     LOAD MASTER DATA
+  ========================================================= */
 
   useEffect(() => {
-    loadData();
+    let mounted = true;
+
+    const loadMasterData = async () => {
+      try {
+        setLoadingData(true);
+
+        const endpoints = [
+          `${API_BASE}/categories`,
+          `${API_BASE}/artists`,
+          `${API_BASE}/venues`,
+        ];
+
+        const responses = await Promise.all(
+          endpoints.map((url) =>
+            fetch(url, {
+              method: "GET",
+              headers: {
+                Accept: "application/json",
+              },
+              cache: "no-store",
+            })
+          )
+        );
+
+        const [categoryData, artistData, venueData] =
+          await Promise.all(responses.map(parseResponse));
+
+        if (!mounted) return;
+
+        setCategories(getList(categoryData, "categories"));
+        setArtists(getList(artistData, "artists"));
+        setVenues(getList(venueData, "venues"));
+      } catch (error) {
+        console.error("LOAD MASTER DATA ERROR:", error);
+
+        if (mounted) {
+          setNotification({
+            type: "error",
+            message: getErrorMessage(error),
+          });
+        }
+      } finally {
+        if (mounted) {
+          setLoadingData(false);
+        }
+      }
+    };
+
+    loadMasterData();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const loadData = async () => {
-    try {
-      setLoadingData(true);
+  /* =========================================================
+     CLEANUP PREVIEW URL
+  ========================================================= */
 
-      const [categoryResponse, artistResponse, venueResponse] =
-        await Promise.all([
-          fetch(`${API_URL}/api/categories`),
-          fetch(`${API_URL}/api/artists`),
-          fetch(`${API_URL}/api/venues`),
-        ]);
-
-      const categoryData = await categoryResponse.json();
-      const artistData = await artistResponse.json();
-      const venueData = await venueResponse.json();
-
-      if (categoryData.success) {
-        setCategories(categoryData.categories || categoryData.data || []);
+  useEffect(() => {
+    return () => {
+      if (posterPreview) {
+        URL.revokeObjectURL(posterPreview);
       }
+    };
+  }, [posterPreview]);
 
-      if (artistData.success) {
-        setArtists(artistData.artists || artistData.data || []);
-      }
+  /* =========================================================
+     FORM CHANGE
+  ========================================================= */
 
-      if (venueData.success) {
-        setVenues(venueData.venues || venueData.data || []);
-      }
-    } catch (error) {
-      console.error("LOAD DATA ERROR:", error);
+  const handleChange = (event) => {
+    const { name, value } = event.target;
 
-      setNotification({
-        type: "error",
-        message: "Gagal mengambil data kategori, artis, atau venue.",
-      });
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-  // ==========================================
-  // FORM CHANGE
-  // ==========================================
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       [name]: value,
     }));
+
+    if (notification.message) {
+      setNotification({
+        type: "",
+        message: "",
+      });
+    }
   };
 
-  // ==========================================
-  // POSTER MODE
-  // ==========================================
+  /* =========================================================
+     POSTER MODE
+  ========================================================= */
 
   const handlePosterMode = (mode) => {
-    if (posterPreview) {
-      URL.revokeObjectURL(posterPreview);
-    }
-
     setPosterMode(mode);
     setSelectedFile(null);
     setPosterPreview("");
 
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       poster: "",
     }));
 
@@ -139,16 +244,20 @@ export default function TambahEventPage() {
     });
   };
 
-  // ==========================================
-  // FILE POSTER
-  // ==========================================
+  /* =========================================================
+     SELECT POSTER
+  ========================================================= */
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
 
     if (!file) return;
 
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
 
     if (!allowedTypes.includes(file.type)) {
       setNotification({
@@ -156,34 +265,32 @@ export default function TambahEventPage() {
         message: "Format poster harus JPG, JPEG, PNG, atau WEBP.",
       });
 
-      e.target.value = "";
+      event.target.value = "";
       return;
     }
 
-    const maxSize = 5 * 1024 * 1024;
-
-    if (file.size > maxSize) {
+    if (file.size > 5 * 1024 * 1024) {
       setNotification({
         type: "error",
         message: "Ukuran poster maksimal 5 MB.",
       });
 
-      e.target.value = "";
+      event.target.value = "";
       return;
-    }
-
-    if (posterPreview) {
-      URL.revokeObjectURL(posterPreview);
     }
 
     setSelectedFile(file);
 
-    const previewUrl = URL.createObjectURL(file);
+    setPosterPreview((previousPreview) => {
+      if (previousPreview) {
+        URL.revokeObjectURL(previousPreview);
+      }
 
-    setPosterPreview(previewUrl);
+      return URL.createObjectURL(file);
+    });
 
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       poster: "",
     }));
 
@@ -191,285 +298,284 @@ export default function TambahEventPage() {
       type: "",
       message: "",
     });
+
+    // Memungkinkan file yang sama dipilih kembali.
+    event.target.value = "";
   };
 
-  // ==========================================
-  // REMOVE POSTER
-  // ==========================================
+  /* =========================================================
+     REMOVE POSTER
+  ========================================================= */
 
   const removePoster = () => {
-    if (posterPreview) {
-      URL.revokeObjectURL(posterPreview);
-    }
-
     setSelectedFile(null);
     setPosterPreview("");
 
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       poster: "",
     }));
   };
 
-  // ==========================================
-  // UPLOAD POSTER
-  // ==========================================
+  /* =========================================================
+     UPLOAD POSTER
+  ========================================================= */
 
-  const uploadPoster = async () => {
+  const uploadPoster = async (token) => {
     if (!selectedFile) {
       throw new Error("Silakan pilih file poster terlebih dahulu.");
     }
 
     const formData = new FormData();
-
     formData.append("poster", selectedFile);
 
-    const token = localStorage.getItem("token");
-
-    const response = await fetch(`${API_URL}/api/uploads/event-poster`, {
+    const response = await fetch(UPLOAD_POSTER_ENDPOINT, {
       method: "POST",
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : undefined,
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
       body: formData,
     });
 
-    let data;
+    const data = await parseResponse(response);
 
-    try {
-      data = await response.json();
-    } catch {
-      throw new Error("Server mengembalikan response yang tidak valid.");
+    const posterPath =
+      data.poster ||
+      data.path ||
+      data.url ||
+      data.file?.path ||
+      data.file?.url ||
+      "";
+
+    if (!posterPath) {
+      throw new Error(
+        "Upload berhasil, tetapi path poster tidak ditemukan dari backend."
+      );
     }
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || "Gagal upload poster.");
-    }
-
-    return data.poster;
+    return posterPath;
   };
 
-  // ==========================================
-  // SUBMIT
-  // ==========================================
+  /* =========================================================
+     VALIDATION
+  ========================================================= */
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const validateForm = () => {
+    if (!form.category_id) {
+      return "Kategori event wajib dipilih.";
+    }
+
+    if (!form.artist_id) {
+      return "Artis wajib dipilih.";
+    }
+
+    if (!form.venue_id) {
+      return "Venue wajib dipilih.";
+    }
+
+    if (!form.event_name.trim()) {
+      return "Nama event wajib diisi.";
+    }
+
+    if (!form.event_date) {
+      return "Tanggal event wajib diisi.";
+    }
+
+    if (!form.event_time) {
+      return "Waktu event wajib diisi.";
+    }
+
+    if (!form.ticket_sale_start) {
+      return "Tanggal mulai penjualan tiket wajib diisi.";
+    }
+
+    if (!form.ticket_sale_end) {
+      return "Tanggal akhir penjualan tiket wajib diisi.";
+    }
+
+    if (
+      form.ticket_sale_start >= form.ticket_sale_end
+    ) {
+      return "Tanggal akhir penjualan harus setelah tanggal mulai.";
+    }
+
+    if (form.ticket_sale_end > form.event_date) {
+      return "Penjualan tiket tidak boleh berakhir setelah tanggal event.";
+    }
+
+    if (!ALLOWED_STATUSES.includes(form.status)) {
+      return "Status event tidak valid.";
+    }
+
+    if (posterMode === "file" && !selectedFile) {
+      return "Silakan pilih file poster terlebih dahulu.";
+    }
+
+    if (posterMode === "url") {
+      if (!form.poster.trim()) {
+        return "Link poster wajib diisi.";
+      }
+
+      try {
+        const url = new URL(form.poster.trim());
+
+        if (!["http:", "https:"].includes(url.protocol)) {
+          return "Link poster harus menggunakan HTTP atau HTTPS.";
+        }
+      } catch {
+        return "Format link poster tidak valid.";
+      }
+    }
+
+    return "";
+  };
+
+  /* =========================================================
+     SUBMIT EVENT
+  ========================================================= */
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (loading) return;
 
     setNotification({
       type: "",
       message: "",
     });
 
-    // ======================================
-    // VALIDATION
-    // ======================================
+    const validationError = validateForm();
 
-    if (!form.category_id) {
+    if (validationError) {
       setNotification({
         type: "error",
-        message: "Kategori event wajib dipilih.",
+        message: validationError,
       });
+
       return;
     }
 
-    if (!form.artist_id) {
-      setNotification({
-        type: "error",
-        message: "Artis wajib dipilih.",
-      });
-      return;
-    }
+    const token = getToken();
 
-    if (!form.venue_id) {
+    if (!token) {
       setNotification({
         type: "error",
-        message: "Venue wajib dipilih.",
+        message: "Sesi login tidak ditemukan. Silakan login kembali.",
       });
-      return;
-    }
 
-    if (!form.event_name.trim()) {
-      setNotification({
-        type: "error",
-        message: "Nama event wajib diisi.",
-      });
-      return;
-    }
-
-    if (!form.event_date) {
-      setNotification({
-        type: "error",
-        message: "Tanggal event wajib diisi.",
-      });
-      return;
-    }
-
-    if (!form.event_time) {
-      setNotification({
-        type: "error",
-        message: "Waktu event wajib diisi.",
-      });
-      return;
-    }
-
-    if (!form.ticket_sale_start) {
-      setNotification({
-        type: "error",
-        message: "Tanggal mulai penjualan tiket wajib diisi.",
-      });
-      return;
-    }
-
-    if (!form.ticket_sale_end) {
-      setNotification({
-        type: "error",
-        message: "Tanggal akhir penjualan tiket wajib diisi.",
-      });
-      return;
-    }
-
-    if (new Date(form.ticket_sale_start) >= new Date(form.ticket_sale_end)) {
-      setNotification({
-        type: "error",
-        message:
-          "Waktu akhir penjualan tiket harus setelah waktu mulai penjualan.",
-      });
-      return;
-    }
-
-    if (posterMode === "file" && !selectedFile) {
-      setNotification({
-        type: "error",
-        message: "Silakan pilih file poster terlebih dahulu.",
-      });
-      return;
-    }
-
-    if (posterMode === "url" && !form.poster.trim()) {
-      setNotification({
-        type: "error",
-        message: "Link poster wajib diisi.",
-      });
       return;
     }
 
     try {
       setLoading(true);
 
-      const token = localStorage.getItem("token");
-
-      let posterValue = form.poster.trim();
-
-      // ==================================
-      // UPLOAD POSTER FILE
-      // ==================================
+      let posterPath = "";
 
       if (posterMode === "file") {
-        posterValue = await uploadPoster();
+        setNotification({
+          type: "info",
+          message: "Sedang meng-upload poster event...",
+        });
+
+        posterPath = await uploadPoster(token);
+      } else {
+        posterPath = form.poster.trim();
       }
 
-      // ==================================
-      // PAYLOAD EVENT
-      // ==================================
-
+      /*
+       * Payload mengikuti createEvent pada backend.
+       * organizer_id tidak dikirim dari frontend.
+       * Backend mengambil organizer_id dari req.user.id.
+       */
       const payload = {
         category_id: Number(form.category_id),
         artist_id: Number(form.artist_id),
         venue_id: Number(form.venue_id),
+
         event_name: form.event_name.trim(),
-        description: form.description.trim(),
-        poster: posterValue,
+        description: form.description.trim() || null,
+
+        poster: posterPath || null,
+        seat_map_image: null,
+
         event_date: form.event_date,
         event_time: form.event_time,
+
         ticket_sale_start: form.ticket_sale_start,
         ticket_sale_end: form.ticket_sale_end,
+
         status: form.status,
       };
 
-      // ==================================
-      // CREATE EVENT
-      // ==================================
+      setNotification({
+        type: "info",
+        message: "Sedang menyimpan event...",
+      });
 
-      const response = await fetch(`${API_URL}/api/events`, {
+      const response = await fetch(`${API_BASE}/events`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token
-            ? {
-                Authorization: `Bearer ${token}`,
-              }
-            : {}),
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
-      let data;
+      const data = await parseResponse(response);
 
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error("Server mengembalikan response yang tidak valid.");
-      }
+      const createdEventId =
+        data.event?.id ||
+        data.data?.event?.id ||
+        data.data?.id;
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Gagal membuat event.");
-      }
-
-      // ==================================
-      // AMBIL ID EVENT BARU
-      // ==================================
-
-      const newEventId = data.event?.id || data.data?.id || data.id;
-
-      if (!newEventId) {
+      if (!createdEventId) {
         throw new Error(
-          "Event berhasil dibuat, tetapi ID event tidak ditemukan."
+          "Event tersimpan, tetapi ID event tidak ditemukan pada response backend."
         );
       }
 
-      // ==================================
-      // SUCCESS
-      // ==================================
-
       setNotification({
         type: "success",
-        message:
-          "Event berhasil dibuat. Mengarahkan ke Kelola Tiket...",
+        message: "Event berhasil dibuat. Mengarahkan ke halaman tiket...",
       });
 
-      setTimeout(() => {
-        router.push(`/organizer/event/kelola-tiket/${newEventId}`);
-      }, 700);
+      router.push(`/organizer/events/${createdEventId}/tiket`);
     } catch (error) {
       console.error("CREATE EVENT ERROR:", error);
 
       setNotification({
         type: "error",
-        message: error.message || "Terjadi kesalahan pada server.",
+        message: getErrorMessage(error),
       });
     } finally {
       setLoading(false);
     }
   };
 
-  // ==========================================
-  // RENDER
-  // ==========================================
+  /* =========================================================
+     STYLING
+  ========================================================= */
+
+  const inputClass =
+    "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10 disabled:bg-slate-50 disabled:text-slate-400";
+
+  const labelClass =
+    "mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500";
+
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
   return (
     <div className="w-full min-w-0 text-[#0F172A]">
       <div className="mx-auto w-full max-w-7xl">
-        {/* ======================================
-            HEADER HALAMAN
-        ====================================== */}
 
+        {/* HEADER */}
         <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div className="flex items-start gap-4">
             <Link
-              href="/organizer/event"
+              href="/organizer/events"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#112250]/30 hover:bg-[#112250]/5 hover:text-[#112250]"
             >
               <ArrowLeft size={19} />
@@ -492,53 +598,55 @@ export default function TambahEventPage() {
           </div>
         </div>
 
-        {/* ======================================
-            NOTIFICATION
-        ====================================== */}
-
+        {/* NOTIFICATION */}
         {notification.message && (
           <div className="mb-6">
             <div
               className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm ${
                 notification.type === "success"
                   ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : notification.type === "info"
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
                   : "border-red-200 bg-red-50 text-red-700"
               }`}
             >
               {notification.type === "success" ? (
                 <CheckCircle2 size={19} />
+              ) : notification.type === "info" ? (
+                <Loader2 size={19} className="animate-spin" />
               ) : (
                 <AlertCircle size={19} />
               )}
 
-              <span className="flex-1">{notification.message}</span>
+              <span className="flex-1">
+                {notification.message}
+              </span>
 
-              <button
-                type="button"
-                onClick={() =>
-                  setNotification({ type: "", message: "" })
-                }
-                className="opacity-60 transition hover:opacity-100"
-              >
-                <X size={16} />
-              </button>
+              {!loading && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotification({
+                      type: "",
+                      message: "",
+                    })
+                  }
+                  className="opacity-60 transition hover:opacity-100"
+                >
+                  <X size={16} />
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        {/* ======================================
-            MAIN FORM
-        ====================================== */}
-
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            {/* ==================================
-                LEFT
-            ================================== */}
 
+            {/* KOLOM KIRI */}
             <div className="space-y-6 xl:col-span-2">
-              {/* INFORMASI EVENT */}
 
+              {/* INFORMASI EVENT */}
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-5">
                   <h2 className="text-base font-bold text-[#0F172A]">
@@ -551,12 +659,11 @@ export default function TambahEventPage() {
                 </div>
 
                 <div className="grid gap-5 p-6 md:grid-cols-2">
-                  {/* NAMA EVENT */}
 
+                  {/* NAMA EVENT */}
                   <div className="md:col-span-2">
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Nama Event
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Nama Event <span className="text-red-500">*</span>
                     </label>
 
                     <input
@@ -564,17 +671,17 @@ export default function TambahEventPage() {
                       name="event_name"
                       value={form.event_name}
                       onChange={handleChange}
+                      maxLength={150}
+                      required
                       placeholder="Contoh: GIGI Live Concert"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                      className={inputClass}
                     />
                   </div>
 
-                  {/* CATEGORY */}
-
+                  {/* KATEGORI */}
                   <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Kategori
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Kategori <span className="text-red-500">*</span>
                     </label>
 
                     <div className="relative">
@@ -588,7 +695,8 @@ export default function TambahEventPage() {
                         value={form.category_id}
                         onChange={handleChange}
                         disabled={loadingData}
-                        className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-11 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10 disabled:bg-slate-50"
+                        required
+                        className={`${inputClass} appearance-none pl-11`}
                       >
                         <option value="">
                           {loadingData
@@ -598,21 +706,23 @@ export default function TambahEventPage() {
 
                         {categories.map((category) => (
                           <option key={category.id} value={category.id}>
-                            {category.category_name ||
-                              category.name ||
-                              category.nama_kategori}
+                            {category.category_name}
                           </option>
                         ))}
                       </select>
                     </div>
+
+                    {!loadingData && categories.length === 0 && (
+                      <p className="mt-2 text-xs text-amber-600">
+                        Belum ada kategori. Tambahkan kategori terlebih dahulu.
+                      </p>
+                    )}
                   </div>
 
-                  {/* ARTIST */}
-
+                  {/* ARTIS */}
                   <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Artis
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Artis <span className="text-red-500">*</span>
                     </label>
 
                     <div className="relative">
@@ -626,7 +736,8 @@ export default function TambahEventPage() {
                         value={form.artist_id}
                         onChange={handleChange}
                         disabled={loadingData}
-                        className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-11 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10 disabled:bg-slate-50"
+                        required
+                        className={`${inputClass} appearance-none pl-11`}
                       >
                         <option value="">
                           {loadingData ? "Memuat artis..." : "Pilih artis"}
@@ -634,21 +745,23 @@ export default function TambahEventPage() {
 
                         {artists.map((artist) => (
                           <option key={artist.id} value={artist.id}>
-                            {artist.artist_name ||
-                              artist.name ||
-                              artist.nama_artis}
+                            {artist.artist_name}
                           </option>
                         ))}
                       </select>
                     </div>
+
+                    {!loadingData && artists.length === 0 && (
+                      <p className="mt-2 text-xs text-amber-600">
+                        Belum ada artis. Tambahkan artis terlebih dahulu.
+                      </p>
+                    )}
                   </div>
 
                   {/* VENUE */}
-
                   <div className="md:col-span-2">
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Venue
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Venue <span className="text-red-500">*</span>
                     </label>
 
                     <div className="relative">
@@ -662,7 +775,8 @@ export default function TambahEventPage() {
                         value={form.venue_id}
                         onChange={handleChange}
                         disabled={loadingData}
-                        className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-11 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10 disabled:bg-slate-50"
+                        required
+                        className={`${inputClass} appearance-none pl-11`}
                       >
                         <option value="">
                           {loadingData ? "Memuat venue..." : "Pilih venue"}
@@ -670,20 +784,23 @@ export default function TambahEventPage() {
 
                         {venues.map((venue) => (
                           <option key={venue.id} value={venue.id}>
-                            {venue.venue_name ||
-                              venue.name ||
-                              venue.nama_venue}
+                            {venue.venue_name}
                             {venue.city ? ` — ${venue.city}` : ""}
                           </option>
                         ))}
                       </select>
                     </div>
+
+                    {!loadingData && venues.length === 0 && (
+                      <p className="mt-2 text-xs text-amber-600">
+                        Belum ada venue. Tambahkan venue terlebih dahulu.
+                      </p>
+                    )}
                   </div>
 
-                  {/* DESCRIPTION */}
-
+                  {/* DESKRIPSI */}
                   <div className="md:col-span-2">
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <label className={labelClass}>
                       Deskripsi Event
                     </label>
 
@@ -692,15 +809,19 @@ export default function TambahEventPage() {
                       value={form.description}
                       onChange={handleChange}
                       rows={5}
+                      maxLength={5000}
                       placeholder="Masukkan deskripsi lengkap mengenai event..."
-                      className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                      className={`${inputClass} resize-none`}
                     />
+
+                    <p className="mt-1 text-right text-xs text-slate-400">
+                      {form.description.length}/5000 karakter
+                    </p>
                   </div>
                 </div>
               </section>
 
-              {/* JADWAL */}
-
+              {/* JADWAL EVENT */}
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-5">
                   <h2 className="text-base font-bold text-[#0F172A]">
@@ -713,12 +834,11 @@ export default function TambahEventPage() {
                 </div>
 
                 <div className="grid gap-5 p-6 md:grid-cols-2">
-                  {/* EVENT DATE */}
 
+                  {/* TANGGAL EVENT */}
                   <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Tanggal Event
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Tanggal Event <span className="text-red-500">*</span>
                     </label>
 
                     <div className="relative">
@@ -732,17 +852,16 @@ export default function TambahEventPage() {
                         name="event_date"
                         value={form.event_date}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-11 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                        required
+                        className={`${inputClass} pl-11`}
                       />
                     </div>
                   </div>
 
-                  {/* EVENT TIME */}
-
+                  {/* WAKTU EVENT */}
                   <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Waktu Event
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Waktu Event <span className="text-red-500">*</span>
                     </label>
 
                     <div className="relative">
@@ -756,49 +875,51 @@ export default function TambahEventPage() {
                         name="event_time"
                         value={form.event_time}
                         onChange={handleChange}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-11 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                        required
+                        className={`${inputClass} pl-11`}
                       />
                     </div>
                   </div>
 
                   {/* SALE START */}
-
                   <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Mulai Penjualan Tiket
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Mulai Penjualan Tiket{" "}
+                      <span className="text-red-500">*</span>
                     </label>
 
                     <input
-                      type="datetime-local"
+                      type="date"
                       name="ticket_sale_start"
                       value={form.ticket_sale_start}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                      required
+                      className={inputClass}
                     />
                   </div>
 
                   {/* SALE END */}
-
                   <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Akhir Penjualan Tiket
-                      <span className="ml-1 text-red-500">*</span>
+                    <label className={labelClass}>
+                      Akhir Penjualan Tiket{" "}
+                      <span className="text-red-500">*</span>
                     </label>
 
                     <input
-                      type="datetime-local"
+                      type="date"
                       name="ticket_sale_end"
                       value={form.ticket_sale_end}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                      required
+                      min={form.ticket_sale_start || undefined}
+                      max={form.event_date || undefined}
+                      className={inputClass}
                     />
                   </div>
 
                   {/* STATUS */}
-
                   <div className="md:col-span-2">
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <label className={labelClass}>
                       Status Event
                     </label>
 
@@ -806,26 +927,27 @@ export default function TambahEventPage() {
                       name="status"
                       value={form.status}
                       onChange={handleChange}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                      className={inputClass}
                     >
-                      <option value="Coming Soon">Coming Soon</option>
-                      <option value="Available">Available</option>
-                      <option value="Limited">Limited</option>
-                      <option value="Sold Out">Sold Out</option>
-                      <option value="Cancelled">Cancelled</option>
+                      {ALLOWED_STATUSES.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
                     </select>
+
+                    <p className="mt-2 text-xs leading-5 text-slate-400">
+                      Pilih status event sesuai pilihan yang tersedia pada database.
+                    </p>
                   </div>
                 </div>
               </section>
             </div>
 
-            {/* ==================================
-                RIGHT
-            ================================== */}
-
+            {/* KOLOM KANAN */}
             <div className="space-y-6">
-              {/* POSTER */}
 
+              {/* POSTER */}
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-5">
                   <h2 className="text-base font-bold text-[#0F172A]">
@@ -833,13 +955,13 @@ export default function TambahEventPage() {
                   </h2>
 
                   <p className="mt-1 text-xs text-slate-500">
-                    Gunakan gambar dari folder komputer atau link gambar.
+                    Gunakan gambar dari komputer atau link gambar.
                   </p>
                 </div>
 
                 <div className="p-6">
-                  {/* MODE */}
 
+                  {/* MODE SELECTOR */}
                   <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
                     <button
                       type="button"
@@ -869,7 +991,6 @@ export default function TambahEventPage() {
                   </div>
 
                   {/* FILE MODE */}
-
                   {posterMode === "file" && (
                     <div className="mt-5">
                       {!posterPreview ? (
@@ -902,7 +1023,7 @@ export default function TambahEventPage() {
                           <div className="relative aspect-[4/5] overflow-hidden bg-slate-100">
                             <img
                               src={posterPreview}
-                              alt="Preview poster"
+                              alt="Preview poster event"
                               className="h-full w-full object-cover"
                             />
 
@@ -936,10 +1057,9 @@ export default function TambahEventPage() {
                   )}
 
                   {/* URL MODE */}
-
                   {posterMode === "url" && (
                     <div className="mt-5">
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">
+                      <label className={labelClass}>
                         Link Poster
                       </label>
 
@@ -955,7 +1075,7 @@ export default function TambahEventPage() {
                           value={form.poster}
                           onChange={handleChange}
                           placeholder="https://example.com/poster.jpg"
-                          className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
+                          className={`${inputClass} pl-11`}
                         />
                       </div>
 
@@ -966,7 +1086,6 @@ export default function TambahEventPage() {
                   )}
 
                   {/* URL PREVIEW */}
-
                   {posterMode === "url" && form.poster && (
                     <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
@@ -993,7 +1112,7 @@ export default function TambahEventPage() {
                             setNotification({
                               type: "error",
                               message:
-                                "Gambar dari link tidak dapat dimuat.",
+                                "Gambar dari link tidak dapat dimuat. Periksa kembali URL poster.",
                             });
                           }}
                         />
@@ -1003,8 +1122,7 @@ export default function TambahEventPage() {
                 </div>
               </section>
 
-              {/* INFO */}
-
+              {/* INFO POSTER */}
               <section className="rounded-2xl border border-[#112250]/15 bg-[#112250]/5 p-5">
                 <div className="flex gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#112250] text-white">
@@ -1013,23 +1131,21 @@ export default function TambahEventPage() {
 
                   <div>
                     <h3 className="text-sm font-bold text-slate-800">
-                      Poster Event
+                      Penyimpanan Poster
                     </h3>
 
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Poster dari folder akan diupload ke server TicketVerse.
-                      Database hanya menyimpan path gambar sehingga lebih
-                      ringan.
+                      Poster dari folder akan dikirim ke server TicketVerse.
+                      Database menyimpan path gambar pada kolom poster.
                     </p>
                   </div>
                 </div>
               </section>
 
-              {/* ACTION */}
-
+              {/* ACTION BUTTON */}
               <div className="flex flex-col gap-3 sm:flex-row xl:flex-col">
                 <Link
-                  href="/organizer/event"
+                  href="/organizer/events"
                   className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
                 >
                   Batal
@@ -1037,7 +1153,7 @@ export default function TambahEventPage() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || loadingData}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#112250] px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1A326A] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading ? (

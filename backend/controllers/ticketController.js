@@ -24,6 +24,12 @@ const getAllTickets = async (req, res) => {
         t.ticket_code,
         t.check_in,
         t.created_at,
+        t.seat_id,
+        es.section_id,
+        es.row_label AS seat_row,
+        es.seat_number,
+        sec.section_code,
+        sec.section_name,
 
         od.order_id,
         od.ticket_category_id,
@@ -60,6 +66,9 @@ const getAllTickets = async (req, res) => {
 
       JOIN events e
         ON tc.event_id = e.id
+
+      LEFT JOIN event_seats es ON es.id = t.seat_id
+      LEFT JOIN event_sections sec ON sec.id = es.section_id
 
       LEFT JOIN artists a
         ON e.artist_id = a.id
@@ -94,6 +103,7 @@ const getAllTickets = async (req, res) => {
 // GET TIKET BERDASARKAN ID
 // ============================================================
 
+
 const getTicketById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -109,47 +119,75 @@ const getTicketById = async (req, res) => {
     const [rows] = await db.query(
       `
       SELECT
+        -- DATA TIKET
         t.id,
         t.order_detail_id,
+        t.seat_id,
         t.qr_code,
         t.ticket_code,
         t.check_in,
-        t.created_at,
+        t.created_at AS ticket_created_at,
 
+        -- DATA ORDER DETAIL
         od.order_id,
         od.ticket_category_id,
-        od.quantity,
+        od.quantity AS order_quantity,
         od.subtotal,
 
+        -- DATA ORDER
         o.order_code,
+        o.total_price AS order_total,
         o.payment_status,
+        o.order_date,
 
+        -- DATA CUSTOMER
+        u.id AS customer_id,
+        u.fullname AS customer_name,
+        u.username AS customer_username,
+        u.email AS customer_email,
+        u.phone AS customer_phone,
+        u.photo AS customer_photo,
+
+        -- DATA KATEGORI
         tc.category_name,
         tc.price,
 
+        -- DATA EVENT
         e.id AS event_id,
         e.event_name,
-        e.poster AS poster,
+        e.poster,
         e.event_date,
         e.event_time,
 
+        -- DATA ARTIS
         a.artist_name,
 
+        -- DATA VENUE
         v.venue_name,
-        v.city
+        v.city,
+
+        -- DATA KURSI
+        es.id AS section_id,
+        es.section_name,
+        es.seat_mode,
+        s.row_label,
+        s.seat_number
 
       FROM tickets t
 
-      JOIN order_details od
+      INNER JOIN order_details od
         ON t.order_detail_id = od.id
 
-      JOIN orders o
+      INNER JOIN orders o
         ON od.order_id = o.id
 
-      JOIN ticket_categories tc
+      INNER JOIN users u
+        ON o.user_id = u.id
+
+      INNER JOIN ticket_categories tc
         ON od.ticket_category_id = tc.id
 
-      JOIN events e
+      INNER JOIN events e
         ON tc.event_id = e.id
 
       LEFT JOIN artists a
@@ -157,6 +195,12 @@ const getTicketById = async (req, res) => {
 
       LEFT JOIN venues v
         ON e.venue_id = v.id
+
+      LEFT JOIN event_seats s
+        ON t.seat_id = s.id
+
+      LEFT JOIN event_sections es
+        ON s.section_id = es.id
 
       WHERE t.id = ?
         AND o.user_id = ?
@@ -169,12 +213,13 @@ const getTicketById = async (req, res) => {
     if (!rows.length) {
       return res.status(404).json({
         success: false,
-        message: "Tiket tidak ditemukan.",
+        message: "Tiket tidak ditemukan atau bukan milik akun Anda.",
       });
     }
 
-    return res.json({
+    return res.status(200).json({
       success: true,
+      message: "Detail tiket berhasil diambil.",
       ticket: rows[0],
     });
   } catch (error) {
@@ -182,11 +227,12 @@ const getTicketById = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Gagal mengambil data tiket.",
+      message: "Gagal mengambil detail tiket.",
       error: error.message,
     });
   }
 };
+
 
 // ============================================================
 // CREATE TICKET MANUAL
@@ -213,6 +259,7 @@ const createTicket = async (req, res) => {
       SELECT
         od.id,
         od.quantity,
+        od.ticket_category_id,
         o.payment_status
       FROM order_details od
       JOIN orders o ON od.order_id = o.id
@@ -229,6 +276,19 @@ const createTicket = async (req, res) => {
     }
 
     const orderDetail = orderDetails[0];
+
+    const [numberedSections] = await db.query(
+      `SELECT id FROM event_sections
+       WHERE ticket_category_id = ? AND seat_mode = 'NUMBERED'
+       LIMIT 1`,
+      [orderDetail.ticket_category_id]
+    );
+    if (numberedSections.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Tiket kategori bernomor diterbitkan otomatis berdasarkan kursi pesanan."
+      });
+    }
 
     if (orderDetail.payment_status !== "Paid") {
       return res.status(400).json({
@@ -469,6 +529,12 @@ const checkInTicket = async (req, res) => {
         t.ticket_code,
         t.check_in,
         t.created_at,
+        t.seat_id,
+        es.section_id,
+        es.row_label AS seat_row,
+        es.seat_number,
+        sec.section_code,
+        sec.section_name,
 
         od.order_id,
         od.ticket_category_id,
@@ -498,6 +564,8 @@ const checkInTicket = async (req, res) => {
       JOIN users u ON o.user_id = u.id
       JOIN ticket_categories tc ON od.ticket_category_id = tc.id
       JOIN events e ON tc.event_id = e.id
+      LEFT JOIN event_seats es ON es.id = t.seat_id
+      LEFT JOIN event_sections sec ON sec.id = es.section_id
 
       WHERE t.qr_code = ?
          OR t.ticket_code = ?
@@ -558,6 +626,12 @@ const checkInTicket = async (req, res) => {
         t.ticket_code,
         t.check_in,
         t.created_at,
+        t.seat_id,
+        es.section_id,
+        es.row_label AS seat_row,
+        es.seat_number,
+        sec.section_code,
+        sec.section_name,
 
         o.order_code,
         o.payment_status,
@@ -581,6 +655,8 @@ const checkInTicket = async (req, res) => {
       JOIN users u ON o.user_id = u.id
       JOIN ticket_categories tc ON od.ticket_category_id = tc.id
       JOIN events e ON tc.event_id = e.id
+      LEFT JOIN event_seats es ON es.id = t.seat_id
+      LEFT JOIN event_sections sec ON sec.id = es.section_id
 
       WHERE t.id = ?
       `,

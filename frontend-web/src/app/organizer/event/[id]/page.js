@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 
@@ -21,144 +21,151 @@ import {
   CheckCircle2,
   XCircle,
   Timer,
-  Minus,
-  Plus,
-  ShoppingCart,
+  Armchair,
+  RefreshCw,
+  LayoutGrid,
   ChevronRight,
+  BarChart3,
+  Building2,
+  Layers3,
+  Eye,
 } from "lucide-react";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+/* =====================================================
+   API CONFIGURATION
+===================================================== */
 
-function getPosterUrl(poster) {
-  if (!poster) return null;
+const API_ROOT = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "");
 
-  if (poster.startsWith("http://") || poster.startsWith("https://")) {
-    return poster;
-  }
+const API_BASE = API_ROOT.endsWith("/api")
+  ? API_ROOT
+  : `${API_ROOT}/api`;
 
-  return `${API_URL}/${poster.replace(/^\/+/, "")}`;
+function getToken() {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
 }
 
-function formatDate(date) {
-  if (!date) return "-";
+async function apiRequest(endpoint, options = {}) {
+  const token = getToken();
 
-  try {
-    return new Date(date).toLocaleDateString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
-  } catch {
-    return "-";
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || data.success === false) {
+    throw new Error(
+      data.message || `Permintaan gagal (${response.status})`
+    );
   }
+
+  return data;
 }
 
-function formatDateTime(date) {
-  if (!date) return "-";
+/* =====================================================
+   FORMAT HELPERS
+===================================================== */
 
-  try {
-    return new Date(date).toLocaleString("id-ID", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "-";
-  }
+function getPosterUrl(path) {
+  if (!path) return null;
+
+  if (/^https?:\/\//i.test(path)) return path;
+
+  return `${API_ROOT}/${path.replace(/^\/+/, "")}`;
 }
 
-function formatTime(time) {
-  if (!time) return "-";
+function formatDate(value) {
+  if (!value) return "-";
 
-  if (typeof time === "string" && time.length >= 5) {
-    return time.substring(0, 5);
-  }
+  const date = new Date(value);
 
-  return time;
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatTime(value) {
+  return value ? String(value).substring(0, 5) : "-";
 }
 
 function formatRupiah(value) {
-  if (value === null || value === undefined || value === "") {
-    return "-";
-  }
-
-  const number = Number(value);
-
-  if (Number.isNaN(number)) return "-";
-
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     maximumFractionDigits: 0,
-  }).format(number);
+  }).format(Number(value) || 0);
 }
 
 function getStatusConfig(status) {
   const configs = {
     "Coming Soon": {
       label: "Coming Soon",
-      className: "bg-slate-50 text-slate-600 border border-slate-200",
+      className: "bg-slate-100 text-slate-600 border-slate-200",
       icon: Timer,
     },
     Available: {
       label: "Available",
-      className: "bg-[#112250]/5 text-[#112250] border border-[#112250]/15",
+      className: "bg-blue-50 text-blue-700 border-blue-200",
       icon: CheckCircle2,
     },
     Limited: {
       label: "Limited",
-      className: "bg-amber-50 text-amber-700 border border-amber-200/60",
+      className: "bg-amber-50 text-amber-700 border-amber-200",
       icon: AlertCircle,
     },
     "Sold Out": {
       label: "Sold Out",
-      className: "bg-rose-50 text-rose-700 border border-rose-200/60",
+      className: "bg-rose-50 text-rose-700 border-rose-200",
       icon: XCircle,
     },
     Cancelled: {
       label: "Cancelled",
-      className: "bg-slate-100 text-slate-500 border border-slate-200",
+      className: "bg-slate-100 text-slate-500 border-slate-200",
       icon: XCircle,
     },
   };
 
-  return (
-    configs[status] || {
-      label: status || "-",
-      className: "bg-slate-100 text-slate-500 border border-slate-200",
-      icon: AlertCircle,
-    }
-  );
-}
-
-function getTicketStatus(ticket) {
-  const remaining = Number(ticket.remaining_ticket ?? 0);
-  const quota = Number(ticket.quota ?? 0);
-
-  if (remaining <= 0) {
-    return {
-      label: "Sold Out",
-      className: "text-rose-600 bg-rose-50 border-rose-200",
-    };
-  }
-
-  if (quota > 0 && remaining <= quota * 0.2) {
-    return {
-      label: "Hampir Habis",
-      className: "text-amber-700 bg-amber-50 border-amber-200",
-    };
-  }
-
-  return {
-    label: "Tersedia",
-    className: "text-[#112250] bg-[#112250]/5 border-[#112250]/15",
+  return configs[status] || {
+    label: status || "-",
+    className: "bg-slate-100 text-slate-600 border-slate-200",
+    icon: AlertCircle,
   };
 }
 
-export default function DetailEventPage() {
+/* =====================================================
+   MAIN PAGE
+===================================================== */
+
+export default function DetailEventOrganizerPage() {
   const params = useParams();
   const router = useRouter();
 
@@ -166,179 +173,189 @@ export default function DetailEventPage() {
 
   const [event, setEvent] = useState(null);
   const [tickets, setTickets] = useState([]);
+  const [sections, setSections] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  const [ticketLoading, setTicketLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [error, setError] = useState("");
   const [ticketError, setTicketError] = useState("");
+  const [seatError, setSeatError] = useState("");
 
-  const [deleting, setDeleting] = useState(false);
+  /* =====================================================
+     FETCH DATA
+  ===================================================== */
 
-  const [selectedTickets, setSelectedTickets] = useState({});
-
-  useEffect(() => {
+  const fetchEvent = useCallback(async () => {
     if (!eventId) return;
 
-    fetchEvent();
-    fetchTicketCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Pastikan event benar-benar milik organizer login.
+    const organizerData = await apiRequest("/organizer/events");
+
+    const myEvents = Array.isArray(organizerData.events)
+      ? organizerData.events
+      : [];
+
+    const ownedEvent = myEvents.find(
+      (item) => Number(item.id) === Number(eventId)
+    );
+
+    if (!ownedEvent) {
+      throw new Error(
+        "Event tidak ditemukan atau bukan milik akun organizer ini."
+      );
+    }
+
+    const data = await apiRequest(`/events/${eventId}`);
+
+    if (
+      Number(data.event?.organizer_id) !==
+      Number(ownedEvent.organizer_id)
+    ) {
+      throw new Error("Akses ke event ini tidak diizinkan.");
+    }
+
+    setEvent(data.event);
   }, [eventId]);
 
-  async function fetchEvent() {
+  const fetchTickets = useCallback(async () => {
+    if (!eventId) return;
+
     try {
-      setLoading(true);
-      setError("");
-
-      const token =
-        typeof window !== "undefined"
-          ? localStorage.getItem("token")
-          : null;
-
-      const response = await fetch(`${API_URL}/api/events/${eventId}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Gagal mengambil data event");
-      }
-
-      setEvent(data.event);
-    } catch (err) {
-      console.error("Fetch event error:", err);
-      setError(err.message || "Gagal mengambil data event");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function fetchTicketCategories() {
-    try {
-      setTicketLoading(true);
       setTicketError("");
 
-      const token =
-        typeof window !== "undefined"
-          ? localStorage.getItem("token")
-          : null;
-
-      const response = await fetch(`${API_URL}/api/ticket-categories`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Gagal mengambil kategori tiket");
-      }
-
-      const allTickets = Array.isArray(data.ticket_categories)
-        ? data.ticket_categories
-        : [];
-
-      const eventTickets = allTickets.filter(
-        (ticket) => Number(ticket.event_id) === Number(eventId)
+      const data = await apiRequest(
+        `/ticket-categories/event/${eventId}`
       );
 
-      setTickets(eventTickets);
+      setTickets(
+        Array.isArray(data.ticket_categories)
+          ? data.ticket_categories
+          : []
+      );
     } catch (err) {
-      console.error("Fetch ticket categories error:", err);
-      setTicketError(err.message || "Gagal mengambil data kategori tiket");
+      setTicketError(err.message);
       setTickets([]);
+    }
+  }, [eventId]);
+
+  const fetchSeats = useCallback(async () => {
+    if (!eventId) return;
+
+    try {
+      setSeatError("");
+
+      const data = await apiRequest(
+        `/seats/events/${eventId}`
+      );
+
+      setSections(
+        Array.isArray(data.sections)
+          ? data.sections
+          : []
+      );
+    } catch (err) {
+      setSeatError(err.message);
+      setSections([]);
+    }
+  }, [eventId]);
+
+  const fetchAll = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    else setRefreshing(true);
+
+    setError("");
+
+    try {
+      await fetchEvent();
+
+      await Promise.all([
+        fetchTickets(),
+        fetchSeats(),
+      ]);
+    } catch (err) {
+      setError(err.message || "Gagal mengambil detail event.");
     } finally {
-      setTicketLoading(false);
+      setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, [fetchEvent, fetchTickets, fetchSeats]);
 
-  function getTicketId(ticket) {
-    return String(ticket.id);
-  }
+  useEffect(() => {
+    if (eventId) fetchAll(true);
+  }, [eventId, fetchAll]);
 
-  function getSelectedQuantity(ticket) {
-    const ticketId = getTicketId(ticket);
-    return Number(selectedTickets[ticketId] || 0);
-  }
+  /* =====================================================
+     TICKET STATISTICS
+  ===================================================== */
 
-  function increaseTicket(ticket) {
-    const ticketId = getTicketId(ticket);
-    const remaining = Math.max(0, Number(ticket.remaining_ticket ?? 0));
-    const currentQuantity = getSelectedQuantity(ticket);
-
-    if (remaining <= 0) return;
-    if (currentQuantity >= remaining) return;
-
-    setSelectedTickets((current) => ({
-      ...current,
-      [ticketId]: currentQuantity + 1,
-    }));
-  }
-
-  function decreaseTicket(ticket) {
-    const ticketId = getTicketId(ticket);
-    const currentQuantity = getSelectedQuantity(ticket);
-
-    if (currentQuantity <= 0) return;
-
-    const nextQuantity = currentQuantity - 1;
-
-    setSelectedTickets((current) => {
-      const next = { ...current };
-      if (nextQuantity <= 0) delete next[ticketId];
-      else next[ticketId] = nextQuantity;
-      return next;
-    });
-  }
-
-  const selectedTicketItems = useMemo(() => {
-    return tickets
-      .filter((ticket) => getSelectedQuantity(ticket) > 0)
-      .map((ticket) => {
-        const quantity = getSelectedQuantity(ticket);
-        const price = Number(ticket.price) || 0;
-        return {
-          ...ticket,
-          quantity,
-          subtotal: price * quantity,
-        };
-      });
-  }, [tickets, selectedTickets]);
-
-  const totalQuantity = useMemo(() => {
-    return selectedTicketItems.reduce(
-      (total, ticket) => total + ticket.quantity,
+  const ticketStats = useMemo(() => {
+    const quota = tickets.reduce(
+      (sum, item) => sum + Number(item.quota || 0),
       0
     );
-  }, [selectedTicketItems]);
 
-  const totalPrice = useMemo(() => {
-    return selectedTicketItems.reduce(
-      (total, ticket) => total + ticket.subtotal,
+    const remaining = tickets.reduce(
+      (sum, item) => sum + Number(item.remaining_ticket || 0),
       0
     );
-  }, [selectedTicketItems]);
 
-  function handleCheckout() {
-    if (selectedTicketItems.length === 0) {
-      alert("Silakan pilih minimal satu tiket.");
-      return;
-    }
+    const sold = Math.max(0, quota - remaining);
 
-    const firstTicket = selectedTicketItems[0];
+    const estimatedValue = tickets.reduce((sum, item) => {
+      const itemSold = Math.max(
+        0,
+        Number(item.quota || 0) -
+        Number(item.remaining_ticket || 0)
+      );
 
-    const query = new URLSearchParams({
-      eventId: String(eventId),
-      ticketCategoryId: String(firstTicket.id),
-      quantity: String(firstTicket.quantity),
-    });
+      return sum + itemSold * Number(item.price || 0);
+    }, 0);
 
-    router.push(`/checkout?${query.toString()}`);
-  }
+    return {
+      quota,
+      remaining,
+      sold,
+      estimatedValue,
+      percentage: quota > 0
+        ? Math.round((sold / quota) * 100)
+        : 0,
+    };
+  }, [tickets]);
+
+  /* =====================================================
+     SEAT STATISTICS
+  ===================================================== */
+
+  const seatStats = useMemo(() => {
+    const allSeats = sections.flatMap(
+      (section) => section.seats || []
+    );
+
+    return {
+      sections: sections.length,
+      total: allSeats.length,
+      available: allSeats.filter(
+        (seat) => seat.status === "Available"
+      ).length,
+      reserved: allSeats.filter(
+        (seat) => seat.status === "Reserved"
+      ).length,
+      sold: allSeats.filter(
+        (seat) => seat.status === "Sold" ||
+          seat.status === "Booked"
+      ).length,
+    };
+  }, [sections]);
+
+  /* =====================================================
+     DELETE EVENT
+  ===================================================== */
 
   async function handleDelete() {
     const confirmed = window.confirm(
-      "Apakah Anda yakin ingin menghapus event ini?"
+      `Apakah kamu yakin ingin menghapus event "${event.event_name}"?\n\nData yang masih terhubung dengan transaksi dapat menyebabkan penghapusan ditolak backend.`
     );
 
     if (!confirmed) return;
@@ -346,73 +363,64 @@ export default function DetailEventPage() {
     try {
       setDeleting(true);
 
-      const token =
-        typeof window !== "undefined"
-          ? localStorage.getItem("token")
-          : null;
-
-      const response = await fetch(`${API_URL}/api/events/${eventId}`, {
+      const data = await apiRequest(`/events/${eventId}`, {
         method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "Gagal menghapus event");
-      }
+      alert(data.message || "Event berhasil dihapus.");
 
       router.push("/organizer/event");
       router.refresh();
     } catch (err) {
-      console.error("Delete event error:", err);
-      alert(err.message || "Gagal menghapus event");
+      alert(err.message || "Gagal menghapus event.");
     } finally {
       setDeleting(false);
     }
   }
 
-  /* ===================================================
+  /* =====================================================
      LOADING
-  =================================================== */
+  ===================================================== */
 
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <Loader2 size={26} className="animate-spin text-[#112250]" />
+            <Loader2 className="h-7 w-7 animate-spin text-[#112250]" />
           </div>
+
           <p className="mt-4 text-sm font-medium text-slate-500">
-            Memuat detail event...
+            Memuat detail event organizer...
           </p>
         </div>
       </div>
     );
   }
 
-  /* ===================================================
+  /* =====================================================
      ERROR
-  =================================================== */
+  ===================================================== */
 
   if (error || !event) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-500">
-            <AlertCircle size={28} />
-          </div>
-          <h2 className="mt-5 text-lg font-bold text-[#0F172A]">
-            Data Event Tidak Ditemukan
+      <div className="flex min-h-[60vh] items-center justify-center p-5">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <AlertCircle className="mx-auto h-12 w-12 text-rose-500" />
+
+          <h2 className="mt-5 text-xl font-bold text-slate-900">
+            Detail Event Tidak Tersedia
           </h2>
+
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            {error || "Event yang Anda cari tidak tersedia atau telah dihapus."}
+            {error || "Data event tidak ditemukan."}
           </p>
+
           <button
             onClick={() => router.push("/organizer/event")}
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#112250] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#1A326A]"
+            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#112250] px-5 py-3 text-sm font-bold text-white hover:bg-[#233D70]"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft size={17} />
             Kembali ke Event
           </button>
         </div>
@@ -420,44 +428,66 @@ export default function DetailEventPage() {
     );
   }
 
+  /* =====================================================
+     EVENT DATA
+  ===================================================== */
+
   const statusConfig = getStatusConfig(event.status);
   const StatusIcon = statusConfig.icon;
   const posterUrl = getPosterUrl(event.poster);
 
-  /* ===================================================
+  /* =====================================================
      MAIN RENDER
-  =================================================== */
+  ===================================================== */
 
   return (
     <div className="w-full min-w-0">
-      <div className="mx-auto w-full max-w-7xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
 
         {/* PAGE HEADER */}
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <Link
               href="/organizer/event"
-              className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-[#112250]"
+              className="mb-3 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-[#112250]"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Kembali ke Event
+              <ArrowLeft size={16} />
+              Kembali ke Event Saya
             </Link>
 
             <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
               Detail Event
             </h1>
+
             <p className="mt-1 text-sm text-slate-500">
-              Informasi lengkap event dan kategori tiket.
+              Kelola informasi, tiket, denah kursi, dan penjualan event.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
+
             <button
               type="button"
-              onClick={() => router.push(`/organizer/event/edit/${event.id}`)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#112250]/30 hover:bg-[#112250]/5 hover:text-[#112250]"
+              onClick={() => fetchAll(false)}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
-              <Pencil className="h-4 w-4" />
+              <RefreshCw
+                size={16}
+                className={refreshing ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                router.push(`/organizer/event/edit/${event.id}`)
+              }
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Pencil size={16} />
               Edit Event
             </button>
 
@@ -465,515 +495,724 @@ export default function DetailEventPage() {
               type="button"
               onClick={handleDelete}
               disabled={deleting}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
             >
               {deleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 size={16} className="animate-spin" />
               ) : (
-                <Trash2 className="h-4 w-4" />
+                <Trash2 size={16} />
               )}
-              {deleting ? "Menghapus..." : "Hapus Event"}
+              {deleting ? "Menghapus..." : "Hapus"}
             </button>
+
           </div>
         </div>
 
-        {/* HERO EVENT */}
-        <section className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="grid lg:grid-cols-[380px_minmax(0,1fr)]">
-            {/* POSTER */}
-            <div className="relative min-h-[420px] bg-slate-900 lg:min-h-[500px]">
+        {/* EVENT HERO */}
+
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="grid lg:grid-cols-[360px_minmax(0,1fr)]">
+
+            <div className="relative min-h-[320px] bg-gradient-to-br from-[#112250] to-[#495B7D] lg:min-h-[430px]">
               {posterUrl ? (
                 <img
                   src={posterUrl}
-                  alt={event.event_name || "Poster Event"}
+                  alt={event.event_name}
                   className="absolute inset-0 h-full w-full object-cover"
                   onError={(e) => {
                     e.currentTarget.style.display = "none";
                   }}
                 />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#112250] via-[#243B68] to-[#3B507D]">
-                  <div className="text-center text-white/80">
-                    <Ticket className="mx-auto h-14 w-14" />
-                    <p className="mt-3 text-sm">Tidak ada poster</p>
-                  </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-white/70">
+                  <Ticket size={64} />
+                  <p className="mt-4 text-sm">
+                    Poster belum tersedia
+                  </p>
                 </div>
               )}
-
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent p-6 pt-24 lg:hidden">
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusConfig.className}`}
-                >
-                  <StatusIcon className="h-3.5 w-3.5" />
-                  {statusConfig.label}
-                </span>
-              </div>
             </div>
 
-            {/* EVENT INFO */}
-            <div className="flex flex-col p-6 sm:p-8 lg:p-10">
-              <div className="hidden lg:block">
+            <div className="flex flex-col justify-center p-6 sm:p-8 lg:p-10">
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[#112250]/5 px-3 py-1.5 text-xs font-bold text-[#112250]">
+                  EVENT ORGANIZER
+                </span>
+
                 <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ${statusConfig.className}`}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold ${statusConfig.className}`}
                 >
-                  <StatusIcon className="h-3.5 w-3.5" />
+                  <StatusIcon size={14} />
                   {statusConfig.label}
                 </span>
               </div>
 
-              <h2 className="mt-4 text-2xl font-bold leading-tight text-[#0F172A] sm:text-3xl">
+              <h2 className="mt-5 text-2xl font-bold leading-tight text-[#0F172A] sm:text-3xl">
                 {event.event_name}
               </h2>
 
+              <p className="mt-3 text-sm text-slate-500">
+                ID Event: #{event.id}
+              </p>
+
               {event.description && (
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-500">
+                <p className="mt-5 whitespace-pre-line text-sm leading-7 text-slate-500">
                   {event.description}
                 </p>
               )}
 
-              <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <div className="mt-7 grid gap-4 sm:grid-cols-2">
+
                 <InfoItem
                   icon={CalendarDays}
                   label="Tanggal Event"
                   value={formatDate(event.event_date)}
                 />
+
                 <InfoItem
                   icon={Clock3}
                   label="Waktu"
                   value={formatTime(event.event_time)}
                 />
+
                 <InfoItem
                   icon={MapPin}
                   label="Lokasi"
-                  value={event.venue_name || event.venue || "-"}
-                  subValue={event.city || event.venue_city || ""}
+                  value={event.venue_name}
+                  subValue={event.city}
                 />
+
                 <InfoItem
                   icon={UserRound}
                   label="Artis"
-                  value={event.artist_name || event.artist || "-"}
+                  value={event.artist_name}
                 />
+
                 <InfoItem
                   icon={Tag}
                   label="Kategori"
-                  value={event.category_name || event.category || "-"}
+                  value={event.category_name}
                 />
+
               </div>
             </div>
           </div>
         </section>
 
-        {/* TICKET CATEGORIES */}
-        <section className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6 lg:p-8">
-          <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
-                  <Ticket className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-[#0F172A] sm:text-xl">
-                    Pilih Tiket
-                  </h2>
-                  <p className="mt-0.5 text-sm text-slate-500">
-                    Pilih kategori dan jumlah tiket yang ingin dibeli.
-                  </p>
-                </div>
-              </div>
-            </div>
+        {/* STATISTICS */}
 
-            {!ticketLoading && !ticketError && (
-              <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[#112250]/5 px-3 py-1.5 text-xs font-bold text-[#112250]">
-                <Ticket className="h-3.5 w-3.5" />
-                {tickets.length} Kategori
-              </div>
-            )}
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-bold text-[#0F172A]">
+              Ringkasan Event
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Statistik berdasarkan kategori tiket dan denah event.
+            </p>
           </div>
 
-          {ticketLoading ? (
-            <div className="flex min-h-[180px] items-center justify-center">
-              <div className="flex items-center gap-3 text-sm text-slate-500">
-                <Loader2 className="h-5 w-5 animate-spin text-[#112250]" />
-                Memuat kategori tiket...
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+            <StatCard
+              icon={Ticket}
+              label="Total Kategori"
+              value={tickets.length}
+              description="Kategori tiket event"
+            />
+
+            <StatCard
+              icon={Users}
+              label="Tiket Terjual"
+              value={ticketStats.sold.toLocaleString("id-ID")}
+              description={`${ticketStats.percentage}% dari kuota`}
+            />
+
+            <StatCard
+              icon={Wallet}
+              label="Sisa Tiket"
+              value={ticketStats.remaining.toLocaleString("id-ID")}
+              description={`Dari ${ticketStats.quota.toLocaleString("id-ID")} kuota`}
+            />
+
+            <StatCard
+              icon={Armchair}
+              label="Total Kursi"
+              value={seatStats.total.toLocaleString("id-ID")}
+              description={`${seatStats.sections} section denah`}
+            />
+
+          </div>
+        </section>
+
+        {/* TICKET MANAGEMENT */}
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+
+          <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
+                <Ticket size={21} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-bold text-[#0F172A]">
+                  Kategori Tiket
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Informasi harga, kuota, dan ketersediaan tiket.
+                </p>
               </div>
             </div>
-          ) : ticketError ? (
-            <div className="mt-5 rounded-2xl border border-red-100 bg-red-50 p-5">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
-                <div>
-                  <h3 className="text-sm font-semibold text-red-800">
-                    Gagal memuat kategori tiket
-                  </h3>
-                  <p className="mt-1 text-sm text-red-600">{ticketError}</p>
-                  <button
-                    type="button"
-                    onClick={fetchTicketCategories}
-                    className="mt-3 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
-                  >
-                    Coba Lagi
-                  </button>
-                </div>
-              </div>
-            </div>
+
+            <Link
+              href={`/organizer/events/${event.id}/tiket`}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#112250] px-4 py-3 text-sm font-bold text-white hover:bg-[#233D70]"
+            >
+              <Pencil size={16} />
+              Kelola Kategori Tiket
+              <ChevronRight size={16} />
+            </Link>
+
+          </div>
+
+          {ticketError ? (
+            <ErrorPanel
+              message={ticketError}
+              onRetry={fetchTickets}
+            />
           ) : tickets.length === 0 ? (
-            <div className="mt-5 flex min-h-[180px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
-                <Ticket className="h-5 w-5 text-slate-400" />
-              </div>
-              <h3 className="mt-3 text-sm font-semibold text-slate-700">
-                Belum ada kategori tiket
-              </h3>
-              <p className="mt-1 max-w-md text-xs leading-5 text-slate-500">
-                Event ini belum memiliki kategori tiket.
-              </p>
-            </div>
+            <EmptyPanel
+              icon={Ticket}
+              title="Belum Ada Kategori Tiket"
+              description="Tambahkan kategori tiket untuk mulai mengatur harga dan kuota event."
+            />
           ) : (
-            <div className="mt-5 space-y-4">
-              {tickets.map((ticket) => {
-                const ticketStatus = getTicketStatus(ticket);
-                const quota = Number(ticket.quota ?? 0);
-                const remaining = Number(ticket.remaining_ticket ?? 0);
-                const quantity = getSelectedQuantity(ticket);
-                const availability =
-                  quota > 0
-                    ? Math.min(100, Math.max(0, (remaining / quota) * 100))
-                    : 0;
-                const isSoldOut = remaining <= 0;
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full min-w-[650px] text-left">
+                <thead>
+                  <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <th className="px-4 py-4">Kategori</th>
+                    <th className="px-4 py-4">Harga</th>
+                    <th className="px-4 py-4">Kuota</th>
+                    <th className="px-4 py-4">Terjual</th>
+                    <th className="px-4 py-4">Sisa</th>
+                    <th className="px-4 py-4">Status</th>
+                  </tr>
+                </thead>
 
-                return (
-                  <div
-                    key={ticket.id}
-                    className={`rounded-2xl border p-5 transition ${
-                      quantity > 0
-                        ? "border-[#112250]/30 bg-[#112250]/5 shadow-sm"
-                        : "border-slate-200 bg-white hover:border-[#112250]/20"
-                    }`}
-                  >
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                      {/* LEFT */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
-                            <Ticket className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h3 className="text-base font-bold text-[#0F172A]">
-                              {ticket.category_name ||
-                                ticket.name ||
-                                ticket.nama_kategori ||
-                                "-"}
-                            </h3>
-                            <span
-                              className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${ticketStatus.className}`}
-                            >
-                              {ticketStatus.label}
-                            </span>
-                          </div>
-                        </div>
+                <tbody>
+                  {tickets.map((ticket) => {
+                    const quota = Number(ticket.quota || 0);
+                    const remaining = Number(
+                      ticket.remaining_ticket || 0
+                    );
 
-                        <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3">
-                          <div>
-                            <p className="text-xs font-medium text-slate-400">
-                              Harga
-                            </p>
-                            <p className="mt-1 text-xl font-bold text-[#112250]">
-                              {formatRupiah(ticket.price)}
-                            </p>
-                          </div>
+                    const sold = Math.max(0, quota - remaining);
 
-                          <div>
-                            <p className="text-xs font-medium text-slate-400">
-                              Sisa Tiket
-                            </p>
-                            <p className="mt-1 text-sm font-bold text-slate-800">
-                              {remaining.toLocaleString("id-ID")} tiket
-                            </p>
-                          </div>
+                    const percentage = quota > 0
+                      ? Math.round((sold / quota) * 100)
+                      : 0;
 
-                          {quota > 0 && (
-                            <div className="min-w-[160px]">
-                              <div className="mb-1 flex items-center justify-between text-[11px]">
-                                <span className="text-slate-400">
-                                  Ketersediaan
-                                </span>
-                                <span className="font-bold text-slate-600">
-                                  {Math.round(availability)}%
-                                </span>
-                              </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                <div
-                                  className="h-full rounded-full bg-[#112250] transition-all"
-                                  style={{ width: `${availability}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* QUANTITY */}
-                      <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-4 lg:min-w-[260px] lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-                        <div>
-                          <p className="text-xs font-medium text-slate-400">
-                            Jumlah
+                    return (
+                      <tr
+                        key={ticket.id}
+                        className="border-b border-slate-50 transition hover:bg-slate-50/70"
+                      >
+                        <td className="px-4 py-5">
+                          <p className="text-sm font-bold text-slate-800">
+                            {ticket.category_name}
                           </p>
-                          <p className="mt-1 text-sm font-bold text-slate-700">
-                            {quantity} tiket
+                          <p className="mt-1 text-xs text-slate-400">
+                            ID #{ticket.id}
                           </p>
-                        </div>
+                        </td>
 
-                        <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
-                          <button
-                            type="button"
-                            onClick={() => decreaseTicket(ticket)}
-                            disabled={quantity <= 0}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
-                            aria-label={`Kurangi ${ticket.category_name || "tiket"}`}
+                        <td className="px-4 py-5 text-sm font-semibold text-[#112250]">
+                          {formatRupiah(ticket.price)}
+                        </td>
+
+                        <td className="px-4 py-5 text-sm text-slate-600">
+                          {quota.toLocaleString("id-ID")}
+                        </td>
+
+                        <td className="px-4 py-5 text-sm font-bold text-emerald-700">
+                          {sold.toLocaleString("id-ID")}
+                        </td>
+
+                        <td className="px-4 py-5 text-sm font-semibold text-slate-700">
+                          {remaining.toLocaleString("id-ID")}
+                        </td>
+
+                        <td className="px-4 py-5">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1.5 text-[11px] font-bold ${
+                              remaining <= 0
+                                ? "bg-rose-50 text-rose-600"
+                                : percentage >= 80
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-emerald-50 text-emerald-700"
+                            }`}
                           >
-                            <Minus className="h-4 w-4" />
-                          </button>
-                          <span className="flex min-w-[42px] items-center justify-center text-sm font-bold text-slate-900">
-                            {quantity}
+                            {remaining <= 0
+                              ? "Sold Out"
+                              : percentage >= 80
+                              ? "Hampir Habis"
+                              : "Tersedia"}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => increaseTicket(ticket)}
-                            disabled={isSoldOut || quantity >= remaining}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg text-[#112250] transition hover:bg-[#112250]/10 disabled:cursor-not-allowed disabled:opacity-30"
-                            aria-label={`Tambah ${ticket.category_name || "tiket"}`}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* SUBTOTAL */}
-                    {quantity > 0 && (
-                      <div className="mt-4 flex items-center justify-between rounded-xl bg-white px-4 py-3">
-                        <span className="text-xs font-medium text-slate-500">
-                          Subtotal
-                        </span>
-                        <span className="text-sm font-bold text-[#0F172A]">
-                          {formatRupiah(Number(ticket.price) * quantity)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
-        </section>
 
-        {/* CHECKOUT SUMMARY */}
-        {selectedTicketItems.length > 0 && (
-          <section className="overflow-hidden rounded-3xl border border-[#112250]/20 bg-white shadow-sm">
-            <div className="grid lg:grid-cols-[minmax(0,1fr)_360px]">
-              {/* SELECTED ITEMS */}
-              <div className="p-5 sm:p-6 lg:p-8">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#112250] text-white">
-                    <ShoppingCart className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-[#0F172A]">
-                      Ringkasan Pesanan
-                    </h2>
-                    <p className="text-sm text-slate-500">
-                      Tiket yang kamu pilih.
-                    </p>
-                  </div>
-                </div>
+          <div className="mt-5 rounded-2xl bg-slate-50 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-slate-800">
+                  Progres Penjualan Tiket
+                </p>
 
-                <div className="mt-6 space-y-3">
-                  {selectedTicketItems.map((ticket) => (
-                    <div
-                      key={ticket.id}
-                      className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-[#0F172A]">
-                          {ticket.category_name ||
-                            ticket.name ||
-                            ticket.nama_kategori ||
-                            "-"}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {ticket.quantity} x {formatRupiah(ticket.price)}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-sm font-bold text-[#0F172A]">
-                        {formatRupiah(ticket.subtotal)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {ticketStats.sold} dari {ticketStats.quota} tiket terjual.
+                </p>
               </div>
 
-              {/* TOTAL */}
-              <div className="border-t border-[#112250]/10 bg-[#112250]/5 p-5 sm:p-6 lg:border-l lg:border-t-0 lg:p-8">
-                <p className="text-sm font-medium text-slate-500">
-                  Total Tiket
-                </p>
-                <div className="mt-2 flex items-end justify-between gap-3">
-                  <span className="text-3xl font-bold tracking-tight text-[#0F172A]">
-                    {totalQuantity}
-                  </span>
-                  <span className="pb-1 text-sm text-slate-500">tiket</span>
-                </div>
+              <span className="text-xl font-bold text-[#112250]">
+                {ticketStats.percentage}%
+              </span>
+            </div>
 
-                <div className="my-5 h-px bg-[#112250]/10" />
+            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-[#112250] transition-all"
+                style={{
+                  width: `${ticketStats.percentage}%`,
+                }}
+              />
+            </div>
+          </div>
+        </section>
 
-                <p className="text-sm font-medium text-slate-500">
-                  Total Pembayaran
-                </p>
-                <p className="mt-1 text-2xl font-bold text-[#112250]">
-                  {formatRupiah(totalPrice)}
-                </p>
+        {/* SEAT MANAGEMENT */}
 
-                <button
-                  type="button"
-                  onClick={handleCheckout}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#112250] px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1A326A] hover:-translate-y-0.5"
-                >
-                  Lanjut ke Checkout
-                  <ChevronRight className="h-4 w-4" />
-                </button>
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
 
-                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">
-                  Pastikan kategori dan jumlah tiket sudah sesuai sebelum
-                  melanjutkan.
+          <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
+                <LayoutGrid size={21} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-bold text-[#0F172A]">
+                  Denah Kursi Event
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Ringkasan section dan konfigurasi kursi.
                 </p>
               </div>
             </div>
-          </section>
-        )}
 
-        {/* EVENT INFORMATION */}
-        <section className="grid gap-6 lg:grid-cols-2">
-          {/* TICKET SALE */}
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
-                <Wallet className="h-5 w-5" />
+            <Link
+              href={`/organizer/events/${event.id}/denah-kursi`}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#112250]/20 bg-[#112250]/5 px-4 py-3 text-sm font-bold text-[#112250] hover:bg-[#112250]/10"
+            >
+              <Armchair size={17} />
+              Kelola Denah Kursi
+              <ChevronRight size={16} />
+            </Link>
+
+          </div>
+
+          {seatError ? (
+            <ErrorPanel
+              message={seatError}
+              onRetry={fetchSeats}
+            />
+          ) : sections.length === 0 ? (
+            <EmptyPanel
+              icon={Armchair}
+              title="Denah Kursi Belum Dibuat"
+              description="Buat section dan tambahkan konfigurasi kursi untuk event ini."
+            />
+          ) : (
+            <>
+              <div className="mt-5 grid gap-4 sm:grid-cols-4">
+
+                <MiniStat
+                  label="Total Section"
+                  value={seatStats.sections}
+                />
+
+                <MiniStat
+                  label="Total Kursi"
+                  value={seatStats.total}
+                />
+
+                <MiniStat
+                  label="Tersedia"
+                  value={seatStats.available}
+                />
+
+                <MiniStat
+                  label="Terpesan / Terjual"
+                  value={seatStats.reserved + seatStats.sold}
+                />
+
               </div>
+
+              <div className="mt-6 space-y-4">
+
+                {sections.map((section) => {
+                  const seats = section.seats || [];
+
+                  const available = seats.filter(
+                    (seat) => seat.status === "Available"
+                  ).length;
+
+                  const reserved = seats.filter(
+                    (seat) => seat.status === "Reserved"
+                  ).length;
+
+                  const sold = seats.filter(
+                    (seat) =>
+                      seat.status === "Sold" ||
+                      seat.status === "Booked"
+                  ).length;
+
+                  return (
+                    <div
+                      key={section.id}
+                      className="rounded-2xl border border-slate-200 p-5"
+                    >
+
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
+                            <Layers3 size={20} />
+                          </div>
+
+                          <div>
+                            <h3 className="font-bold text-slate-800">
+                              {section.section_name}
+                            </h3>
+
+                            <p className="mt-1 text-xs text-slate-400">
+                              {section.section_code} · {section.seat_mode}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              Kategori: {section.category_name}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-left sm:text-right">
+                          <p className="text-sm font-bold text-[#112250]">
+                            {formatRupiah(section.price)}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-400">
+                            {seats.length} kursi
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid grid-cols-3 gap-3">
+
+                        <SeatCount
+                          label="Tersedia"
+                          value={available}
+                          color="text-emerald-700 bg-emerald-50"
+                        />
+
+                        <SeatCount
+                          label="Reserved"
+                          value={reserved}
+                          color="text-amber-700 bg-amber-50"
+                        />
+
+                        <SeatCount
+                          label="Terjual"
+                          value={sold}
+                          color="text-slate-700 bg-slate-100"
+                        />
+
+                      </div>
+                    </div>
+                  );
+                })}
+
+              </div>
+            </>
+          )}
+
+        </section>
+
+        {/* SALE PERIOD */}
+
+        <section className="grid gap-6 lg:grid-cols-2">
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
+                <Wallet size={21} />
+              </div>
+
               <div>
-                <h2 className="text-base font-bold text-[#0F172A]">
-                  Periode Penjualan Tiket
+                <h2 className="font-bold text-[#0F172A]">
+                  Periode Penjualan
                 </h2>
-                <p className="text-xs text-slate-500">
-                  Informasi waktu penjualan tiket.
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Jadwal penjualan tiket event.
                 </p>
               </div>
             </div>
 
             <div className="mt-5 space-y-3">
-              <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-400">
-                    Mulai Penjualan
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-slate-800">
-                    {formatDateTime(event.ticket_sale_start)}
-                  </p>
-                </div>
-                <CalendarDays className="h-5 w-5 shrink-0 text-slate-400" />
-              </div>
 
-              <div className="flex items-center justify-between gap-4 rounded-xl bg-slate-50 p-4">
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-400">
-                    Akhir Penjualan
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-slate-800">
-                    {formatDateTime(event.ticket_sale_end)}
-                  </p>
-                </div>
-                <CalendarDays className="h-5 w-5 shrink-0 text-slate-400" />
-              </div>
+              <SaleDate
+                label="Mulai Penjualan"
+                value={event.ticket_sale_start}
+              />
+
+              <SaleDate
+                label="Akhir Penjualan"
+                value={event.ticket_sale_end}
+              />
+
             </div>
           </div>
 
-          {/* VENUE */}
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
-                <MapPin className="h-5 w-5" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
+                <Building2 size={21} />
               </div>
+
               <div>
-                <h2 className="text-base font-bold text-[#0F172A]">
-                  Lokasi Event
+                <h2 className="font-bold text-[#0F172A]">
+                  Informasi Venue
                 </h2>
-                <p className="text-xs text-slate-500">
-                  Informasi tempat penyelenggaraan.
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Tempat penyelenggaraan event.
                 </p>
               </div>
             </div>
 
             <div className="mt-5 rounded-2xl bg-slate-50 p-5">
-              <h3 className="text-lg font-bold text-[#0F172A]">
-                {event.venue_name || event.venue || "-"}
+
+              <h3 className="text-lg font-bold text-slate-900">
+                {event.venue_name || "-"}
               </h3>
 
-              <div className="mt-2 flex items-start gap-2 text-sm text-slate-500">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#112250]" />
-                <span>
-                  {event.city ||
-                    event.venue_city ||
-                    "Lokasi tidak tersedia"}
-                </span>
-              </div>
+              <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                <MapPin size={16} />
+                {event.city || "Lokasi tidak tersedia"}
+              </p>
 
-              {event.capacity && (
-                <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
-                  <Users className="h-4 w-4 text-[#112250]" />
-                  <span>
-                    Kapasitas:{" "}
-                    <strong className="text-slate-700">
-                      {Number(event.capacity).toLocaleString("id-ID")}
-                    </strong>
-                  </span>
-                </div>
-              )}
+              <p className="mt-4 text-xs text-slate-400">
+                Data venue diambil dari informasi event backend.
+              </p>
+
             </div>
           </div>
+
         </section>
 
-        {/* FOOTER ACTION */}
-        <div className="flex justify-start pb-4">
+        {/* ESTIMATED SALES */}
+
+        <section className="rounded-3xl border border-blue-100 bg-blue-50/60 p-5 sm:p-6">
+
+          <div className="flex items-start gap-3">
+            <BarChart3 className="mt-0.5 h-5 w-5 shrink-0 text-[#112250]" />
+
+            <div>
+              <h3 className="text-sm font-bold text-[#112250]">
+                Estimasi Nilai Tiket Terjual
+              </h3>
+
+              <p className="mt-1 text-2xl font-bold text-[#112250]">
+                {formatRupiah(ticketStats.estimatedValue)}
+              </p>
+
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Dihitung dari harga kategori tiket dikalikan jumlah
+                tiket yang terjual berdasarkan kuota dan sisa tiket.
+                Angka ini bukan laporan pendapatan transaksi aktual
+                atau pembayaran yang sudah berhasil.
+              </p>
+            </div>
+          </div>
+
+        </section>
+
+        {/* FOOTER */}
+
+        <div className="flex justify-start pb-5">
           <Link
             href="/organizer/event"
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-[#112250]/30 hover:bg-[#112250]/5 hover:text-[#112250]"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft size={17} />
             Kembali ke Daftar Event
           </Link>
         </div>
+
       </div>
     </div>
   );
 }
 
-/* =========================
-   INFO ITEM
-========================= */
+/* =====================================================
+   REUSABLE COMPONENTS
+===================================================== */
 
 function InfoItem({ icon: Icon, label, value, subValue }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
-        <Icon className="h-4 w-4 text-[#112250]" />
+    <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#112250] shadow-sm">
+        <Icon size={17} />
       </div>
+
       <div className="min-w-0">
-        <p className="text-xs font-medium text-slate-400">{label}</p>
-        <p className="mt-1 truncate text-sm font-bold text-slate-800">
-          {value}
+        <p className="text-xs font-medium text-slate-400">
+          {label}
         </p>
+
+        <p className="mt-1 break-words text-sm font-bold text-slate-800">
+          {value || "-"}
+        </p>
+
         {subValue && (
-          <p className="mt-0.5 text-xs text-slate-500">{subValue}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {subValue}
+          </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, description }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-slate-500">
+          {label}
+        </p>
+
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#112250]/5 text-[#112250]">
+          <Icon size={19} />
+        </div>
+      </div>
+
+      <p className="mt-4 text-2xl font-bold tracking-tight text-[#0F172A]">
+        {value}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-400">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-4">
+      <p className="text-xs text-slate-400">{label}</p>
+
+      <p className="mt-2 text-xl font-bold text-[#112250]">
+        {Number(value).toLocaleString("id-ID")}
+      </p>
+    </div>
+  );
+}
+
+function SeatCount({ label, value, color }) {
+  return (
+    <div className={`rounded-xl p-3 ${color}`}>
+      <p className="text-xs">{label}</p>
+
+      <p className="mt-1 text-lg font-bold">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SaleDate({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-4">
+      <div>
+        <p className="text-xs text-slate-400">
+          {label}
+        </p>
+
+        <p className="mt-1 text-sm font-bold text-slate-800">
+          {formatDateTime(value)}
+        </p>
+      </div>
+
+      <CalendarDays className="h-5 w-5 shrink-0 text-[#112250]" />
+    </div>
+  );
+}
+
+function EmptyPanel({ icon: Icon, title, description }) {
+  return (
+    <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center">
+      <Icon className="mx-auto h-10 w-10 text-slate-300" />
+
+      <h3 className="mt-3 text-sm font-bold text-slate-700">
+        {title}
+      </h3>
+
+      <p className="mx-auto mt-1 max-w-md text-xs leading-5 text-slate-500">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function ErrorPanel({ message, onRetry }) {
+  return (
+    <div className="mt-5 rounded-2xl border border-rose-100 bg-rose-50 p-5">
+      <div className="flex items-start gap-3">
+        <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />
+
+        <div>
+          <p className="text-sm font-bold text-rose-800">
+            Gagal memuat data
+          </p>
+
+          <p className="mt-1 text-xs text-rose-600">
+            {message}
+          </p>
+
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-3 rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700"
+          >
+            Coba Lagi
+          </button>
+        </div>
       </div>
     </div>
   );

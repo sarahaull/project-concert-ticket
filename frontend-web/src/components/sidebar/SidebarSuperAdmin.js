@@ -163,35 +163,34 @@ export default function SidebarSuperAdmin() {
       title: "Menu Utama",
       items: [
         { label: "Dashboard", href: "/superadmin/dashboard", icon: Gauge },
-        { label: "Manajemen Konser", href: "/superadmin/konser", icon: Music2 },
-        { label: "Kategori & Kuota Tiket", href: "/superadmin/kategori-kuota", icon: Tags },
+        { label: "Manajemen Konser", href: "/superadmin/events", icon: Music2 },
+        { label: "Kategori & Kuota Tiket", href: "/superadmin/kategori-tiket", icon: Tags },
         { label: "Pemesanan Tiket", href: "/superadmin/pemesanan", icon: ShoppingCart },
         { label: "Pembayaran", href: "/superadmin/pembayaran", icon: CreditCard },
-        { label: "Validasi E-Ticket", href: "/superadmin/validasi-ticket", icon: QrCode },
+        { label: "Validasi E-Ticket", href: "/superadmin/validasi-etiket", icon: QrCode },
       ],
     },
     {
       title: "Master Data",
       items: [
-        { label: "Manajemen Pengguna", href: "/superadmin/pengguna", icon: Users },
+        { label: "Manajemen Pengguna", href: "/superadmin/users", icon: Users },
         { label: "Data Artis", href: "/superadmin/artis", icon: Mic2 },
-        { label: "Data Venue", href: "/superadmin/venue", icon: MapPin },
+        { label: "Data Venue", href: "/superadmin/venues", icon: MapPin },
         { label: "Kategori Konser", href: "/superadmin/kategori-konser", icon: FolderOpen },
       ],
     },
     {
       title: "Interaksi & Informasi",
       items: [
-        { label: "Ulasan Konser", href: "/superadmin/ulasan", icon: Star },
-        { label: "Notifikasi", href: "/superadmin/notifikasi", icon: Bell },
-        { label: "Pesan & Pengaduan", href: "/superadmin/pesan", icon: MessageSquare },
-      ],
+        { label: "Ulasan Konser", href: "/superadmin/kelola-ulasan", icon: Star },
+        { label: "Notifikasi", href: "/superadmin/kelola-notif", icon: Bell },
+            ],
     },
     {
       title: "System",
       items: [
         { label: "Laporan & Analitik", href: "/superadmin/laporan", icon: BarChart3 },
-        { label: "Profil Super Admin", href: "/superadmin/profil", icon: UserCircle },
+        { label: "Profil Super Admin", href: "/superadmin/profile", icon: UserCircle },
       ],
     },
   ];

@@ -1,41 +1,38 @@
+
 const db = require("../config/db");
 
-// ===== Ambil Semua Event =====
+// ============================================================
+// AMBIL SEMUA EVENT
+// ============================================================
+
 const getEvents = async (req, res) => {
   try {
     const [rows] = await db.query(
       `SELECT
         e.id,
+        e.organizer_id,
         e.category_id,
         e.artist_id,
         e.venue_id,
         e.event_name,
         e.description,
         e.poster,
+        e.seat_map_image,
         e.event_date,
         e.event_time,
         e.ticket_sale_start,
         e.ticket_sale_end,
         e.status,
         e.created_at,
-
         c.category_name,
         a.artist_name,
         v.venue_name,
         v.city
-
-       FROM events e
-
-       LEFT JOIN categories c
-         ON e.category_id = c.id
-
-       LEFT JOIN artists a
-         ON e.artist_id = a.id
-
-       LEFT JOIN venues v
-         ON e.venue_id = v.id
-
-       ORDER BY e.id DESC`
+      FROM events e
+      LEFT JOIN categories c ON e.category_id = c.id
+      LEFT JOIN artists a ON e.artist_id = a.id
+      LEFT JOIN venues v ON e.venue_id = v.id
+      ORDER BY e.id DESC`
     );
 
     return res.status(200).json({
@@ -52,7 +49,10 @@ const getEvents = async (req, res) => {
   }
 };
 
-// ===== Ambil Event Berdasarkan ID =====
+// ============================================================
+// AMBIL EVENT BERDASARKAN ID
+// ============================================================
+
 const getEventById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -60,40 +60,33 @@ const getEventById = async (req, res) => {
     const [rows] = await db.query(
       `SELECT
         e.id,
+        e.organizer_id,
         e.category_id,
         e.artist_id,
         e.venue_id,
         e.event_name,
         e.description,
         e.poster,
+        e.seat_map_image,
         e.event_date,
         e.event_time,
         e.ticket_sale_start,
         e.ticket_sale_end,
         e.status,
         e.created_at,
-
         c.category_name,
         a.artist_name,
         v.venue_name,
         v.city
-
-       FROM events e
-
-       LEFT JOIN categories c
-         ON e.category_id = c.id
-
-       LEFT JOIN artists a
-         ON e.artist_id = a.id
-
-       LEFT JOIN venues v
-         ON e.venue_id = v.id
-
-       WHERE e.id = ?`,
+      FROM events e
+      LEFT JOIN categories c ON e.category_id = c.id
+      LEFT JOIN artists a ON e.artist_id = a.id
+      LEFT JOIN venues v ON e.venue_id = v.id
+      WHERE e.id = ?`,
       [id]
     );
 
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({
         success: false,
         message: "Event tidak ditemukan",
@@ -114,7 +107,9 @@ const getEventById = async (req, res) => {
   }
 };
 
-// ===== Tambah Event =====
+// ============================================================
+// TAMBAH EVENT
+// ============================================================
 
 const createEvent = async (req, res) => {
   try {
@@ -128,7 +123,7 @@ const createEvent = async (req, res) => {
       });
     }
 
-    if (role !== "event_organizer") {
+   if (!["organizer", "event_organizer"].includes(role)) {
       return res.status(403).json({
         success: false,
         message: "Hanya event organizer yang dapat membuat acara.",
@@ -142,6 +137,7 @@ const createEvent = async (req, res) => {
       event_name,
       description,
       poster,
+      seat_map_image,
       event_date,
       event_time,
       ticket_sale_start,
@@ -224,12 +220,13 @@ const createEvent = async (req, res) => {
         event_name,
         description,
         poster,
+        seat_map_image,
         event_date,
         event_time,
         ticket_sale_start,
         ticket_sale_end,
         status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         organizerId,
         category_id,
@@ -238,6 +235,7 @@ const createEvent = async (req, res) => {
         event_name.trim(),
         description || null,
         poster || null,
+        seat_map_image || null,
         event_date,
         event_time,
         ticket_sale_start,
@@ -258,6 +256,7 @@ const createEvent = async (req, res) => {
         event_name: event_name.trim(),
         description: description || null,
         poster: poster || null,
+        seat_map_image: seat_map_image || null,
         event_date,
         event_time,
         ticket_sale_start,
@@ -275,12 +274,59 @@ const createEvent = async (req, res) => {
   }
 };
 
+// ============================================================
+// UPDATE EVENT
+// ============================================================
 
-// ===== Update Event =====
 const updateEvent = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Validasi ID
+    if (!id || !Number.isInteger(Number(id)) || Number(id) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ID event tidak valid.",
+      });
+    }
+
+    // Validasi autentikasi dan role
+    const organizerId = req.user?.id;
+    const role = String(req.user?.role || "").toLowerCase();
+
+    if (!organizerId) {
+      return res.status(401).json({
+        success: false,
+        message: "Token login tidak valid.",
+      });
+    }
+
+    if (!["organizer", "event_organizer"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Hanya event organizer yang dapat memperbarui event.",
+      });
+    }
+
+    // Ambil event dan pastikan milik organizer yang login
+    const [existingEvent] = await db.query(
+      `SELECT *
+       FROM events
+       WHERE id = ? AND organizer_id = ?
+       LIMIT 1`,
+      [id, organizerId]
+    );
+
+    if (!existingEvent.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Event tidak ditemukan atau bukan milik Anda.",
+      });
+    }
+
+    const currentEvent = existingEvent[0];
+
+    // Ambil data dari request
     const {
       category_id,
       artist_id,
@@ -288,6 +334,7 @@ const updateEvent = async (req, res) => {
       event_name,
       description,
       poster,
+      seat_map_image,
       event_date,
       event_time,
       ticket_sale_start,
@@ -295,133 +342,99 @@ const updateEvent = async (req, res) => {
       status,
     } = req.body;
 
-    if (!category_id) {
+    // Validasi field wajib
+    if (
+      !category_id ||
+      !artist_id ||
+      !venue_id ||
+      !event_name ||
+      !event_date ||
+      !event_time ||
+      !ticket_sale_start ||
+      !ticket_sale_end
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Kategori event wajib dipilih",
+        message: "Semua data wajib event harus diisi.",
       });
     }
 
-    if (!artist_id) {
+    if (!String(event_name).trim()) {
       return res.status(400).json({
         success: false,
-        message: "Artist event wajib dipilih",
+        message: "Nama event tidak boleh kosong.",
       });
     }
 
-    if (!venue_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Venue event wajib dipilih",
-      });
-    }
-
-    if (!event_name) {
-      return res.status(400).json({
-        success: false,
-        message: "Nama event wajib diisi",
-      });
-    }
-
-    if (!event_date) {
-      return res.status(400).json({
-        success: false,
-        message: "Tanggal event wajib diisi",
-      });
-    }
-
-    if (!event_time) {
-      return res.status(400).json({
-        success: false,
-        message: "Waktu event wajib diisi",
-      });
-    }
-
-    if (!ticket_sale_start) {
-      return res.status(400).json({
-        success: false,
-        message: "Waktu mulai penjualan tiket wajib diisi",
-      });
-    }
-
-    if (!ticket_sale_end) {
-      return res.status(400).json({
-        success: false,
-        message: "Waktu selesai penjualan tiket wajib diisi",
-      });
-    }
-
-    // Cek event
-    const [existingEvent] = await db.query(
-      `SELECT id
-       FROM events
-       WHERE id = ?`,
-      [id]
-    );
-
-    if (existingEvent.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Event tidak ditemukan",
-      });
-    }
-
-    // Cek kategori
+    // Validasi kategori
     const [category] = await db.query(
-      `SELECT id FROM categories WHERE id = ?`,
+      "SELECT id FROM categories WHERE id = ?",
       [category_id]
     );
 
-    if (category.length === 0) {
+    if (!category.length) {
       return res.status(404).json({
         success: false,
-        message: "Kategori tidak ditemukan",
+        message: "Kategori tidak ditemukan.",
       });
     }
 
-    // Cek artist
+    // Validasi artist
     const [artist] = await db.query(
-      `SELECT id FROM artists WHERE id = ?`,
+      "SELECT id FROM artists WHERE id = ?",
       [artist_id]
     );
 
-    if (artist.length === 0) {
+    if (!artist.length) {
       return res.status(404).json({
         success: false,
-        message: "Artist tidak ditemukan",
+        message: "Artist tidak ditemukan.",
       });
     }
 
-    // Cek venue
+    // Validasi venue
     const [venue] = await db.query(
-      `SELECT id FROM venues WHERE id = ?`,
+      "SELECT id FROM venues WHERE id = ?",
       [venue_id]
     );
 
-    if (venue.length === 0) {
+    if (!venue.length) {
       return res.status(404).json({
         success: false,
-        message: "Venue tidak ditemukan",
+        message: "Venue tidak ditemukan.",
       });
     }
 
-    // Cek nama event duplikat
+    // Validasi nama event duplikat
     const [duplicate] = await db.query(
       `SELECT id
        FROM events
        WHERE event_name = ?
-       AND id != ?`,
-      [event_name, id]
+       AND id != ?
+       LIMIT 1`,
+      [String(event_name).trim(), id]
     );
 
-    if (duplicate.length > 0) {
+    if (duplicate.length) {
       return res.status(400).json({
         success: false,
-        message: "Nama event sudah digunakan",
+        message: "Nama event sudah digunakan.",
       });
     }
 
-    await db.query(
+    // Pertahankan poster dan seat map lama jika tidak dikirim
+    const finalPoster =
+      poster !== undefined ? poster || null : currentEvent.poster;
+
+    const finalSeatMap =
+      seat_map_image !== undefined
+        ? seat_map_image || null
+        : currentEvent.seat_map_image;
+
+    const finalStatus = status || currentEvent.status || "Coming Soon";
+
+    // Update event dengan pengecekan kepemilikan
+    const [result] = await db.query(
       `UPDATE events
        SET category_id = ?,
            artist_id = ?,
@@ -429,77 +442,162 @@ const updateEvent = async (req, res) => {
            event_name = ?,
            description = ?,
            poster = ?,
+           seat_map_image = ?,
            event_date = ?,
            event_time = ?,
            ticket_sale_start = ?,
            ticket_sale_end = ?,
            status = ?
-       WHERE id = ?`,
+       WHERE id = ?
+       AND organizer_id = ?`,
       [
         category_id,
         artist_id,
         venue_id,
-        event_name,
+        String(event_name).trim(),
         description || null,
-        poster || null,
+        finalPoster,
+        finalSeatMap,
         event_date,
         event_time,
         ticket_sale_start,
         ticket_sale_end,
-        status || "Coming Soon",
+        finalStatus,
         id,
+        organizerId,
       ]
     );
 
+    if (!result.affectedRows) {
+      return res.status(404).json({
+        success: false,
+        message: "Event gagal diperbarui atau tidak ditemukan.",
+      });
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Event berhasil diperbarui",
+      message: "Event berhasil diperbarui.",
+      event: {
+        id: Number(id),
+        organizer_id: organizerId,
+        category_id,
+        artist_id,
+        venue_id,
+        event_name: String(event_name).trim(),
+        description: description || null,
+        poster: finalPoster,
+        seat_map_image: finalSeatMap,
+        event_date,
+        event_time,
+        ticket_sale_start,
+        ticket_sale_end,
+        status: finalStatus,
+      },
     });
   } catch (error) {
     console.error("UPDATE EVENT ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Gagal memperbarui event",
+      message: "Gagal memperbarui event.",
     });
   }
 };
 
-// ===== Hapus Event =====
+// ============================================================
+// HAPUS EVENT
+// ============================================================
+
 const deleteEvent = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [existing] = await db.query(
-      `SELECT id
-       FROM events
-       WHERE id = ?`,
-      [id]
-    );
-
-    if (existing.length === 0) {
-      return res.status(404).json({
+    // Validasi ID
+    if (!id || !Number.isInteger(Number(id)) || Number(id) <= 0) {
+      return res.status(400).json({
         success: false,
-        message: "Event tidak ditemukan",
+        message: "ID event tidak valid.",
       });
     }
 
-    await db.query(
-      `DELETE FROM events
-       WHERE id = ?`,
-      [id]
+    // Validasi autentikasi
+    const organizerId = req.user?.id;
+    const role = String(req.user?.role || "").toLowerCase();
+
+    if (!organizerId) {
+      return res.status(401).json({
+        success: false,
+        message: "Token login tidak valid.",
+      });
+    }
+
+    // Validasi role
+    if (!["organizer", "event_organizer"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Hanya event organizer yang dapat menghapus event.",
+      });
+    }
+
+    // Pastikan event benar-benar milik organizer
+    const [existingEvent] = await db.query(
+      `SELECT id, event_name
+       FROM events
+       WHERE id = ?
+       AND organizer_id = ?
+       LIMIT 1`,
+      [id, organizerId]
     );
+
+    if (!existingEvent.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Event tidak ditemukan atau bukan milik Anda.",
+      });
+    }
+
+    // Hapus event dengan pengecekan kepemilikan
+    const [result] = await db.query(
+      `DELETE FROM events
+       WHERE id = ?
+       AND organizer_id = ?`,
+      [id, organizerId]
+    );
+
+    if (!result.affectedRows) {
+      return res.status(404).json({
+        success: false,
+        message: "Event gagal dihapus atau tidak ditemukan.",
+      });
+    }
 
     return res.status(200).json({
       success: true,
-      message: "Event berhasil dihapus",
+      message: "Event berhasil dihapus.",
+      deleted_event: {
+        id: Number(id),
+        event_name: existingEvent[0].event_name,
+      },
     });
   } catch (error) {
     console.error("DELETE EVENT ERROR:", error);
 
+    // Event mungkin masih terhubung dengan data transaksi/tiket
+    if (
+      error.code === "ER_ROW_IS_REFERENCED_2" ||
+      error.errno === 1451
+    ) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Event tidak dapat dihapus karena masih memiliki data tiket atau transaksi yang terhubung.",
+      });
+    }
+
     return res.status(500).json({
       success: false,
-      message: "Gagal menghapus event",
+      message: "Gagal menghapus event.",
     });
   }
 };

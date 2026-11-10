@@ -1,9 +1,9 @@
-const express = require("express");
 
+const express = require("express");
 const router = express.Router();
 
 // ============================================================
-// CONTROLLER
+// IMPORT AUTH CONTROLLER
 // ============================================================
 
 const {
@@ -17,18 +17,35 @@ const {
 } = require("../controllers/authController");
 
 // ============================================================
-// CEK CONTROLLER
+// VALIDASI CONTROLLER
 // ============================================================
 
+const controllers = {
+  register,
+  login,
+  verifyOTP,
+  resendOTP,
+  forgotPassword,
+  verifyResetOTP,
+  resetPassword,
+};
+
+Object.entries(controllers).forEach(([name, controller]) => {
+  if (typeof controller !== "function") {
+    throw new Error(
+      `Auth Controller "${name}" tidak ditemukan atau bukan function.`
+    );
+  }
+});
+
 console.log("========================================");
-console.log("🔐 AUTH ROUTES LOADED");
-console.log("register       :", typeof register);
-console.log("login          :", typeof login);
-console.log("verifyOTP      :", typeof verifyOTP);
-console.log("resendOTP      :", typeof resendOTP);
-console.log("forgotPassword :", typeof forgotPassword);
-console.log("verifyResetOTP :", typeof verifyResetOTP);
-console.log("resetPassword  :", typeof resetPassword);
+console.log("AUTH ROUTES LOADED SUCCESSFULLY");
+console.log("========================================");
+
+Object.keys(controllers).forEach((name) => {
+  console.log(`${name}: OK`);
+});
+
 console.log("========================================");
 
 // ============================================================
@@ -36,73 +53,52 @@ console.log("========================================");
 // POST /api/auth/register
 // ============================================================
 
-router.post(
-  "/register",
-  register
-);
+router.post("/register", register);
 
 // ============================================================
 // LOGIN
 // POST /api/auth/login
 // ============================================================
 
-router.post(
-  "/login",
-  login
-);
+router.post("/login", login);
 
 // ============================================================
 // VERIFY OTP LOGIN
 // POST /api/auth/verify-otp
 // ============================================================
 
-router.post(
-  "/verify-otp",
-  verifyOTP
-);
+router.post("/verify-otp", verifyOTP);
 
 // ============================================================
 // RESEND OTP LOGIN
 // POST /api/auth/resend-otp
 // ============================================================
 
-router.post(
-  "/resend-otp",
-  resendOTP
-);
+router.post("/resend-otp", resendOTP);
 
 // ============================================================
 // FORGOT PASSWORD
 // POST /api/auth/forgot-password
 // ============================================================
 
-router.post(
-  "/forgot-password",
-  forgotPassword
-);
+router.post("/forgot-password", forgotPassword);
 
 // ============================================================
 // VERIFY RESET OTP
 // POST /api/auth/verify-reset-otp
 // ============================================================
 
-router.post(
-  "/verify-reset-otp",
-  verifyResetOTP
-);
+router.post("/verify-reset-otp", verifyResetOTP);
 
 // ============================================================
 // RESET PASSWORD
 // POST /api/auth/reset-password
 // ============================================================
 
-router.post(
-  "/reset-password",
-  resetPassword
-);
+router.post("/reset-password", resetPassword);
 
 // ============================================================
-// EXPORT
+// EXPORT ROUTER
 // ============================================================
 
 module.exports = router;

@@ -269,7 +269,7 @@ const createOrder = async (req, res) => {
     // 1. VALIDASI LOGIN DAN INPUT
     // =========================================================
     const userId = req.user?.id;
-    const { order_code, ticket_category_id, quantity } = req.body;
+    const { order_code, ticket_category_id, quantity, seat_ids } = req.body;
 
     if (!userId) {
       return res.status(401).json({
@@ -393,6 +393,72 @@ const [categories] = await connection.query(
 
     if (!category) {
       throw new Error("Kategori tiket tidak ditemukan.");
+    }
+
+
+    // Seat selection is optional: when omitted, the existing GENERAL flow remains unchanged.
+    const selectedSeatIds = seat_ids === undefined || seat_ids === null
+      ? []
+      : [...new Set((Array.isArray(seat_ids) ? seat_ids : []).map(Number))];
+
+    if (seat_ids !== undefined && seat_ids !== null) {
+      if (!Array.isArray(seat_ids) || selectedSeatIds.length !== qty ||
+          selectedSeatIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+        throw new Error("Jumlah kursi yang dipilih harus sama dengan jumlah tiket.");
+      }
+    }
+
+    let lockedSeats = [];
+    let seatMode = "GENERAL";
+
+    const [numberedSections] = await connection.query(
+      `SELECT id FROM event_sections
+       WHERE event_id = ? AND ticket_category_id = ? AND seat_mode = 'NUMBERED'
+       LIMIT 1`,
+      [category.event_id, categoryId]
+    );
+
+    if (numberedSections.length && selectedSeatIds.length === 0) {
+      throw new Error("Silakan pilih kursi terlebih dahulu untuk kategori ini.");
+    }
+
+    if (selectedSeatIds.length > 0) {
+      const placeholders = selectedSeatIds.map(() => "?").join(",");
+      const [seatRows] = await connection.query(
+        `SELECT s.id, s.status, s.reserved_until, s.reserved_order_id,
+                es.ticket_category_id, es.seat_mode
+         FROM event_seats s
+         INNER JOIN event_sections es ON es.id = s.section_id
+         WHERE s.id IN (${placeholders})
+           AND es.event_id = ?
+           AND es.ticket_category_id = ?
+         FOR UPDATE`,
+        [...selectedSeatIds, category.event_id, categoryId]
+      );
+
+      if (seatRows.length !== qty) {
+        throw new Error("Sebagian kursi tidak ditemukan atau bukan bagian dari kategori tiket ini.");
+      }
+
+      seatMode = String(seatRows[0].seat_mode || "GENERAL").toUpperCase();
+      if (seatMode !== "NUMBERED") {
+        throw new Error("Kategori ini tidak menggunakan pemilihan kursi bernomor.");
+      }
+
+      if (seatRows.some((seat) => String(seat.seat_mode || "GENERAL").toUpperCase() !== "NUMBERED")) {
+        throw new Error("Kursi yang dipilih tidak berasal dari mode denah yang sama.");
+      }
+
+      const unavailable = seatRows.filter((seat) => {
+        const status = String(seat.status || "Available");
+        if (status === "Available") return false;
+        if (status === "Reserved" && seat.reserved_until && new Date(seat.reserved_until) <= new Date()) return false;
+        return true;
+      });
+      if (unavailable.length) {
+        throw new Error("Ada kursi yang sudah dipesan. Silakan pilih kursi lain.");
+      }
+      lockedSeats = seatRows;
     }
 
   
@@ -546,6 +612,24 @@ if (
       [orderId, categoryId, qty, subtotal]
     );
 
+
+    // Lock numbered seats for 10 minutes. The reservation is tied to this order.
+    if (selectedSeatIds.length) {
+      const seatPlaceholders = selectedSeatIds.map(() => "?").join(",");
+      const [reserveResult] = await connection.query(
+        `UPDATE event_seats
+         SET status = 'Reserved', reserved_order_id = ?,
+             reserved_until = DATE_ADD(NOW(), INTERVAL 10 MINUTE)
+         WHERE id IN (${seatPlaceholders})
+           AND (status IS NULL OR status = 'Available'
+                OR (status = 'Reserved' AND reserved_until IS NOT NULL AND reserved_until <= NOW()))`,
+        [orderId, ...selectedSeatIds]
+      );
+      if (reserveResult.affectedRows !== selectedSeatIds.length) {
+        throw new Error("Kursi baru saja dipesan pengguna lain. Silakan pilih ulang.");
+      }
+    }
+
     // =========================================================
     // 10. KURANGI STOK SECARA AMAN
     // =========================================================
@@ -574,6 +658,11 @@ if (
       transaction_details: {
         order_id: orderCode,
         gross_amount: totalPrice,
+      },
+      expiry: {
+        start_time: `${new Date().toISOString().replace("T", " ").slice(0, 19)} +0000`,
+        unit: "minutes",
+        duration: 10,
       },
       item_details: [
         {
@@ -640,6 +729,8 @@ if (
         event_id: category.event_id,
         event_name: category.event_name,
         quantity: qty,
+        seat_mode: selectedSeatIds.length ? "NUMBERED" : "GENERAL",
+        seat_ids: selectedSeatIds,
         ticket_price: ticketPrice,
         subtotal,
         service_fee: serviceFee,
@@ -698,7 +789,13 @@ if (
     const isClientError =
       clientErrorMessages.includes(error.message) ||
       error.message.startsWith("Stok tiket tidak mencukupi.") ||
-      error.message.startsWith("Acara belum tersedia untuk pembelian.");
+      error.message.startsWith("Acara belum tersedia untuk pembelian.") ||
+      error.message.startsWith("Sebagian kursi") ||
+      error.message.startsWith("Kursi") ||
+      error.message.startsWith("Ada kursi") ||
+      error.message.startsWith("Jumlah kursi") ||
+      error.message.startsWith("Kategori ini tidak menggunakan") ||
+      error.message.startsWith("Masa reservasi kursi");
 
     const midtransErrors =
       error.ApiResponse?.error_messages ||

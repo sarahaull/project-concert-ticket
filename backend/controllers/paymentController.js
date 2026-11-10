@@ -75,35 +75,71 @@ const generateTicketCode = () => {
 
 const createTicketsForOrder = async (connection, orderId) => {
   const [details] = await connection.query(
-    `SELECT id, quantity
-     FROM order_details
-     WHERE order_id = ?`,
+    `SELECT od.id, od.quantity, od.ticket_category_id,
+            es.seat_mode
+     FROM order_details od
+     LEFT JOIN event_sections es
+       ON es.ticket_category_id = od.ticket_category_id
+     WHERE od.order_id = ?
+     GROUP BY od.id, od.quantity, od.ticket_category_id, es.seat_mode`,
     [orderId]
   );
 
   for (const detail of details) {
     const quantity = Math.max(0, Number(detail.quantity) || 0);
-
-    if (quantity <= 0) continue;
+    if (!quantity) continue;
 
     const [existingRows] = await connection.query(
-      `SELECT COUNT(*) AS total
-       FROM tickets
-       WHERE order_detail_id = ?`,
+      `SELECT COUNT(*) AS total FROM tickets WHERE order_detail_id = ?`,
       [detail.id]
     );
-
     const existingCount = Number(existingRows[0]?.total || 0);
     const remaining = Math.max(0, quantity - existingCount);
+    if (!remaining) continue;
+
+    const [orderSeats] = await connection.query(
+      `SELECT s.id
+       FROM event_seats s
+       INNER JOIN event_sections es ON es.id = s.section_id
+       WHERE s.reserved_order_id = ?
+         AND es.ticket_category_id = ?
+         AND s.status = 'Reserved'
+         AND s.reserved_until > NOW()
+       ORDER BY s.id ASC
+       FOR UPDATE`,
+      [orderId, detail.ticket_category_id]
+    );
+
+    const [sectionModes] = await connection.query(
+      `SELECT DISTINCT seat_mode FROM event_sections WHERE ticket_category_id = ?`,
+      [detail.ticket_category_id]
+    );
+    const usesNumberedSeats = sectionModes.some((row) => String(row.seat_mode || "GENERAL").toUpperCase() === "NUMBERED");
+
+    if (usesNumberedSeats && orderSeats.length !== quantity) {
+      throw new Error("Masa reservasi kursi telah berakhir. Pembayaran tidak dapat menerbitkan tiket bernomor.");
+    }
 
     for (let i = 0; i < remaining; i++) {
       const ticketCode = generateTicketCode();
-
+      const seatId = usesNumberedSeats ? orderSeats[i]?.id : null;
+      if (usesNumberedSeats && !seatId) {
+        throw new Error("Kursi pesanan tidak lengkap untuk penerbitan tiket.");
+      }
       await connection.query(
-        `INSERT INTO tickets
-         (order_detail_id, qr_code, ticket_code, check_in)
-         VALUES (?, ?, ?, ?)`,
-        [detail.id, ticketCode, ticketCode, "Belum"]
+        `INSERT INTO tickets (order_detail_id, qr_code, ticket_code, check_in, seat_id)
+         VALUES (?, ?, ?, 'Belum', ?)`,
+        [detail.id, ticketCode, ticketCode, seatId]
+      );
+    }
+
+    if (usesNumberedSeats) {
+      await connection.query(
+        `UPDATE event_seats
+         SET status = 'Sold', reserved_until = NULL
+         WHERE reserved_order_id = ?
+           AND id IN (${orderSeats.map(() => '?').join(',')})`,
+        [orderId, ...orderSeats.map((seat) => seat.id)]
       );
     }
   }
@@ -250,6 +286,14 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
     // Tiket hanya diterbitkan ketika pembayaran terverifikasi sukses.
     if (orderStatus === "Paid") {
       await createTicketsForOrder(connection, order.id);
+    }
+ else if (["Cancelled", "Expired"].includes(orderStatus)) {
+      await connection.query(
+        `UPDATE event_seats
+         SET status = 'Available', reserved_order_id = NULL, reserved_until = NULL
+         WHERE reserved_order_id = ? AND status = 'Reserved'`,
+        [order.id]
+      );
     }
 
     await connection.commit();
