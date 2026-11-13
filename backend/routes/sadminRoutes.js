@@ -33,5 +33,6 @@ router.get("/transactions/recent", sadminController.getRecentTransactions);
 // Persetujuan event
 router.get("/event-approvals", sadminController.getEventApprovals);
 router.patch("/events/:id/approval", sadminController.reviewEvent);
+router.get("/reports", sadminController.getReports);
 
 module.exports = router;

@@ -1,494 +1,768 @@
+
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useState, useEffect, useRef } from "react";
 import {
   UserCircleIcon,
-  ArrowLeftIcon,
   ShieldCheckIcon,
-  KeyIcon,
   DevicePhoneMobileIcon,
   EnvelopeIcon,
   CheckCircleIcon,
   CameraIcon,
   PencilSquareIcon,
   ChevronRightIcon,
-  MapPinIcon,
   CalendarDaysIcon,
-  SparklesIcon,
   LockClosedIcon,
   FingerPrintIcon,
   ExclamationTriangleIcon,
+  KeyIcon,
+  ArrowPathIcon,
+  MapPinIcon,
 } from "@heroicons/react/24/outline";
 
-export default function ProfilSuperAdmin() {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordSuccess, setPasswordSuccess] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
-  const [passwordForm, setPasswordForm] = useState({
-    current: "",
-    next: "",
-    confirm: "",
-  });
+const RAW_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-  const [formData, setFormData] = useState({
-    name: "Super Admin TicketVerse",
-    email: "superadmin@ticketverse.id",
-    phone: "+62 812 3456 7890",
-    role: "Super Administrator",
-    location: "Jakarta, Indonesia",
-    bio: "Mengelola seluruh operasional platform TicketVerse dan memastikan pengalaman terbaik bagi pengguna.",
-  });
+const API_URL = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/, "");
+const PROFILE_URL = `${API_URL}/api/users/profile`;
 
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-    }, 1000);
-  };
-
-  const handlePasswordSubmit = (e) => {
-    e.preventDefault();
-    setPasswordError("");
-    if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) {
-      setPasswordError("Semua kolom wajib diisi.");
-      return;
-    }
-    if (passwordForm.next.length < 8) {
-      setPasswordError("Kata sandi baru minimal 8 karakter.");
-      return;
-    }
-    if (passwordForm.next !== passwordForm.confirm) {
-      setPasswordError("Konfirmasi kata sandi tidak cocok.");
-      return;
-    }
-    setPasswordSaving(true);
-    setTimeout(() => {
-      setPasswordSaving(false);
-      setPasswordSuccess(true);
-      setPasswordForm({ current: "", next: "", confirm: "" });
-      setTimeout(() => {
-        setPasswordSuccess(false);
-        setShowPasswordModal(false);
-      }, 1500);
-    }, 900);
-  };
-
-  const closePasswordModal = () => {
-    if (passwordSaving) return;
-    setShowPasswordModal(false);
-    setPasswordError("");
-    setPasswordSuccess(false);
-    setPasswordForm({ current: "", next: "", confirm: "" });
-  };
+const getToken = () => {
+  if (typeof window === "undefined") return null;
 
   return (
-    <div className={`w-full min-w-0 text-[#0B1220] transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}>
-      {/* ================= HERO ================= */}
-      <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/60 bg-gradient-to-br from-[#0B1220] via-[#1B2942] to-[#2F3F63] p-6 shadow-[0_8px_32px_rgba(11,18,32,0.18)] sm:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 left-1/3 h-56 w-56 rounded-full bg-violet-400/15 blur-3xl" />
-        <div className="pointer-events-none absolute right-1/4 top-1/2 h-32 w-32 rounded-full bg-emerald-300/10 blur-2xl" />
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.06]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
-            backgroundSize: "32px 32px",
-          }}
-        />
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken")
+  );
+};
 
-        <div className="relative">
-          {/* Breadcrumb */}
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">
-            <span>Super Admin</span>
-            <ChevronRightIcon className="h-3 w-3 text-white/30" />
-            <span className="text-white/90">Profil Saya</span>
-          </div>
+const getPhotoUrl = (photo) => {
+  if (!photo) return null;
 
-          {/* Profile row */}
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-            <div className="relative shrink-0">
-              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-sky-400/60 to-violet-500/60 p-[2px]">
-                <div className="flex h-full w-full items-center justify-center rounded-full border-2 border-[#0B1220] bg-[#13213b]">
-                  <UserCircleIcon className="h-14 w-14 text-sky-200/80" />
-                </div>
-              </div>
-              <button
-                type="button"
-                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-white text-[#0B1220] shadow-lg transition hover:bg-slate-100"
-                aria-label="Ubah foto profil"
-              >
-                <CameraIcon className="h-3.5 w-3.5" />
-              </button>
-            </div>
+  if (
+    photo.startsWith("http://") ||
+    photo.startsWith("https://") ||
+    photo.startsWith("data:")
+  ) {
+    return photo;
+  }
 
-            <div className="min-w-0 flex-1 text-center sm:text-left">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur">
-                <ShieldCheckIcon className="h-3 w-3 text-emerald-300" />
-                Akun Terverifikasi
-              </div>
-              <h1 className="mt-2.5 text-[24px] font-semibold leading-tight tracking-[-0.02em] text-white sm:text-[28px]">
-                {formData.name}
-              </h1>
-              <p className="mt-1 flex items-center justify-center gap-1.5 text-[12.5px] font-medium text-sky-300 sm:justify-start">
-                <ShieldCheckIcon className="h-3.5 w-3.5" />
-                {formData.role}
-              </p>
-              <p className="mt-2 max-w-2xl text-[12.5px] leading-relaxed text-white/60">
-                {formData.bio}
-              </p>
-            </div>
-          </div>
+  return `${API_URL}/${photo.replace(/^\/+/, "")}`;
+};
+
+const formatDate = (date) => {
+  if (!date) return "-";
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  return parsed.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+export default function ProfilSuperAdmin() {
+  const fileInputRef = useRef(null);
+
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
+  const [profile, setProfile] = useState(null);
+
+  const [formData, setFormData] = useState({
+    fullname: "",
+    email: "",
+    phone: "",
+    gender: "",
+    birth_date: "",
+    role: "",
+    photo: "",
+  });
+
+  // ============================================================
+  // AMBIL PROFIL DARI BACKEND
+  // ============================================================
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const token = getToken();
+
+      if (!token) {
+        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+      }
+
+      const response = await fetch(PROFILE_URL, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.success === false) {
+        throw new Error(
+          data.message || "Gagal mengambil data profil."
+        );
+      }
+
+      const user = data.user || data.data?.user || data.data;
+
+      if (!user) {
+        throw new Error("Data profil tidak ditemukan dari backend.");
+      }
+
+      setProfile(user);
+
+      setFormData({
+        fullname: user.fullname || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        gender: user.gender || "",
+        birth_date: user.birth_date
+          ? String(user.birth_date).substring(0, 10)
+          : "",
+        role: user.role || "",
+        photo: user.photo || "",
+      });
+
+      setPhotoPreview(getPhotoUrl(user.photo));
+    } catch (err) {
+      console.error("FETCH PROFILE ERROR:", err);
+      setError(err.message || "Terjadi kesalahan saat mengambil profil.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  // ============================================================
+  // HANDLE INPUT
+  // ============================================================
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // ============================================================
+  // PILIH FOTO PROFIL
+  // ============================================================
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("File harus berupa gambar.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Ukuran foto maksimal 5 MB.");
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+
+    setSelectedPhoto(file);
+
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoPreview(previewUrl);
+  };
+
+  // ============================================================
+  // SIMPAN PERUBAHAN PROFIL
+  // ============================================================
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    if (!formData.fullname.trim()) {
+      setError("Nama lengkap wajib diisi.");
+      return;
+    }
+
+    if (!formData.phone.trim()) {
+      setError("Nomor telepon wajib diisi.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      const token = getToken();
+
+      if (!token) {
+        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+      }
+
+      const payload = new FormData();
+
+      payload.append("fullname", formData.fullname.trim());
+      payload.append("phone", formData.phone.trim());
+      payload.append("gender", formData.gender);
+      payload.append("birth_date", formData.birth_date || "");
+
+      if (selectedPhoto) {
+        payload.append("photo", selectedPhoto);
+      }
+
+      const response = await fetch(PROFILE_URL, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: payload,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.success === false) {
+        throw new Error(
+          data.message || "Gagal memperbarui profil."
+        );
+      }
+
+      const updatedUser =
+        data.user || data.data?.user || data.data;
+
+      if (updatedUser && typeof updatedUser === "object") {
+        setProfile(updatedUser);
+
+        setFormData((prev) => ({
+          ...prev,
+          fullname: updatedUser.fullname ?? prev.fullname,
+          email: updatedUser.email ?? prev.email,
+          phone: updatedUser.phone ?? prev.phone,
+          gender: updatedUser.gender ?? prev.gender,
+          birth_date: updatedUser.birth_date
+            ? String(updatedUser.birth_date).substring(0, 10)
+            : prev.birth_date,
+          role: updatedUser.role ?? prev.role,
+          photo: updatedUser.photo ?? prev.photo,
+        }));
+
+        setPhotoPreview(
+          getPhotoUrl(updatedUser.photo || formData.photo)
+        );
+      } else {
+        await fetchProfile();
+      }
+
+      setSelectedPhoto(null);
+      setSuccess(data.message || "Profil berhasil diperbarui.");
+    } catch (err) {
+      console.error("UPDATE PROFILE ERROR:", err);
+      setError(err.message || "Gagal menyimpan perubahan profil.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // ============================================================
+  // LOADING
+  // ============================================================
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <ArrowPathIcon className="h-8 w-8 animate-spin text-[#112250]" />
+          <p className="text-sm font-medium text-gray-500">
+            Memuat profil akun...
+          </p>
         </div>
       </div>
+    );
+  }
 
-      {/* ================= GRID ================= */}
+  // ============================================================
+  // ERROR LOAD
+  // ============================================================
+
+  if (error && !profile) {
+    return (
+      <div className="rounded-2xl border border-rose-200 bg-white p-8 text-center">
+        <ExclamationTriangleIcon className="mx-auto h-10 w-10 text-rose-500" />
+
+        <h2 className="mt-3 text-lg font-bold text-gray-900">
+          Gagal Memuat Profil
+        </h2>
+
+        <p className="mt-2 text-sm text-gray-500">{error}</p>
+
+        <button
+          type="button"
+          onClick={fetchProfile}
+          className="mt-5 rounded-lg bg-[#112250] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#3B507D]"
+        >
+          Coba Lagi
+        </button>
+      </div>
+    );
+  }
+
+  const roleLabel = formData.role
+    ? formData.role.replaceAll("_", " ")
+    : "Super Admin";
+
+  return (
+    <div className="w-full space-y-6 text-[#112250]">
+
+      {/* HEADER PROFIL */}
+      <section className="relative overflow-hidden rounded-2xl px-6 py-8 shadow-[0_8px_30px_rgba(10,20,40,0.25)]">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#13213b] to-[#1b2f4e]" />
+
+        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#5a8ad0]/15 blur-3xl" />
+
+        <div className="absolute -bottom-20 left-20 h-48 w-48 rounded-full bg-[#8ab4f8]/10 blur-3xl" />
+
+        <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center">
+
+          <div className="relative shrink-0">
+            <div className="h-24 w-24 rounded-full bg-gradient-to-br from-[#8ab4f8]/60 to-[#5a8ad0]/60 p-[2px]">
+              <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-[#0a1628] bg-[#13213b]">
+                {photoPreview ? (
+                  <img
+                    src={photoPreview}
+                    alt="Foto profil"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <UserCircleIcon className="h-16 w-16 text-[#8ab4f8]/80" />
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white text-[#0a1628] shadow-lg transition hover:bg-gray-100"
+              aria-label="Ubah foto profil"
+            >
+              <CameraIcon className="h-4 w-4" />
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoChange}
+              className="hidden"
+            />
+          </div>
+
+          <div className="min-w-0 flex-1 text-center sm:text-left">
+            <div className="mb-3 flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8aa0c0] sm:justify-start">
+              <span>Super Admin</span>
+              <ChevronRightIcon className="h-3 w-3 text-[#8aa0c0]/50" />
+              <span>Profil Saya</span>
+            </div>
+
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur">
+              <ShieldCheckIcon className="h-3 w-3 text-emerald-400" />
+              Akun Super Admin
+            </div>
+
+            <h1 className="mt-2.5 text-[24px] font-bold leading-tight tracking-tight text-white sm:text-[28px]">
+              {formData.fullname || "Nama Pengguna"}
+            </h1>
+
+            <p className="mt-1 flex items-center justify-center gap-1.5 text-[12.5px] font-medium capitalize text-[#8ab4f8] sm:justify-start">
+              <ShieldCheckIcon className="h-3.5 w-3.5" />
+              {roleLabel}
+            </p>
+
+            <p className="mt-2 text-[13px] text-[#8aa0c0]">
+              Kelola informasi akun Super Admin TicketVerse Anda.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* NOTIFIKASI */}
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4">
+          <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-rose-600" />
+          <p className="text-sm text-rose-700">{error}</p>
+        </div>
+      )}
+
+      {success && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-600" />
+          <p className="text-sm font-semibold text-emerald-700">
+            {success}
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* LEFT */}
+
+        {/* KOLOM KIRI */}
         <div className="space-y-6 lg:col-span-2">
+
           {/* INFORMASI PRIBADI */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-            <div className="border-b border-slate-100 bg-gradient-to-b from-slate-50/50 to-white px-5 py-4">
-              <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-[#0B1220]">
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0B1220]/[0.05] text-[#0B1220]">
+          <div className="overflow-hidden rounded-2xl border border-[#e0e8f0]/60 bg-white shadow-sm">
+
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#0a1628]">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#112250]/[0.05] text-[#112250]">
                   <PencilSquareIcon className="h-3.5 w-3.5" />
                 </span>
                 Informasi Pribadi
               </h2>
-              <p className="mt-0.5 text-[12.5px] text-slate-500">
-                Perbarui data diri dan kontak Anda
+
+              <p className="mt-0.5 text-[11px] text-[#7e91b2]">
+                Perbarui data diri yang tersimpan di database.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="p-5">
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+                {/* NAMA */}
                 <div>
-                  <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500">
                     Nama Lengkap
                   </label>
+
                   <input
                     type="text"
-                    name="name"
-                    value={formData.name}
+                    name="fullname"
+                    value={formData.fullname}
                     onChange={handleChange}
-                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
+                    required
+                    placeholder="Masukkan nama lengkap"
+                    className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-[13px] text-[#112250] outline-none transition focus:border-[#112250] focus:ring-1 focus:ring-[#112250]"
                   />
                 </div>
 
+                {/* EMAIL */}
                 <div>
-                  <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500">
                     Alamat Email
                   </label>
+
                   <div className="relative">
-                    <EnvelopeIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <EnvelopeIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+
                     <input
                       type="email"
-                      name="email"
                       value={formData.email}
-                      onChange={handleChange}
-                      className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-[13px] text-slate-800 outline-none transition focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
+                      readOnly
+                      className="h-10 w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-[13px] text-gray-500 outline-none"
                     />
                   </div>
+
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    Email akun tidak dapat diubah melalui halaman ini.
+                  </p>
                 </div>
 
+                {/* TELEPON */}
                 <div>
-                  <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500">
                     Nomor Telepon
                   </label>
+
                   <div className="relative">
-                    <DevicePhoneMobileIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <DevicePhoneMobileIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+
                     <input
-                      type="text"
+                      type="tel"
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
-                      className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-[13px] text-slate-800 outline-none transition focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
+                      placeholder="Masukkan nomor telepon"
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-[13px] text-[#112250] outline-none transition focus:border-[#112250] focus:ring-1 focus:ring-[#112250]"
                     />
                   </div>
                 </div>
 
+                {/* JENIS KELAMIN */}
                 <div>
-                  <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                    Lokasi
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                    Jenis Kelamin
                   </label>
+
+                  <select
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleChange}
+                    className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-[13px] text-[#112250] outline-none transition focus:border-[#112250] focus:ring-1 focus:ring-[#112250]"
+                  >
+                    <option value="">Pilih jenis kelamin</option>
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                  </select>
+                </div>
+
+                {/* TANGGAL LAHIR */}
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                    Tanggal Lahir
+                  </label>
+
                   <div className="relative">
-                    <MapPinIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <CalendarDaysIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+
                     <input
-                      type="text"
-                      name="location"
-                      value={formData.location}
+                      type="date"
+                      name="birth_date"
+                      value={formData.birth_date}
                       onChange={handleChange}
-                      className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-[13px] text-slate-800 outline-none transition focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-[13px] text-[#112250] outline-none transition focus:border-[#112250] focus:ring-1 focus:ring-[#112250]"
                     />
                   </div>
+                </div>
+
+                {/* ROLE */}
+                <div>
+                  <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500">
+                    Hak Akses
+                  </label>
+
+                  <input
+                    type="text"
+                    value={roleLabel}
+                    readOnly
+                    className="h-10 w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 text-[13px] capitalize text-gray-500 outline-none"
+                  />
                 </div>
               </div>
 
-              <div className="mt-5 flex flex-col-reverse items-center justify-between gap-3 border-t border-slate-100 pt-4 sm:flex-row">
-                <div className="order-2 sm:order-1">
-                  {showSuccess && (
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-600">
-                      <CheckCircleIcon className="h-4 w-4" />
-                      Profil berhasil diperbarui
-                    </span>
-                  )}
-                </div>
+              {/* ACTION */}
+              <div className="mt-5 flex flex-col-reverse items-center justify-between gap-3 border-t border-gray-100 pt-4 sm:flex-row">
+
+                <p className="text-[11px] text-gray-400">
+                  Perubahan akan disimpan ke akun Anda.
+                </p>
+
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="order-1 inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942] disabled:cursor-not-allowed disabled:opacity-60 sm:order-2"
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#112250] px-5 text-[13px] font-bold text-white transition hover:bg-[#3B507D] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 >
                   {isSaving ? (
                     <>
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      <ArrowPathIcon className="h-4 w-4 animate-spin" />
                       Menyimpan...
                     </>
                   ) : (
-                    <>Simpan Perubahan</>
+                    <>
+                      <CheckCircleIcon className="h-4 w-4" />
+                      Simpan Perubahan
+                    </>
                   )}
                 </button>
               </div>
             </form>
           </div>
 
-          {/* KEAMANAN AKUN */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-            <div className="border-b border-slate-100 bg-gradient-to-b from-slate-50/50 to-white px-5 py-4">
-              <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-[#0B1220]">
-                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0B1220]/[0.05] text-[#0B1220]">
+          {/* KEAMANAN */}
+          <div className="overflow-hidden rounded-2xl border border-[#e0e8f0]/60 bg-white shadow-sm">
+
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#0a1628]">
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#112250]/[0.05] text-[#112250]">
                   <KeyIcon className="h-3.5 w-3.5" />
                 </span>
                 Keamanan Akun
               </h2>
-              <p className="mt-0.5 text-[12.5px] text-slate-500">
-                Kelola kata sandi dan autentikasi akun Anda
+
+              <p className="mt-0.5 text-[11px] text-[#7e91b2]">
+                Informasi keamanan akun Super Admin.
               </p>
             </div>
 
-            <div className="divide-y divide-slate-100">
-              {/* PASSWORD */}
-              <div className="flex flex-col justify-between gap-3 px-5 py-4 transition hover:bg-slate-50/60 sm:flex-row sm:items-center">
+            <div className="divide-y divide-gray-100">
+
+              <div className="flex flex-col justify-between gap-3 px-5 py-4 sm:flex-row sm:items-center">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0B1220]/[0.05] text-[#0B1220]">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#112250]/[0.05] text-[#112250]">
                     <LockClosedIcon className="h-4 w-4" />
                   </div>
+
                   <div>
-                    <p className="text-[13px] font-semibold text-[#0B1220]">
+                    <p className="text-[13px] font-bold text-[#112250]">
                       Kata Sandi
                     </p>
-                    <p className="mt-0.5 text-[12px] text-slate-500">
-                      Terakhir diubah 3 bulan yang lalu
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordModal(true)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-[#0B1220]/30 hover:bg-[#0B1220]/[0.04] hover:text-[#0B1220]"
-                >
-                  Ubah Sandi
-                </button>
-              </div>
 
-              {/* 2FA */}
-              <div className="flex flex-col justify-between gap-3 px-5 py-4 transition hover:bg-slate-50/60 sm:flex-row sm:items-center">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0B1220]/[0.05] text-[#0B1220]">
-                    <FingerPrintIcon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-[#0B1220]">
-                      Autentikasi Dua Faktor (2FA)
-                    </p>
-                    <p className="mt-0.5 text-[12px] text-slate-500">
-                      Tingkatkan keamanan akun Anda
+                    <p className="mt-0.5 text-[11px] text-gray-500">
+                      Gunakan fitur pengaturan keamanan untuk mengganti kata sandi.
                     </p>
                   </div>
                 </div>
-                <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[11.5px] font-semibold text-emerald-700">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                  Aktif
+
+                <span className="inline-flex h-8 items-center justify-center rounded-md border border-gray-200 bg-gray-50 px-3 text-[11px] font-semibold text-gray-500">
+                  Endpoint belum tersedia
                 </span>
               </div>
+
+              <div className="flex flex-col justify-between gap-3 px-5 py-4 sm:flex-row sm:items-center">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#112250]/[0.05] text-[#112250]">
+                    <FingerPrintIcon className="h-4 w-4" />
+                  </div>
+
+                  <div>
+                    <p className="text-[13px] font-bold text-[#112250]">
+                      Autentikasi Akun
+                    </p>
+
+                    <p className="mt-0.5 text-[11px] text-gray-500">
+                      Autentikasi menggunakan token login.
+                    </p>
+                  </div>
+                </div>
+
+                <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[11.5px] font-bold text-emerald-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Terautentikasi
+                </span>
+              </div>
+
             </div>
           </div>
         </div>
 
-        {/* RIGHT: STATUS AKUN */}
+        {/* KOLOM KANAN */}
         <div className="space-y-6">
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0B1220] via-[#1B2942] to-[#2F3F63] p-5 shadow-[0_8px_24px_rgba(11,18,32,0.18)]">
-            <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-sky-400/15 blur-2xl" />
-            <div className="pointer-events-none absolute -bottom-10 -left-8 h-32 w-32 rounded-full bg-violet-400/10 blur-2xl" />
+
+          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0a1628] via-[#13213b] to-[#1b2f4e] p-5 shadow-sm">
+
+            <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#5a8ad0]/15 blur-2xl" />
 
             <div className="relative">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.08] text-sky-300 backdrop-blur">
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/[0.08] text-[#8ab4f8]">
                 <ShieldCheckIcon className="h-5 w-5" />
               </div>
-              <h3 className="mt-3 text-[13px] font-semibold text-white">
-                Status Akun
+
+              <h3 className="mt-3 text-[13px] font-bold text-white">
+                Informasi Akun
               </h3>
-              <p className="mt-0.5 text-[11.5px] text-white/50">
-                Informasi ringkas tentang akun Anda
+
+              <p className="mt-0.5 text-[11.5px] text-[#8aa0c0]">
+                Data akun berdasarkan database TicketVerse.
               </p>
 
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between text-[12px]">
-                  <span className="text-white/50">Status Verifikasi</span>
-                  <span className="inline-flex items-center gap-1 font-semibold text-emerald-300">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                    Terverifikasi
+              <div className="mt-5 space-y-4">
+
+                <div className="flex items-start justify-between gap-3 text-[12px]">
+                  <span className="text-[#8aa0c0]">
+                    Nama Pengguna
+                  </span>
+
+                  <span className="max-w-[60%] break-words text-right font-bold text-white">
+                    {formData.fullname || "-"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[12px]">
-                  <span className="text-white/50">Level Akses</span>
-                  <span className="font-semibold text-white">Super Admin</span>
-                </div>
-                <div className="flex items-center justify-between text-[12px]">
-                  <span className="text-white/50">Bergabung Sejak</span>
-                  <span className="inline-flex items-center gap-1 font-semibold text-white">
-                    <CalendarDaysIcon className="h-3 w-3 text-white/40" />
-                    01 Jan 2024
+
+                <div className="flex items-start justify-between gap-3 text-[12px]">
+                  <span className="text-[#8aa0c0]">
+                    Email
                   </span>
+
+                  <span className="max-w-[60%] break-all text-right font-bold text-white">
+                    {formData.email || "-"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 text-[12px]">
+                  <span className="text-[#8aa0c0]">
+                    Level Akses
+                  </span>
+
+                  <span className="font-bold capitalize text-white">
+                    {roleLabel}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 text-[12px]">
+                  <span className="text-[#8aa0c0]">
+                    Bergabung Sejak
+                  </span>
+
+                  <span className="text-right font-bold text-white">
+                    {formatDate(profile?.created_at)}
+                  </span>
+                </div>
+
+              </div>
+
+              <div className="mt-5 border-t border-white/10 pt-4">
+                <div className="flex items-center gap-2 text-[11px] font-medium text-[#8aa0c0]">
+                  <ShieldCheckIcon className="h-4 w-4 text-emerald-400" />
+                  Data diambil dari server
                 </div>
               </div>
 
-              <div className="mt-4 border-t border-white/10 pt-3">
-                <div className="flex items-center gap-2 text-[11px] text-white/40">
-                  <SparklesIcon className="h-3 w-3 text-amber-300" />
-                  Akun Premium Aktif
-                </div>
-              </div>
             </div>
+          </div>
+
+          {/* FOTO PROFIL */}
+          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+
+            <div className="flex items-center gap-2">
+              <CameraIcon className="h-5 w-5 text-[#112250]" />
+
+              <h3 className="text-[13px] font-bold text-[#112250]">
+                Foto Profil
+              </h3>
+            </div>
+
+            <p className="mt-2 text-[11px] leading-relaxed text-gray-500">
+              Gunakan foto profil yang jelas. Format gambar maksimal 5 MB.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[#112250]/20 bg-[#112250]/[0.04] px-4 py-2.5 text-[12px] font-bold text-[#112250] transition hover:bg-[#112250]/10"
+            >
+              <CameraIcon className="h-4 w-4" />
+              Pilih Foto Baru
+            </button>
+
+            {selectedPhoto && (
+              <p className="mt-2 break-all text-[10px] text-emerald-600">
+                Foto dipilih: {selectedPhoto.name}. Klik Simpan Perubahan untuk mengunggah.
+              </p>
+            )}
+
           </div>
         </div>
       </div>
-
-      {/* ================= PASSWORD MODAL ================= */}
-      {showPasswordModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) closePasswordModal();
-          }}
-        >
-          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/[0.06]">
-            <div className="p-6">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#0B1220]/[0.05] text-[#0B1220]">
-                <LockClosedIcon className="h-5 w-5" />
-              </div>
-              <h2 className="mt-4 text-[16px] font-semibold tracking-[-0.01em] text-slate-900">
-                Ubah Kata Sandi
-              </h2>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-slate-500">
-                Gunakan kata sandi yang kuat dan tidak pernah digunakan di
-                platform lain.
-              </p>
-
-              <form onSubmit={handlePasswordSubmit} className="mt-5 space-y-3">
-                <div>
-                  <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                    Kata Sandi Saat Ini
-                  </label>
-                  <input
-                    type="password"
-                    value={passwordForm.current}
-                    onChange={(e) =>
-                      setPasswordForm((p) => ({ ...p, current: e.target.value }))
-                    }
-                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-800 outline-none transition focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                    Kata Sandi Baru
-                  </label>
-                  <input
-                    type="password"
-                    value={passwordForm.next}
-                    onChange={(e) =>
-                      setPasswordForm((p) => ({ ...p, next: e.target.value }))
-                    }
-                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-800 outline-none transition focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                    Konfirmasi Kata Sandi Baru
-                  </label>
-                  <input
-                    type="password"
-                    value={passwordForm.confirm}
-                    onChange={(e) =>
-                      setPasswordForm((p) => ({ ...p, confirm: e.target.value }))
-                    }
-                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-[13px] text-slate-800 outline-none transition focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
-                  />
-                </div>
-
-                {passwordError && (
-                  <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5">
-                    <ExclamationTriangleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" />
-                    <p className="text-[11.5px] leading-4 text-rose-700">
-                      {passwordError}
-                    </p>
-                  </div>
-                )}
-
-                {passwordSuccess && (
-                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5">
-                    <CheckCircleIcon className="h-4 w-4 text-emerald-600" />
-                    <p className="text-[11.5px] font-semibold text-emerald-700">
-                      Kata sandi berhasil diperbarui
-                    </p>
-                  </div>
-                )}
-              </form>
-            </div>
-
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={closePasswordModal}
-                disabled={passwordSaving}
-                className="h-9 rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handlePasswordSubmit}
-                disabled={passwordSaving || passwordSuccess}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {passwordSaving ? (
-                  <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>Simpan Sandi</>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

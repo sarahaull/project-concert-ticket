@@ -542,6 +542,153 @@ const reviewEvent = async (req, res) => {
   }
 };
 
+// ============================================================
+// LAPORAN TRANSAKSI SUPER ADMIN
+// ============================================================
+
+const getReports = async (req, res) => {
+  try {
+    const { startDate, endDate, status } = req.query;
+
+    const conditions = [];
+    const params = [];
+
+    if (startDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Format tanggal awal tidak valid.",
+        });
+      }
+
+      conditions.push("DATE(o.order_date) >= ?");
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        return res.status(400).json({
+          success: false,
+          message: "Format tanggal akhir tidak valid.",
+        });
+      }
+
+      conditions.push("DATE(o.order_date) <= ?");
+      params.push(endDate);
+    }
+
+    if (startDate && endDate && startDate > endDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Tanggal awal tidak boleh melebihi tanggal akhir.",
+      });
+    }
+
+    if (status && status !== "All") {
+      conditions.push("o.payment_status = ?");
+      params.push(status);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    // Ringkasan transaksi sesuai filter.
+    const [[summary]] = await db.query(
+      `
+      SELECT
+        COUNT(*) AS totalTransactions,
+
+        SUM(
+          CASE WHEN o.payment_status = 'Paid'
+          THEN 1 ELSE 0 END
+        ) AS paidTransactions,
+
+        SUM(
+          CASE WHEN o.payment_status = 'Pending'
+          THEN 1 ELSE 0 END
+        ) AS pendingTransactions,
+
+        SUM(
+          CASE WHEN o.payment_status NOT IN ('Paid', 'Pending')
+          THEN 1 ELSE 0 END
+        ) AS otherTransactions,
+
+        SUM(
+          CASE WHEN o.payment_status = 'Paid'
+          THEN o.total_price ELSE 0 END
+        ) AS revenue
+
+      FROM orders o
+      ${whereClause}
+      `,
+      params
+    );
+
+    // Daftar transaksi beserta pembeli, event, dan jumlah tiket.
+    const [transactions] = await db.query(
+      `
+      SELECT
+        o.id,
+        o.user_id,
+        o.order_code,
+        o.total_price,
+        o.payment_status,
+        o.order_date,
+        u.fullname AS buyer_name,
+        u.email AS buyer_email,
+
+        (
+          SELECT GROUP_CONCAT(
+            DISTINCT e.event_name
+            SEPARATOR ', '
+          )
+          FROM order_details od
+          INNER JOIN ticket_categories tc
+            ON tc.id = od.ticket_category_id
+          INNER JOIN events e
+            ON e.id = tc.event_id
+          WHERE od.order_id = o.id
+        ) AS event_names,
+
+        (
+          SELECT COALESCE(SUM(od.quantity), 0)
+          FROM order_details od
+          WHERE od.order_id = o.id
+        ) AS ticket_quantity
+
+      FROM orders o
+
+      LEFT JOIN users u
+        ON u.id = o.user_id
+
+      ${whereClause}
+
+      ORDER BY o.order_date DESC, o.id DESC
+      `,
+      params
+    );
+
+    return res.json({
+      success: true,
+      summary: {
+        totalTransactions: Number(summary.totalTransactions || 0),
+        paidTransactions: Number(summary.paidTransactions || 0),
+        pendingTransactions: Number(summary.pendingTransactions || 0),
+        otherTransactions: Number(summary.otherTransactions || 0),
+        revenue: Number(summary.revenue || 0),
+      },
+      transactions,
+    });
+  } catch (error) {
+    console.error("GET SUPER ADMIN REPORTS:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mengambil laporan transaksi.",
+    });
+  }
+};
 module.exports = {
   getPlatformSummary,
   getUsers,
@@ -553,4 +700,5 @@ module.exports = {
   getRecentTransactions,
   getEventApprovals,
   reviewEvent,
+  getReports,
 };

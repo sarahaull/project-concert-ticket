@@ -164,10 +164,8 @@ export default function SidebarSuperAdmin() {
       title: "Menu Utama",
       items: [
         { label: "Dashboard", href: "/superadmin/dashboard", icon: Gauge },
-        { label: "Manajemen Konser", href: "/superadmin/events", icon: Music2 },
+        { label: "Manajemen Event", href: "/superadmin/events", icon: Music2 },
         { label: "Kategori & Kuota Tiket", href: "/superadmin/kategori-tiket", icon: Tags },
-        { label: "Pemesanan Tiket", href: "/superadmin/pemesanan", icon: ShoppingCart },
-        { label: "Pembayaran", href: "/superadmin/pembayaran", icon: CreditCard },
         { label: "Validasi E-Ticket", href: "/superadmin/validasi-etiket", icon: QrCode },
       ],
     },

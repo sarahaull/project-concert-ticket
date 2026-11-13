@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -18,7 +17,18 @@ import {
   Receipt,
   Bell,
   Star,
+  Loader2,
 } from "lucide-react";
+
+// ==========================================
+// API CONFIGURATION
+// ==========================================
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+// ==========================================
+// COMPONENT
+// ==========================================
 
 export default function SidebarCustomer({
   collapsed,
@@ -29,8 +39,15 @@ export default function SidebarCustomer({
 
   const [user, setUser] = useState({
     fullname: "Customer",
-    email: "customer@ticketverse.com",
+    email: "-",
+    photo: null,
   });
+
+  const [loading, setLoading] = useState(true);
+
+  // ==========================================
+  // MENU
+  // ==========================================
 
   const menus = [
     {
@@ -70,45 +87,131 @@ export default function SidebarCustomer({
     },
   ];
 
-  // Ambil data customer
-  useEffect(() => {
+  // ==========================================
+  // FETCH PROFILE FROM BACKEND
+  // ==========================================
+
+  const fetchUserProfile = useCallback(async (signal) => {
     try {
-      const storedUser = localStorage.getItem("user");
+      setLoading(true);
 
-      if (!storedUser) return;
+      const token = localStorage.getItem("token");
 
-      const parsedUser = JSON.parse(storedUser);
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(
+        `${API_URL}/api/profile`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+          signal,
+        }
+      );
+
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        sessionStorage.clear();
+        router.replace("/login");
+        return;
+      }
+
+      if (!response.ok) {
+        // Jika gagal, diamkan saja (tidak throw error agar tidak memicu UI error)
+        return;
+      }
+
+      const result = await response.json();
+
+      const profile =
+        result.user || 
+        result.data?.user || 
+        result.data?.profile || 
+        result.profile || 
+        result.data || 
+        result;
+
+      if (!profile || typeof profile !== "object") return;
+
+      const fullname =
+        profile.fullname ||
+        profile.fullName ||
+        profile.namaLengkap ||
+        profile.nama_lengkap ||
+        profile.name ||
+        profile.nama ||
+        "Customer";
+
+      const email = profile.email || "-";
+
+      const photo =
+        profile.photo ||
+        profile.profilePhoto ||
+        profile.foto ||
+        profile.fotoProfil ||
+        profile.foto_profil ||
+        null;
 
       setUser({
-        fullname:
-          parsedUser.fullname ||
-          parsedUser.name ||
-          "Customer",
-
-        email:
-          parsedUser.email ||
-          "customer@ticketverse.com",
+        fullname,
+        email,
+        photo,
       });
-    } catch (error) {
-      console.error("Gagal membaca data user:", error);
-    }
-  }, []);
 
-  // Logout
+    } catch (error) {
+      if (error.name === "AbortError") return;
+      // Error ditelan diam-diam, UI tidak akan menampilkan peringatan merah
+      console.log("Profile fetch skipped or failed:", error.message);
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
+    }
+  }, [router]);
+
+  // ==========================================
+  // LOAD PROFILE
+  // ==========================================
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchUserProfile(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [fetchUserProfile]);
+
+  // ==========================================
+  // LOGOUT
+  // ==========================================
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     sessionStorage.clear();
-
-    router.push("/login");
+    router.replace("/login");
   };
 
-  // Toggle sidebar
+  // ==========================================
+  // TOGGLE SIDEBAR
+  // ==========================================
+
   const toggleSidebar = () => {
     setCollapsed((previous) => !previous);
   };
 
-  // Active menu
+  // ==========================================
+  // ACTIVE MENU
+  // ==========================================
+
   const isMenuActive = (href) => {
     if (href === "/dashboard") {
       return pathname === href;
@@ -120,6 +223,37 @@ export default function SidebarCustomer({
     );
   };
 
+  // ==========================================
+  // INITIAL NAME
+  // ==========================================
+
+  const getInitial = () => {
+    if (!user.fullname) return "C";
+    return user.fullname.trim().charAt(0).toUpperCase();
+  };
+
+  // ==========================================
+  // PROFILE IMAGE URL
+  // ==========================================
+
+  const getPhotoUrl = () => {
+    if (!user.photo) return null;
+
+    if (
+      user.photo.startsWith("http://") ||
+      user.photo.startsWith("https://")
+    ) {
+      return user.photo;
+    }
+
+    const baseHost = API_URL.replace(/\/api$/i, "");
+    return `${baseHost}/${user.photo.replace(/^\/+/, "")}`;
+  };
+
+  // ==========================================
+  // RENDER
+  // ==========================================
+
   return (
     <aside
       className={`
@@ -130,23 +264,17 @@ export default function SidebarCustomer({
         from-[#02122F] via-[#23354D] to-[#02122F]
         shadow-[8px_0_30px_rgba(2,18,47,0.4)]
         transition-[width] duration-300 ease-in-out
-        ${
-          collapsed
-            ? "w-[72px]"
-            : "w-[260px]"
-        }
+        ${collapsed ? "w-[72px]" : "w-[260px]"}
       `}
     >
+
       {/* LOGO */}
+
       <div
         className={`
           flex h-[82px] shrink-0 items-center
           border-b border-[#495B7D]/30
-          ${
-            collapsed
-              ? "justify-center px-2"
-              : "px-5"
-          }
+          ${collapsed ? "justify-center px-2" : "px-5"}
         `}
       >
         <Link
@@ -183,16 +311,17 @@ export default function SidebarCustomer({
       </div>
 
       {/* SIDEBAR CONTENT */}
+
       <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-6 pt-5 [scrollbar-width:thin] [scrollbar-color:#495B7D_transparent]">
 
-        {/* MENU TITLE */}
         {!collapsed && (
           <p className="mb-2 px-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#8BA3C5]/60">
             Menu Utama
           </p>
         )}
 
-        {/* MENU LIST */}
+        {/* MENU */}
+
         <nav className="space-y-1">
           {menus.map((menu) => {
             const Icon = menu.icon;
@@ -250,6 +379,7 @@ export default function SidebarCustomer({
         </nav>
 
         {/* MEMBER CARD */}
+
         {!collapsed && (
           <div className="relative mt-7 overflow-hidden rounded-2xl border border-[#495B7D]/40 bg-gradient-to-br from-[#23354D]/80 via-[#495B7D]/30 to-[#02122F]/60 p-4 shadow-[0_0_30px_rgba(139,163,197,0.05)]">
             <div className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-[#8BA3C5]/20 blur-2xl" />
@@ -280,6 +410,7 @@ export default function SidebarCustomer({
         )}
 
         {/* ACCOUNT */}
+
         {!collapsed && (
           <p className="mb-2 mt-6 px-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#8BA3C5]/60">
             Akun
@@ -292,31 +423,59 @@ export default function SidebarCustomer({
             flex items-center rounded-xl
             border border-[#495B7D]/40
             bg-[#23354D]/40 backdrop-blur-sm
-            ${
-              collapsed
-                ? "justify-center p-2"
-                : "gap-3 px-3 py-2.5"
-            }
+            ${collapsed ? "justify-center p-2" : "gap-3 px-3 py-2.5"}
           `}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#8BA3C5]/40 bg-gradient-to-br from-[#495B7D] to-[#8BA3C5] text-[#F0ECDD] shadow-md">
-            <User size={19} strokeWidth={1.5} />
+
+          {/* AVATAR */}
+
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#8BA3C5]/40 bg-gradient-to-br from-[#495B7D] to-[#8BA3C5] text-[#F0ECDD] shadow-md">
+            {loading ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : getPhotoUrl() ? (
+              <img
+                src={getPhotoUrl()}
+                alt={user.fullname}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-sm font-bold">
+                {getInitial()}
+              </span>
+            )}
           </div>
 
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="truncate text-[12px] font-medium text-[#F0ECDD]">
-                {user.fullname}
-              </p>
+          {/* USER DATA */}
 
-              <p className="truncate text-[10px] text-[#8BA3C5]/70">
-                {user.email}
-              </p>
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              {loading ? (
+                <>
+                  <p className="text-[12px] text-[#F0ECDD]/70">
+                    Memuat profil...
+                  </p>
+
+                  <p className="text-[10px] text-[#8BA3C5]/60">
+                    Mengambil data akun
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="truncate text-[12px] font-medium text-[#F0ECDD]">
+                    {user.fullname}
+                  </p>
+
+                  <p className="truncate text-[10px] text-[#8BA3C5]/70">
+                    {user.email}
+                  </p>
+                </>
+              )}
             </div>
           )}
         </div>
 
         {/* LOGOUT */}
+
         <button
           type="button"
           onClick={handleLogout}
@@ -326,11 +485,7 @@ export default function SidebarCustomer({
             rounded-xl text-[#8BA3C5]/60
             transition-all hover:bg-[#495B7D]/30
             hover:text-[#F0ECDD]
-            ${
-              collapsed
-                ? "justify-center p-3"
-                : "gap-3 px-3 py-2.5"
-            }
+            ${collapsed ? "justify-center p-3" : "gap-3 px-3 py-2.5"}
           `}
         >
           <LogOut size={18} strokeWidth={1.7} />
@@ -344,14 +499,11 @@ export default function SidebarCustomer({
       </div>
 
       {/* COLLAPSE BUTTON */}
+
       <button
         type="button"
         onClick={toggleSidebar}
-        aria-label={
-          collapsed
-            ? "Buka sidebar"
-            : "Tutup sidebar"
-        }
+        aria-label={collapsed ? "Buka sidebar" : "Tutup sidebar"}
         className="
           absolute -right-[13px] top-[94px] z-[60]
           flex h-7 w-7 items-center justify-center

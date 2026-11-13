@@ -649,9 +649,111 @@ const deleteTicket = async (req, res) => {
   });
 };
 
+
 // ============================================================
-// EXPORT
+// GET RIWAYAT CHECK-IN
 // ============================================================
+
+const getCheckInHistory = async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const role = req.user?.role;
+
+    // Validasi login
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Silakan login terlebih dahulu.",
+      });
+    }
+
+    // Validasi role
+    if (!["event_organizer", "super_admin"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Anda tidak memiliki akses melihat riwayat check-in.",
+      });
+    }
+
+    const conditions = [];
+    const params = [];
+
+    // Event organizer hanya dapat melihat riwayat event miliknya.
+    if (role === "event_organizer") {
+      conditions.push("e.organizer_id = ?");
+      params.push(userId);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    const [rows] = await db.query(
+      `
+      SELECT
+        tc.id,
+        tc.ticket_id,
+        tc.event_id,
+        tc.scanned_by,
+        tc.qr_fingerprint,
+        tc.result,
+        tc.scanned_at,
+
+        t.ticket_code,
+        t.check_in,
+
+        o.order_code,
+
+        u.fullname AS customer_name,
+        u.email AS customer_email,
+
+        e.event_name,
+        e.event_date,
+        e.event_time,
+
+        scanner.fullname AS scanned_by_name
+
+      FROM ticket_checkins tc
+
+      LEFT JOIN tickets t
+        ON tc.ticket_id = t.id
+
+      LEFT JOIN order_details od
+        ON t.order_detail_id = od.id
+
+      LEFT JOIN orders o
+        ON od.order_id = o.id
+
+      LEFT JOIN users u
+        ON o.user_id = u.id
+
+      LEFT JOIN events e
+        ON tc.event_id = e.id
+
+      LEFT JOIN users scanner
+        ON tc.scanned_by = scanner.id
+
+      ${whereClause}
+
+      ORDER BY tc.scanned_at DESC
+      `,
+      params
+    );
+
+    return res.status(200).json({
+      success: true,
+      total: rows.length,
+      history: rows,
+    });
+
+  } catch (error) {
+    return sendServerError(
+      res,
+      error,
+      "Gagal mengambil riwayat check-in."
+    );
+  }
+};
 
 module.exports = {
   getAllTickets,
@@ -660,4 +762,5 @@ module.exports = {
   updateTicket,
   deleteTicket,
   checkInTicket,
+  getCheckInHistory,
 };

@@ -16,12 +16,17 @@ import {
   Info,
 } from "lucide-react";
 
+const RAW_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+const API_URL = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/, "");
+
+const PROFILE_URL = `${API_URL}/api/users/profile`;
+const NOTIFICATION_URL = `${API_URL}/api/notifications`;
+
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
-
-  const API_URL =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   const [user, setUser] = useState(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -29,6 +34,15 @@ export default function Header() {
 
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  const getToken = useCallback(() => {
+    if (typeof window === "undefined") return null;
+
+    return (
+      localStorage.getItem("token") ||
+      localStorage.getItem("accessToken")
+    );
+  }, []);
 
   const getPhoto = useCallback((currentUser) => {
     const photo =
@@ -41,72 +55,140 @@ export default function Header() {
 
     if (!photo) return null;
 
-    if (
-      photo.startsWith("http://") ||
-      photo.startsWith("https://") ||
-      photo.startsWith("data:")
-    ) {
+    if (/^(https?:\/\/|data:)/i.test(photo)) {
       return photo;
     }
 
-    return `${API_URL}${photo.startsWith("/") ? "" : "/"}${photo}`;
-  }, [API_URL]);
+    return `${API_URL}/${String(photo).replace(/^\/+/, "")}`;
+  }, []);
 
-  const loadUser = useCallback(() => {
+  const normalizeUser = useCallback(
+    (currentUser) => {
+      if (!currentUser) return null;
+
+      return {
+        ...currentUser,
+        fullname:
+          currentUser.fullname ||
+          currentUser.name ||
+          currentUser.username ||
+          "User",
+        email: currentUser.email || "",
+        photo: getPhoto(currentUser),
+      };
+    },
+    [getPhoto]
+  );
+
+  // ==========================================
+  // LOAD PROFIL DARI LOCAL STORAGE DAN BACKEND
+  // ==========================================
+
+  const loadUser = useCallback(async () => {
+    let savedUser = null;
+
     try {
-      const data = localStorage.getItem("user");
+      savedUser = JSON.parse(
+        localStorage.getItem("user") || "null"
+      );
 
-      if (!data) {
-        setUser(null);
+      if (savedUser) {
+        setUser(normalizeUser(savedUser));
+      }
+    } catch (error) {
+      console.error("Gagal membaca data user:", error);
+    }
+
+    const token = getToken();
+
+    if (!token) {
+      setUser(null);
+      return;
+    }
+
+    try {
+      const response = await fetch(PROFILE_URL, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        console.error(
+          "Gagal mengambil profil terbaru:",
+          response.status
+        );
         return;
       }
 
-      const parsedUser = JSON.parse(data);
+      const result = await response.json();
 
-      setUser({
-        ...parsedUser,
-        fullname:
-          parsedUser.fullname ||
-          parsedUser.name ||
-          parsedUser.username ||
-          "User",
-        email: parsedUser.email || "",
-        photo: getPhoto(parsedUser),
-      });
+      const latestUser =
+        result.user ||
+        result.data?.user ||
+        result.data ||
+        null;
+
+      if (!result.success || !latestUser) return;
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(latestUser)
+      );
+
+      setUser(normalizeUser(latestUser));
     } catch (error) {
-      console.error("Gagal membaca user:", error);
-      setUser(null);
+      console.error("Gagal memperbarui profil:", error);
+
+      if (!savedUser) {
+        setUser(null);
+      }
     }
-  }, [getPhoto]);
+  }, [getToken, normalizeUser]);
+
+  // ==========================================
+  // LISTENER UPDATE PROFIL
+  // ==========================================
 
   useEffect(() => {
     loadUser();
 
     const handleProfileUpdate = (event) => {
-      if (event.detail) {
-        const updatedUser = event.detail.user || event.detail;
+      const updatedUser =
+        event.detail?.user || event.detail;
 
-        const normalizedUser = {
+      if (
+        !updatedUser ||
+        typeof updatedUser !== "object"
+      ) {
+        loadUser();
+        return;
+      }
+
+      try {
+        const currentUser = JSON.parse(
+          localStorage.getItem("user") || "{}"
+        );
+
+        const mergedUser = {
+          ...currentUser,
           ...updatedUser,
-          fullname:
-            updatedUser.fullname ||
-            updatedUser.name ||
-            updatedUser.username ||
-            "User",
-          email: updatedUser.email || "",
-          photo: getPhoto(updatedUser),
         };
-
-        setUser(normalizedUser);
 
         localStorage.setItem(
           "user",
-          JSON.stringify({
-            ...JSON.parse(localStorage.getItem("user") || "{}"),
-            ...updatedUser,
-          })
+          JSON.stringify(mergedUser)
         );
-      } else {
+
+        setUser(normalizeUser(mergedUser));
+      } catch (error) {
+        console.error(
+          "Gagal memperbarui data Header:",
+          error
+        );
+
         loadUser();
       }
     };
@@ -122,7 +204,10 @@ export default function Header() {
       handleProfileUpdate
     );
 
-    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener(
+      "storage",
+      handleStorageChange
+    );
 
     return () => {
       window.removeEventListener(
@@ -130,11 +215,18 @@ export default function Header() {
         handleProfileUpdate
       );
 
-      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener(
+        "storage",
+        handleStorageChange
+      );
     };
-  }, [loadUser, getPhoto]);
+  }, [loadUser, normalizeUser]);
 
-  const getUserId = () => {
+  // ==========================================
+  // USER ID
+  // ==========================================
+
+  const getUserId = useCallback(() => {
     try {
       const data = localStorage.getItem("user");
 
@@ -152,29 +244,40 @@ export default function Header() {
       console.error("Gagal membaca ID user:", error);
       return null;
     }
-  };
+  }, []);
 
-  const fetchNotifications = async () => {
+  // ==========================================
+  // AMBIL NOTIFIKASI
+  // ==========================================
+
+  const fetchNotifications = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
+      const token = getToken();
       const userId = getUserId();
 
-      if (!token || !userId) return;
+      if (!token || !userId) {
+        setNotifications([]);
+        return;
+      }
 
       setLoadingNotifications(true);
 
       const response = await fetch(
-        `${API_URL}/api/notifications/user/${userId}`,
+        `${NOTIFICATION_URL}/user/${userId}`,
         {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          cache: "no-store",
         }
       );
 
       if (!response.ok) {
-        console.error("Gagal mengambil notifikasi:", response.status);
+        console.error(
+          "Gagal mengambil notifikasi:",
+          response.status
+        );
         return;
       }
 
@@ -182,20 +285,26 @@ export default function Header() {
 
       if (!data.success) return;
 
-      const notificationData = Array.isArray(data.notifications)
-        ? data.notifications
-        : [];
-
-      setNotifications(notificationData);
+      setNotifications(
+        Array.isArray(data.notifications)
+          ? data.notifications
+          : []
+      );
     } catch (error) {
-      console.error("Gagal mengambil notifikasi:", error);
+      console.error(
+        "Gagal mengambil notifikasi:",
+        error
+      );
     } finally {
       setLoadingNotifications(false);
     }
-  };
+  }, [getToken, getUserId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
 
     fetchNotifications();
 
@@ -204,7 +313,11 @@ export default function Header() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user?.id, fetchNotifications]);
+
+  // ==========================================
+  // JUMLAH NOTIFIKASI BELUM DIBACA
+  // ==========================================
 
   const unreadCount = notifications.filter(
     (notification) =>
@@ -213,21 +326,34 @@ export default function Header() {
       notification.is_read === "0"
   ).length;
 
+  // ==========================================
+  // ROLE
+  // ==========================================
+
   const getRoleName = () => {
     switch (user?.role) {
       case "super_admin":
         return "Super Admin";
+
       case "event_organizer":
         return "Event Organizer";
+
       case "customer":
         return "Customer";
+
       default:
         return "User";
     }
   };
 
+  // ==========================================
+  // JUDUL HALAMAN
+  // ==========================================
+
   const getPageTitle = () => {
-    if (pathname.includes("/dashboard")) return "Dashboard";
+    if (pathname.includes("/dashboard")) {
+      return "Dashboard";
+    }
 
     if (
       pathname.includes("/users") ||
@@ -248,59 +374,112 @@ export default function Header() {
         : "Tiket";
     }
 
-    if (pathname.includes("/participants")) return "Peserta";
-    if (pathname.includes("/organizers")) return "Organizer";
-    if (pathname.includes("/reports")) return "Laporan";
-    if (pathname.includes("/favorites")) return "Favorit";
-    if (pathname.includes("/notifications")) return "Notifikasi";
-    if (pathname.includes("/profile")) return "Profil";
-    if (pathname.includes("/settings")) return "Pengaturan";
-    if (pathname.includes("/roles")) return "Roles & Permissions";
+    if (pathname.includes("/participants")) {
+      return "Peserta";
+    }
+
+    if (pathname.includes("/organizers")) {
+      return "Organizer";
+    }
+
+    if (pathname.includes("/reports")) {
+      return "Laporan";
+    }
+
+    if (pathname.includes("/favorites")) {
+      return "Favorit";
+    }
+
+    if (pathname.includes("/notifications")) {
+      return "Notifikasi";
+    }
+
+    if (pathname.includes("/profile")) {
+      return "Profil";
+    }
+
+    if (pathname.includes("/settings")) {
+      return "Pengaturan";
+    }
+
+    if (pathname.includes("/roles")) {
+      return "Roles & Permissions";
+    }
 
     return "Dashboard";
   };
 
+  // ==========================================
+  // URL PROFIL BERDASARKAN ROLE
+  // ==========================================
+
   const getProfileUrl = () => {
-    if (user?.role === "super_admin") {
-      return "/superadmin/profile";
-    }
+    switch (user?.role) {
+      case "super_admin":
+        return "/superadmin/profile";
 
-    if (user?.role === "event_organizer") {
-      return "/organizer/profile";
-    }
+      case "event_organizer":
+        return "/organizer/profile";
 
-    if (user?.role === "customer") {
-      return "/profile";
+      case "customer":
+      default:
+        return "/profile";
     }
-
-    return "/profile";
   };
+
+  // ==========================================
+  // URL SETTINGS BERDASARKAN ROLE
+  // ==========================================
 
   const getSettingsUrl = () => {
-    if (user?.role === "super_admin") {
-      return "/superadmin/settings";
-    }
+    switch (user?.role) {
+      case "super_admin":
+        return "/superadmin/settings";
 
-    if (user?.role === "event_organizer") {
-      return "/organizer/settings";
-    }
+      case "event_organizer":
+        return "/organizer/settings";
 
-    return "/settings";
+      case "customer":
+      default:
+        return "/settings";
+    }
   };
+
+  // ==========================================
+  // LOGOUT
+  // ==========================================
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
+
     sessionStorage.clear();
 
-    router.push("/login");
+    setUser(null);
+    setNotifications([]);
+    setProfileOpen(false);
+    setNotificationOpen(false);
+
+    router.replace("/login");
   };
 
+  // ==========================================
+  // INISIAL NAMA
+  // ==========================================
+
   const getInitial = () => {
-    const fullname = user?.fullname || user?.name || "User";
+    const fullname =
+      user?.fullname ||
+      user?.name ||
+      "User";
 
     return fullname.charAt(0).toUpperCase();
   };
+
+  // ==========================================
+  // TOGGLE DROPDOWN
+  // ==========================================
 
   const toggleNotification = () => {
     setNotificationOpen((prev) => !prev);
@@ -316,14 +495,18 @@ export default function Header() {
     setNotificationOpen(false);
   };
 
+  // ==========================================
+  // TANDAI NOTIFIKASI DIBACA
+  // ==========================================
+
   const markAsRead = async (notificationId) => {
     try {
-      const token = localStorage.getItem("token");
+      const token = getToken();
 
       if (!token) return;
 
       const response = await fetch(
-        `${API_URL}/api/notifications/${notificationId}/read`,
+        `${NOTIFICATION_URL}/${notificationId}/read`,
         {
           method: "PATCH",
           headers: {
@@ -347,11 +530,16 @@ export default function Header() {
         )
       );
     } catch (error) {
-      console.error("Gagal menandai notifikasi:", error);
+      console.error(
+        "Gagal menandai notifikasi:",
+        error
+      );
     }
   };
 
-  const handleNotificationClick = async (notification) => {
+  const handleNotificationClick = async (
+    notification
+  ) => {
     const isUnread =
       notification.is_read === 0 ||
       notification.is_read === false ||
@@ -362,12 +550,18 @@ export default function Header() {
     }
   };
 
+  // ==========================================
+  // FORMAT WAKTU NOTIFIKASI
+  // ==========================================
+
   const formatNotificationTime = (createdAt) => {
     if (!createdAt) return "";
 
     const date = new Date(createdAt);
 
-    if (Number.isNaN(date.getTime())) return "";
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
 
     const now = new Date();
 
@@ -396,6 +590,10 @@ export default function Header() {
     });
   };
 
+  // ==========================================
+  // ICON NOTIFIKASI
+  // ==========================================
+
   const getNotificationIcon = (title = "") => {
     const lowerTitle = title.toLowerCase();
 
@@ -404,25 +602,49 @@ export default function Header() {
       lowerTitle.includes("transaksi") ||
       lowerTitle.includes("bayar")
     ) {
-      return <CreditCard size={15} strokeWidth={1.8} />;
+      return (
+        <CreditCard
+          size={15}
+          strokeWidth={1.8}
+        />
+      );
     }
 
     if (
       lowerTitle.includes("event") ||
       lowerTitle.includes("konser")
     ) {
-      return <CalendarDays size={15} strokeWidth={1.8} />;
+      return (
+        <CalendarDays
+          size={15}
+          strokeWidth={1.8}
+        />
+      );
     }
 
     if (
       lowerTitle.includes("user") ||
       lowerTitle.includes("akun")
     ) {
-      return <User size={15} strokeWidth={1.8} />;
+      return (
+        <User
+          size={15}
+          strokeWidth={1.8}
+        />
+      );
     }
 
-    return <Info size={15} strokeWidth={1.8} />;
+    return (
+      <Info
+        size={15}
+        strokeWidth={1.8}
+      />
+    );
   };
+
+  // ==========================================
+  // TAMPILAN HEADER
+  // ==========================================
 
   return (
     <header
@@ -450,6 +672,8 @@ export default function Header() {
           xl:px-10
         "
       >
+        {/* JUDUL HALAMAN */}
+
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <div
@@ -510,7 +734,12 @@ export default function Header() {
           </div>
         </div>
 
+        {/* MENU KANAN */}
+
         <div className="flex items-center gap-1.5 sm:gap-3">
+
+          {/* NOTIFIKASI */}
+
           <div className="relative">
             <button
               onClick={toggleNotification}
@@ -562,7 +791,9 @@ export default function Header() {
                     ring-white
                   "
                 >
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {unreadCount > 9
+                    ? "9+"
+                    : unreadCount}
                 </span>
               )}
             </button>
@@ -632,7 +863,8 @@ export default function Header() {
                   )}
                 </div>
 
-                {loadingNotifications && notifications.length === 0 ? (
+                {loadingNotifications &&
+                notifications.length === 0 ? (
                   <div className="flex items-center justify-center px-5 py-11">
                     <div className="flex items-center gap-2.5">
                       <div
@@ -669,7 +901,10 @@ export default function Header() {
                         text-[#9AA6B2]
                       "
                     >
-                      <Bell size={19} strokeWidth={1.7} />
+                      <Bell
+                        size={19}
+                        strokeWidth={1.7}
+                      />
                     </div>
 
                     <p className="mt-4 text-[12px] font-bold text-[#112250]">
@@ -682,92 +917,102 @@ export default function Header() {
                   </div>
                 ) : (
                   <div className="max-h-[390px] overflow-y-auto">
-                    {notifications.slice(0, 5).map((notification) => {
-                      const isUnread =
-                        notification.is_read === 0 ||
-                        notification.is_read === false ||
-                        notification.is_read === "0";
+                    {notifications
+                      .slice(0, 5)
+                      .map((notification) => {
+                        const isUnread =
+                          notification.is_read === 0 ||
+                          notification.is_read === false ||
+                          notification.is_read === "0";
 
-                      return (
-                        <button
-                          key={notification.id}
-                          onClick={() =>
-                            handleNotificationClick(notification)
-                          }
-                          className={`
-                            group
-                            flex
-                            w-full
-                            gap-3
-                            border-b
-                            border-[#EEF1F5]
-                            px-5
-                            py-4
-                            text-left
-                            transition-all
-                            duration-200
-                            hover:bg-[#F8FAFC]
-                            ${
-                              isUnread
-                                ? "bg-[#FCFDFE]"
-                                : "bg-white"
+                        return (
+                          <button
+                            key={notification.id}
+                            onClick={() =>
+                              handleNotificationClick(
+                                notification
+                              )
                             }
-                          `}
-                        >
-                          <div
                             className={`
+                              group
                               flex
-                              h-9
-                              w-9
-                              flex-shrink-0
-                              items-center
-                              justify-center
-                              rounded-xl
-                              border
-                              transition
+                              w-full
+                              gap-3
+                              border-b
+                              border-[#EEF1F5]
+                              px-5
+                              py-4
+                              text-left
+                              transition-all
+                              duration-200
+                              hover:bg-[#F8FAFC]
                               ${
                                 isUnread
-                                  ? "border-[#E0E6EE] bg-[#F2F5F8] text-[#3B507D]"
-                                  : "border-[#EDF0F4] bg-[#F8F9FB] text-[#9AA6B2]"
+                                  ? "bg-[#FCFDFE]"
+                                  : "bg-white"
                               }
                             `}
                           >
-                            {getNotificationIcon(notification.title)}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <p
-                                className={`
-                                  line-clamp-1
-                                  text-[12px]
-                                  leading-5
-                                  ${
-                                    isUnread
-                                      ? "font-bold text-[#112250]"
-                                      : "font-semibold text-[#4B5C72]"
-                                  }
-                                `}
-                              >
-                                {notification.title || "Notifikasi"}
-                              </p>
-
-                              {isUnread && (
-                                <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#3B507D]" />
+                            <div
+                              className={`
+                                flex
+                                h-9
+                                w-9
+                                flex-shrink-0
+                                items-center
+                                justify-center
+                                rounded-xl
+                                border
+                                transition
+                                ${
+                                  isUnread
+                                    ? "border-[#E0E6EE] bg-[#F2F5F8] text-[#3B507D]"
+                                    : "border-[#EDF0F4] bg-[#F8F9FB] text-[#9AA6B2]"
+                                }
+                              `}
+                            >
+                              {getNotificationIcon(
+                                notification.title
                               )}
                             </div>
 
-                            <p className="mt-1 line-clamp-2 text-[10px] leading-[1.65] text-[#718096]">
-                              {notification.message || "Tidak ada pesan."}
-                            </p>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <p
+                                  className={`
+                                    line-clamp-1
+                                    text-[12px]
+                                    leading-5
+                                    ${
+                                      isUnread
+                                        ? "font-bold text-[#112250]"
+                                        : "font-semibold text-[#4B5C72]"
+                                    }
+                                  `}
+                                >
+                                  {notification.title ||
+                                    "Notifikasi"}
+                                </p>
 
-                            <p className="mt-1.5 text-[9px] font-medium text-[#A0AAB7]">
-                              {formatNotificationTime(notification.created_at)}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
+                                {isUnread && (
+                                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#3B507D]" />
+                                )}
+                              </div>
+
+                              <p className="mt-1 line-clamp-2 text-[10px] leading-[1.65] text-[#718096]">
+                                {notification.message ||
+                                  "Tidak ada pesan."}
+                              </p>
+
+                              <p className="mt-1.5 text-[9px] font-medium text-[#A0AAB7]">
+                                {formatNotificationTime(
+                                  notification.created_at
+                                )}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
                   </div>
                 )}
 
@@ -801,6 +1046,8 @@ export default function Header() {
           </div>
 
           <div className="hidden h-8 w-px bg-[#E4E8EE] sm:block" />
+
+          {/* PROFIL USER */}
 
           <div className="relative">
             <button
@@ -1010,7 +1257,10 @@ export default function Header() {
                         group-hover:text-[#3B507D]
                       "
                     >
-                      <User size={16} strokeWidth={1.8} />
+                      <User
+                        size={16}
+                        strokeWidth={1.8}
+                      />
                     </span>
 
                     Profil Saya
@@ -1054,7 +1304,10 @@ export default function Header() {
                         group-hover:text-[#3B507D]
                       "
                     >
-                      <Settings size={16} strokeWidth={1.8} />
+                      <Settings
+                        size={16}
+                        strokeWidth={1.8}
+                      />
                     </span>
 
                     Pengaturan
@@ -1095,7 +1348,10 @@ export default function Header() {
                         group-hover:bg-white
                       "
                     >
-                      <LogOut size={16} strokeWidth={1.8} />
+                      <LogOut
+                        size={16}
+                        strokeWidth={1.8}
+                      />
                     </span>
 
                     Logout

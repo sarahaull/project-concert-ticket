@@ -1,21 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 
 import {
   CreditCardIcon,
   CalendarIcon,
   UsersIcon,
-  ArrowsRightLeftIcon,
   ArrowUpRightIcon,
   CheckCircleIcon,
   ClockIcon,
   TicketIcon,
   SparklesIcon,
   FireIcon,
-  StarIcon,
+  ExclamationCircleIcon,
 } from "@heroicons/react/24/outline";
+
+import { RefreshCw } from "lucide-react";
 
 import {
   Chart as ChartJS,
@@ -42,382 +43,359 @@ ChartJS.register(
   Filler
 );
 
-// ============================================================
-// FORMAT
-// ============================================================
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+).replace(/\/+$/, "");
 
-const formatNumber = (number) => {
-  return new Intl.NumberFormat("id-ID").format(number);
-};
+const API_URL = API_BASE.endsWith("/api") ? API_BASE : `${API_BASE}/api`;
+const SADMIN_URL = `${API_URL}/sadmin`;
 
-const formatRupiah = (amount) => {
-  return new Intl.NumberFormat("id-ID", {
+const formatNumber = (number) =>
+  new Intl.NumberFormat("id-ID").format(Number(number) || 0);
+
+const formatRupiah = (amount) =>
+  new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(Number(amount) || 0);
+
+const getRelativeTime = (date) => {
+  if (!date) return "-";
+  const timestamp = new Date(date).getTime();
+  if (Number.isNaN(timestamp)) return "-";
+  const diff = Math.max(0, Date.now() - timestamp);
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (minutes < 1) return "Baru saja";
+  if (minutes < 60) return `${minutes} menit lalu`;
+  if (hours < 24) return `${hours} jam lalu`;
+  return `${days} hari lalu`;
 };
 
-// ============================================================
-// STATISTICS — Premium dengan Gradien Menarik
-// ============================================================
+/* ---------------------------------- Cards --------------------------------- */
 
-const statsData = [
-  {
-    title: "Total Pengguna",
-    value: "56.231",
-    change: "+9.3%",
-    icon: UsersIcon,
-    gradient: "from-[#0a1628] via-[#1a2f4a] to-[#2a4a7a]",
-    accent: "#8ab4f8",
-    glow: "rgba(138,180,248,0.15)",
-  },
-  {
-    title: "Pendapatan",
-    value: formatRupiah(2458750000),
-    change: "+18.6%",
-    icon: CreditCardIcon,
-    gradient: "from-[#0a1628] via-[#1a2f3a] to-[#4a6b5a]",
-    accent: "#6bcf8a",
-    glow: "rgba(107,207,138,0.15)",
-  },
-  {
-    title: "Total Event",
-    value: "128",
-    change: "+15.2%",
-    icon: CalendarIcon,
-    gradient: "from-[#0a1628] via-[#1a2a3a] to-[#4a5a7a]",
-    accent: "#8ab4f8",
-    glow: "rgba(138,180,248,0.15)",
-  },
-  {
-    title: "Transaksi",
-    value: "31.658",
-    change: "+14.7%",
-    icon: ArrowsRightLeftIcon,
-    gradient: "from-[#0a1628] via-[#1a2a3a] to-[#5a4a6a]",
-    accent: "#c084fc",
-    glow: "rgba(192,132,252,0.15)",
-  },
-];
-
-// ============================================================
-// CATEGORY
-// ============================================================
-
-const categoryData = {
-  labels: ["VIP", "Festival", "Konser", "Fan Meeting", "Lainnya"],
-  datasets: [
-    {
-      data: [35.2, 28.1, 22.4, 8.7, 5.6],
-      backgroundColor: ["#8ab4f8", "#4a6b9a", "#2a4a7a", "#6b8fc0", "#b0c8e0"],
-      borderColor: "#ffffff",
-      borderWidth: 3,
-      hoverOffset: 10,
-    },
-  ],
-};
-
-// ============================================================
-// EVENTS
-// ============================================================
-
-const topEvents = [
-  {
-    name: "COLDPLAY",
-    subtitle: "Music of The Spheres World Tour",
-    sold: 4860,
-    image:
-      "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=300&h=300&fit=crop",
-  },
-  {
-    name: "BLACKPINK",
-    subtitle: "Born Pink World Tour",
-    sold: 3945,
-    image:
-      "https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?w=300&h=300&fit=crop",
-  },
-  {
-    name: "NCT DREAM",
-    subtitle: "The Dream Show 3",
-    sold: 2756,
-    image:
-      "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=300&h=300&fit=crop",
-  },
-  {
-    name: "Sheila On 7",
-    subtitle: "Tunggu Aku di Jakarta",
-    sold: 2301,
-    image:
-      "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=300&h=300&fit=crop",
-  },
-  {
-    name: "Deep Purple",
-    subtitle: "The Long Goodbye Tour",
-    sold: 1967,
-    image:
-      "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop",
-  },
-];
-
-// ============================================================
-// USERS
-// ============================================================
-
-const newUsers = [
-  { name: "Aisyah Putri", email: "aisyahp@gmail.com" },
-  { name: "Muhammad Alif", email: "alif.muhammad@gmail.com" },
-  { name: "Jonathan Lee", email: "jonathanlee@gmail.com" },
-  { name: "Nadia Rahma", email: "nadirahma@gmail.com" },
-  { name: "David Setiawan", email: "davidsetiawan@gmail.com" },
-];
-
-// ============================================================
-// ACTIVITIES
-// ============================================================
-
-const recentActivities = [
-  {
-    text: "Event baru ditambahkan — Coldplay",
-    time: "2 jam lalu",
-    type: "event",
-  },
-  {
-    text: "Transaksi berhasil — TRX-2025-0610-001",
-    time: "3 jam lalu",
-    type: "transaction",
-  },
-  {
-    text: "Refund diproses — REF-2025-0609-018",
-    time: "5 jam lalu",
-    type: "refund",
-  },
-  {
-    text: "User baru terdaftar — aisyahp@gmail.com",
-    time: "6 jam lalu",
-    type: "user",
-  },
-  {
-    text: "Banner diperbarui — Summer Festival Promo",
-    time: "8 jam lalu",
-    type: "banner",
-  },
-];
-
-// ============================================================
-// STAT CARD — Premium Version dengan Animasi
-// ============================================================
-
-function StatsCard({ title, value, change, icon: Icon, gradient, accent, glow }) {
-  const [isHovered, setIsHovered] = useState(false);
-
+function StatsCard({ title, value, subtitle, icon: Icon, accent, loading }) {
   return (
-    <div
-      className="group relative min-w-0 overflow-hidden rounded-2xl transition-all duration-500 hover:-translate-y-1.5"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{
-        background: `linear-gradient(135deg, #0a1628 0%, #13213b 50%, #1b2f4e 100%)`,
-        boxShadow: isHovered
-          ? `0 20px 60px ${glow || "rgba(138,180,248,0.15)"}`
-          : `0 4px 20px rgba(10,20,40,0.08)`,
-      }}
-    >
-      {/* Decorative glow orbs */}
+    <div className="group relative overflow-hidden rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
       <div
-        className="absolute -right-16 -top-16 h-48 w-48 rounded-full blur-3xl transition-all duration-700"
-        style={{
-          background: accent || "#5a8ad0",
-          opacity: isHovered ? 0.2 : 0.05,
-          transform: isHovered ? "scale(1.2)" : "scale(1)",
-        }}
+        className="absolute -right-10 -top-10 h-28 w-28 rounded-full blur-2xl opacity-10 transition-opacity duration-500 group-hover:opacity-25"
+        style={{ background: accent }}
       />
-      <div
-        className="absolute -bottom-20 -left-20 h-40 w-40 rounded-full blur-3xl transition-all duration-700"
-        style={{
-          background: accent || "#5a8ad0",
-          opacity: isHovered ? 0.15 : 0.03,
-          transform: isHovered ? "scale(1.3)" : "scale(1)",
-        }}
-      />
-
-      {/* Shimmer border on hover */}
-      <div
-        className="absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-500 pointer-events-none"
-        style={{
-          background: `linear-gradient(135deg, transparent, ${accent}40, transparent)`,
-          opacity: isHovered ? 1 : 0,
-        }}
-      />
-
-      <div className="relative p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-[#8aa0c0]">
-              {title}
-            </p>
-            <p className="mt-2 text-[26px] sm:text-[28px] font-bold tracking-[-0.02em] text-white leading-tight break-words">
-              {value}
-            </p>
-            <div className="flex items-center gap-1.5 mt-3">
-              <span
-                className="inline-flex items-center gap-0.5 text-[11px] font-semibold transition-colors duration-300"
-                style={{ color: accent || "#8ab4f8" }}
-              >
-                <ArrowUpRightIcon className="w-3.5 h-3.5" />
-                {change}
-              </span>
-              <span className="text-[10px] text-[#7e91b2]">dari periode lalu</span>
-            </div>
-          </div>
-          <div
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border backdrop-blur-sm transition-all duration-300"
-            style={{
-              borderColor: isHovered ? `${accent}60` : "#4a6b9a/30",
-              background: isHovered ? `rgba(26,47,74,0.7)` : "rgba(26,47,74,0.5)",
-              boxShadow: isHovered ? `0 0 30px ${glow || "rgba(138,180,248,0.1)"}` : "none",
-            }}
-          >
-            <Icon
-              className="w-5 h-5 transition-all duration-300"
-              style={{
-                color: isHovered ? accent || "#8ab4f8" : "#8ab4f8",
-                transform: isHovered ? "scale(1.1)" : "scale(1)",
-              }}
-            />
-          </div>
+      <div className="relative flex justify-between items-start mb-3">
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-xl"
+          style={{ background: `${accent}18`, color: accent }}
+        >
+          <Icon className="h-5 w-5" />
         </div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-600">
+          <SparklesIcon className="h-3 w-3" />
+          Live
+        </span>
+      </div>
+      <p className="relative text-[11px] font-medium uppercase tracking-wider text-[#7e91b2]">
+        {title}
+      </p>
+      <p className="relative mt-1 break-words text-xl font-bold text-[#0a1628]">
+        {loading ? "..." : value}
+      </p>
+      <p className="relative mt-1 text-[10px] text-[#7e91b2]">{subtitle}</p>
+    </div>
+  );
+}
+
+function SystemCard({ icon, iconBg, iconColor, title, value, subtitle }) {
+  return (
+    <div className="group rounded-2xl border border-[#e0e8f0]/50 bg-white/90 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+      <div className="flex items-center gap-2">
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBg}`}
+        >
+          <span className={iconColor}>{icon}</span>
+        </div>
+        <p className="text-[11px] font-medium text-[#7e91b2]">{title}</p>
+      </div>
+      <p className="mt-2 break-words text-[20px] font-bold text-[#0a1628]">
+        {value}
+      </p>
+      <p className="mt-0.5 text-[11px] text-[#7e91b2]">{subtitle}</p>
+    </div>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="flex flex-col items-center gap-3 text-[#7e91b2]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#8ab4f8] border-t-transparent" />
+        <span className="text-xs">Memuat grafik...</span>
       </div>
     </div>
   );
 }
 
-// ============================================================
-// DASHBOARD
-// ============================================================
+/* -------------------------------- Dashboard ------------------------------- */
 
 export default function AdminDashboard() {
-  const [selectedPeriod, setSelectedPeriod] = useState("bulan ini");
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [summary, setSummary] = useState({
+    users: 0,
+    customers: 0,
+    organizers: 0,
+    superAdmins: 0,
+    events: 0,
+    tickets: 0,
+  });
 
-  useEffect(() => {
-    setIsLoaded(true);
+  const [users, setUsers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState("all");
+
+  const getHeaders = useCallback(() => {
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("token") || localStorage.getItem("accessToken")
+        : null;
+    return {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
   }, []);
 
-  // ==========================================================
-  // REVENUE CHART — Premium Colors
-  // ==========================================================
+  const fetchData = useCallback(
+    async (url) => {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: getHeaders(),
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.success === false) {
+        throw new Error(
+          result.message || `Gagal mengambil data. Status ${response.status}`
+        );
+      }
+      return result;
+    },
+    [getHeaders]
+  );
 
-  const revenueData = {
-    labels: ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"],
-    datasets: [
-      {
-        label: "Pendapatan",
-        data: [120000000, 180000000, 220000000, 290000000, 350000000, 410000000, 480000000, 520000000, 580000000, 620000000, 680000000, 758750000],
-        borderColor: "#8ab4f8",
-        backgroundColor: (context) => {
-          const ctx = context.chart.ctx;
-          const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-          gradient.addColorStop(0, "rgba(138,180,248,0.25)");
-          gradient.addColorStop(0.5, "rgba(138,180,248,0.08)");
-          gradient.addColorStop(1, "rgba(138,180,248,0)");
-          return gradient;
+  const loadDashboard = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      setError("");
+
+      try {
+        const [summaryResult, usersResult, eventsResult, transactionsResult] =
+          await Promise.all([
+            fetchData(`${SADMIN_URL}/summary`),
+            fetchData(`${SADMIN_URL}/users/recent`),
+            fetchData(`${SADMIN_URL}/events/recent`),
+            fetchData(`${SADMIN_URL}/transactions/recent`),
+          ]);
+
+        setSummary({
+          users: Number(summaryResult.summary?.users || 0),
+          customers: Number(summaryResult.summary?.customers || 0),
+          organizers: Number(summaryResult.summary?.organizers || 0),
+          superAdmins: Number(summaryResult.summary?.superAdmins || 0),
+          events: Number(summaryResult.summary?.events || 0),
+          tickets: Number(summaryResult.summary?.tickets || 0),
+        });
+
+        setUsers(Array.isArray(usersResult.users) ? usersResult.users : []);
+        setEvents(Array.isArray(eventsResult.events) ? eventsResult.events : []);
+        setTransactions(
+          Array.isArray(transactionsResult.transactions)
+            ? transactionsResult.transactions
+            : []
+        );
+      } catch (err) {
+        setError(
+          err.message || "Gagal menghubungkan dashboard dengan backend."
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [fetchData]
+  );
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const paidTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (item) => String(item.payment_status || "").toLowerCase() === "paid"
+      ),
+    [transactions]
+  );
+
+  const pendingTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (item) => String(item.payment_status || "").toLowerCase() === "pending"
+      ),
+    [transactions]
+  );
+
+  const recentPaidRevenue = useMemo(
+    () =>
+      paidTransactions.reduce(
+        (total, item) => total + Number(item.total_price || 0),
+        0
+      ),
+    [paidTransactions]
+  );
+
+  const chartTransactions = useMemo(() => {
+    let filtered = [...transactions];
+
+    if (selectedPeriod === "month") {
+      const now = new Date();
+      filtered = filtered.filter((item) => {
+        const date = new Date(item.order_date);
+        return (
+          date.getMonth() === now.getMonth() &&
+          date.getFullYear() === now.getFullYear()
+        );
+      });
+    }
+
+    if (selectedPeriod === "3months") {
+      const limit = new Date();
+      limit.setMonth(limit.getMonth() - 3);
+      filtered = filtered.filter(
+        (item) => new Date(item.order_date) >= limit
+      );
+    }
+
+    return filtered
+      .sort((a, b) => new Date(a.order_date) - new Date(b.order_date))
+      .slice(-10);
+  }, [transactions, selectedPeriod]);
+
+  /* ------------------------------ Chart data ------------------------------ */
+
+  const revenueData = useMemo(() => {
+    return {
+      labels: chartTransactions.map((item) => {
+        const date = new Date(item.order_date);
+        return Number.isNaN(date.getTime())
+          ? "-"
+          : date.toLocaleDateString("id-ID", {
+              day: "2-digit",
+              month: "short",
+            });
+      }),
+      datasets: [
+        {
+          label: "Nilai Transaksi",
+          data: chartTransactions.map((item) =>
+            Number(item.total_price || 0)
+          ),
+          borderColor: "#8ab4f8",
+          backgroundColor: (context) => {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return "rgba(138,180,248,0.1)";
+            const gradient = ctx.createLinearGradient(
+              0,
+              chartArea.top,
+              0,
+              chartArea.bottom
+            );
+            gradient.addColorStop(0, "rgba(138,180,248,0.3)");
+            gradient.addColorStop(0.5, "rgba(138,180,248,0.08)");
+            gradient.addColorStop(1, "rgba(138,180,248,0)");
+            return gradient;
+          },
+          fill: true,
+          tension: 0.42,
+          pointRadius: 4,
+          pointHoverRadius: 8,
+          pointBackgroundColor: "#8ab4f8",
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2,
+          borderWidth: 2.5,
         },
-        fill: true,
-        tension: 0.42,
-        pointRadius: 4,
-        pointHoverRadius: 8,
-        pointBackgroundColor: "#8ab4f8",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-      },
-      {
-        label: "Tiket Terjual",
-        data: [1200, 1800, 2200, 2900, 3500, 4100, 4800, 5200, 5800, 6200, 6800, 7587],
-        borderColor: "#4a6b9a",
-        backgroundColor: "rgba(74,107,154,0.05)",
-        fill: true,
-        tension: 0.42,
-        borderDash: [6, 4],
-        pointRadius: 3,
-        pointHoverRadius: 6,
-        pointBackgroundColor: "#4a6b9a",
-        pointBorderColor: "#ffffff",
-        pointBorderWidth: 2,
-        yAxisID: "y1",
-      },
-    ],
-  };
+      ],
+    };
+  }, [chartTransactions]);
 
-  // ==========================================================
-  // CHART OPTIONS — Refined
-  // ==========================================================
+  const doughnutData = useMemo(() => {
+    const paid = paidTransactions.length;
+    const pending = pendingTransactions.length;
+    const failed = transactions.filter((item) =>
+      ["failed", "cancelled", "canceled", "expire", "expired"].includes(
+        String(item.payment_status || "").toLowerCase()
+      )
+    ).length;
+    const other = Math.max(0, transactions.length - paid - pending - failed);
+
+    return {
+      labels: ["Berhasil", "Menunggu", "Gagal / Kedaluwarsa", "Lainnya"],
+      datasets: [
+        {
+          data: [paid, pending, failed, other],
+          backgroundColor: ["#6bcf8a", "#f5bd58", "#ef7777", "#8ab4f8"],
+          borderColor: "#ffffff",
+          borderWidth: 3,
+          hoverOffset: 8,
+        },
+      ],
+    };
+  }, [transactions, paidTransactions, pendingTransactions]);
+
+  /* ------------------------------ Chart opt ------------------------------- */
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: {
-        position: "top",
-        labels: {
-          color: "#8aa0c0",
-          font: { size: 11, weight: "500" },
-          boxWidth: 8,
-          padding: 16,
-          usePointStyle: true,
-          pointStyle: "circle",
-        },
-      },
+      legend: { display: false },
       tooltip: {
         backgroundColor: "rgba(10,22,40,0.95)",
         titleColor: "#e0e8f0",
         bodyColor: "#8aa0c0",
-        padding: 14,
-        cornerRadius: 12,
-        displayColors: true,
-        borderColor: "rgba(74,107,154,0.3)",
-        borderWidth: 1,
-        backdropColor: "rgba(10,22,40,0.8)",
-        backdropPadding: 10,
+        padding: 12,
+        cornerRadius: 10,
+        callbacks: {
+          label: (context) => formatRupiah(context.raw),
+        },
       },
     },
     scales: {
       x: {
+        grid: { display: false },
         border: { display: false },
-        grid: { color: "rgba(74,107,154,0.06)" },
+        ticks: { color: "#7e91b2", font: { size: 10 } },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: "rgba(74,107,154,0.08)" },
+        border: { display: false },
         ticks: {
           color: "#7e91b2",
           font: { size: 10 },
-        },
-      },
-      y: {
-        beginAtZero: false,
-        border: { display: false },
-        grid: { color: "rgba(74,107,154,0.06)" },
-        ticks: {
-          color: "#7e91b2",
-          font: { size: 9 },
-          callback: (value) => `Rp ${(value / 1000000).toFixed(0)}M`,
-        },
-      },
-      y1: {
-        position: "right",
-        border: { display: false },
-        grid: { drawOnChartArea: false },
-        ticks: {
-          color: "#7e91b2",
-          font: { size: 9 },
-          callback: (value) => `${(value / 1000).toFixed(0)}K`,
+          callback: (value) => `Rp ${(Number(value) / 1000000).toFixed(0)} jt`,
         },
       },
     },
   };
-
-  // ==========================================================
-  // DOUGHNUT OPTIONS — Premium
-  // ==========================================================
 
   const doughnutOptions = {
     responsive: true,
@@ -427,11 +405,12 @@ export default function AdminDashboard() {
       legend: {
         position: "bottom",
         labels: {
-          color: "#8aa0c0",
-          font: { size: 10, weight: "500" },
+          color: "#7e91b2",
+          font: { size: 10 },
           boxWidth: 8,
           padding: 14,
           usePointStyle: true,
+          pointStyle: "circle",
         },
       },
       tooltip: {
@@ -439,401 +418,437 @@ export default function AdminDashboard() {
         titleColor: "#e0e8f0",
         bodyColor: "#8aa0c0",
         padding: 12,
-        cornerRadius: 12,
-        borderColor: "rgba(74,107,154,0.3)",
-        borderWidth: 1,
+        cornerRadius: 10,
       },
     },
   };
 
-  // ==========================================================
-  // RETURN
-  // ==========================================================
+  /* ------------------------------ Activities ------------------------------ */
+
+  const activities = useMemo(() => {
+    const userActivities = users.map((user) => ({
+      id: `user-${user.id}`,
+      text: `Pengguna baru terdaftar — ${user.fullname || user.email}`,
+      date: user.created_at,
+      type: "user",
+    }));
+
+    const eventActivities = events.map((event) => ({
+      id: `event-${event.id}`,
+      text: `Event baru ditambahkan — ${event.event_name}`,
+      date: event.created_at,
+      type: "event",
+    }));
+
+    const transactionActivities = transactions.map((transaction) => ({
+      id: `transaction-${transaction.id}`,
+      text: `Transaksi ${transaction.payment_status || "baru"} — ${
+        transaction.order_code || `#${transaction.id}`
+      }`,
+      date: transaction.order_date,
+      type: "transaction",
+    }));
+
+    return [...userActivities, ...eventActivities, ...transactionActivities]
+      .filter((item) => item.date)
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 8);
+  }, [users, events, transactions]);
+
+  const systemStatus = error ? "Perlu diperiksa" : "Terhubung";
+
+  /* -------------------------------- Render -------------------------------- */
 
   return (
-    <div className={`w-full space-y-6 ${isLoaded ? "animate-in fade-in duration-500" : "opacity-0"}`}>
-      {/* ======================================================
-          WELCOME — Premium Hero dengan Efek Glow
-          ====================================================== */}
-
-      <section className="relative overflow-hidden w-full rounded-2xl px-6 py-8 shadow-[0_8px_30px_rgba(10,20,40,0.25)]">
-        {/* Background dengan gradien dan efek */}
+    <div className="w-full space-y-6">
+      {/* HERO */}
+      <section className="relative w-full overflow-hidden rounded-2xl px-6 py-8 shadow-[0_8px_30px_rgba(10,20,40,0.25)]">
         <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#13213b] to-[#1b2f4e]" />
+        <div className="absolute -right-16 -top-16 h-64 w-64 animate-pulse rounded-full bg-[#5a8ad0]/15 blur-3xl" />
+        <div className="absolute -bottom-20 left-20 h-48 w-48 rounded-full bg-[#8ab4f8]/10 blur-3xl" />
 
-        {/* Decorative orbs dengan animasi */}
-        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#5a8ad0]/15 blur-3xl animate-pulse" />
-        <div className="absolute -bottom-20 left-20 h-48 w-48 rounded-full bg-[#8ab4f8]/10 blur-3xl animate-pulse delay-75" />
-        <div className="absolute right-1/3 top-1/2 h-32 w-32 rounded-full bg-[#4a6b9a]/15 blur-2xl animate-pulse delay-150" />
-
-        {/* Shimmer border */}
-        <div className="absolute inset-0 rounded-2xl pointer-events-none">
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-[#8ab4f8]/20 to-transparent animate-shimmer" />
-        </div>
-
-        <div className="relative">
-          <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#8ab4f8] shadow-[0_0_12px_rgba(138,180,248,0.6)] animate-pulse" />
-            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-[#8aa0c0]">
-              Overview
-            </p>
-          </div>
-
-          <h1 className="mt-3 text-[26px] sm:text-[32px] font-bold tracking-[-0.03em] text-white">
-            Selamat datang, <span className="bg-gradient-to-r from-[#8ab4f8] to-[#b0c8e0] bg-clip-text text-transparent">Super Admin</span>
-          </h1>
-
-          <p className="mt-1.5 text-sm text-[#8aa0c0] max-w-xl">
-            Berikut ringkasan aktivitas platform TicketVerse hari ini. Kelola dan pantau dengan mudah.
-          </p>
-
-          {/* Badge status */}
-          <div className="mt-4 flex items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-medium text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Sistem Normal
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-[10px] font-medium text-blue-400">
-              <SparklesIcon className="w-3 h-3" />
-              Live
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* ======================================================
-          STATISTICS — dengan Animasi Stagger
-          ====================================================== */}
-
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {statsData.map((stat, index) => (
-          <div
-            key={index}
-            className={`transition-all duration-700 delay-${index * 100}`}
-            style={{
-              animation: `fadeInUp 0.6s ease ${index * 0.1}s both`,
-            }}
-          >
-            <StatsCard {...stat} />
-          </div>
-        ))}
-      </section>
-
-      {/* ======================================================
-          CHARTS
-          ====================================================== */}
-
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* REVENUE CHART */}
-        <div className="xl:col-span-2 min-w-0 rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 shadow-[0_4px_20px_rgba(10,20,40,0.06)] hover:shadow-[0_8px_30px_rgba(10,20,40,0.10)] transition-all duration-300">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
-            <div>
-              <h2 className="text-[15px] font-bold tracking-[-0.01em] text-[#0a1628] flex items-center gap-2">
-                <span className="w-1 h-4 rounded-full bg-[#8ab4f8]" />
-                Grafik Pendapatan
-              </h2>
-              <p className="text-[11px] text-[#7e91b2] mt-0.5">
-                Perbandingan pendapatan dan tiket terjual
+        <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8ab4f8]" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8aa0c0]">
+                Overview
               </p>
             </div>
+
+            <h1 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-white">
+              Selamat datang,{" "}
+              <span className="bg-gradient-to-r from-[#8ab4f8] to-[#b0c8e0] bg-clip-text text-transparent">
+                Super Admin
+              </span>
+            </h1>
+
+            <p className="mt-1.5 max-w-xl text-sm text-[#8aa0c0]">
+              Ringkasan aktivitas platform TicketVerse berdasarkan data backend.
+            </p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/20 px-3 py-1 text-[10px] font-medium text-emerald-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                {systemStatus}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/20 px-3 py-1 text-[10px] font-medium text-blue-400">
+                <SparklesIcon className="h-3 w-3" />
+                Live Data
+              </span>
+            </div>
+          </div>
+
+          <div className="flex gap-3 w-full sm:w-auto">
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="self-start sm:self-auto bg-white border border-[#d0d8e4] rounded-xl px-3 py-2 text-[11px] font-medium text-[#0a1628] outline-none focus:border-[#8ab4f8] focus:ring-2 focus:ring-[#8ab4f8]/20 cursor-pointer transition"
+              className="bg-white/10 border border-white/20 text-white text-xs font-medium rounded-xl px-3 py-2 outline-none backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all"
             >
-              <option value="bulan ini">Bulan Ini</option>
-              <option value="3 bulan">3 Bulan</option>
-              <option value="tahun ini">Tahun Ini</option>
+              <option className="text-black" value="all">
+                Semua Data
+              </option>
+              <option className="text-black" value="month">
+                Bulan Ini
+              </option>
+              <option className="text-black" value="3months">
+                3 Bulan Terakhir
+              </option>
             </select>
-          </div>
 
-          <div className="relative w-full h-[280px] sm:h-[320px] lg:h-[350px]">
-            <Line data={revenueData} options={chartOptions} />
-          </div>
-        </div>
-
-        {/* CATEGORY DOUGHNUT */}
-        <div className="min-w-0 rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 shadow-[0_4px_20px_rgba(10,20,40,0.06)] hover:shadow-[0_8px_30px_rgba(10,20,40,0.10)] transition-all duration-300">
-          <div className="mb-5">
-            <h2 className="text-[15px] font-bold tracking-[-0.01em] text-[#0a1628] flex items-center gap-2">
-              <span className="w-1 h-4 rounded-full bg-[#4a6b9a]" />
-              Kategori Penjualan
-            </h2>
-            <p className="text-[11px] text-[#7e91b2] mt-0.5">
-              Distribusi tiket terjual
-            </p>
-          </div>
-
-          <div className="relative w-full h-[280px] sm:h-[320px] lg:h-[350px]">
-            <Doughnut data={categoryData} options={doughnutOptions} />
+            <button
+              onClick={() => loadDashboard(true)}
+              disabled={refreshing}
+              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#8ab4f8] to-[#5a8ad0] text-[#0a1628] text-xs font-bold px-4 py-2.5 rounded-xl hover:shadow-[0_8px_25px_rgba(138,180,248,0.3)] hover:-translate-y-0.5 transition-all disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+              />
+              Perbarui Data
+            </button>
           </div>
         </div>
       </section>
 
-      {/* ======================================================
-          BOTTOM CONTENT
-          ====================================================== */}
+      {/* ERROR */}
+      {error && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <ExclamationCircleIcon className="h-5 w-5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold">Gagal memuat sebagian data dashboard</p>
+            <p className="mt-1">{error}</p>
+            <p className="mt-2 text-xs">
+              Pastikan token Super Admin masih berlaku dan backend berjalan.
+            </p>
+          </div>
+        </div>
+      )}
 
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* EVENT TERLARIS */}
-        <div className="min-w-0 rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 shadow-[0_4px_20px_rgba(10,20,40,0.06)] hover:shadow-[0_8px_30px_rgba(10,20,40,0.10)] transition-all duration-300">
-          <div className="flex items-center justify-between mb-4">
+      {/* STATS */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard
+          title="Total Pengguna"
+          value={formatNumber(summary.users)}
+          subtitle={`${formatNumber(summary.customers)} customer · ${formatNumber(summary.organizers)} organizer`}
+          icon={UsersIcon}
+          accent="#8ab4f8"
+          loading={loading}
+        />
+        <StatsCard
+          title="Pendapatan 10 Transaksi"
+          value={formatRupiah(recentPaidRevenue)}
+          subtitle={`${paidTransactions.length} transaksi berstatus Paid`}
+          icon={CreditCardIcon}
+          accent="#6bcf8a"
+          loading={loading}
+        />
+        <StatsCard
+          title="Total Event"
+          value={formatNumber(summary.events)}
+          subtitle={`${events.length} event terbaru dimuat`}
+          icon={CalendarIcon}
+          accent="#8ab4f8"
+          loading={loading}
+        />
+        <StatsCard
+          title="Total Tiket"
+          value={formatNumber(summary.tickets)}
+          subtitle="Tiket tercatat di platform"
+          icon={TicketIcon}
+          accent="#c084fc"
+          loading={loading}
+        />
+      </section>
+
+      {/* CHARTS */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
+          <h2 className="text-[15px] font-bold text-[#0a1628] mb-1 flex items-center gap-2">
+            <span className="w-1 h-4 rounded-full bg-[#8ab4f8]" />
+            Tren Transaksi Terbaru
+          </h2>
+          <p className="text-[11px] text-[#7e91b2] mb-6">
+            Nilai pesanan berdasarkan transaksi terbaru
+          </p>
+          <div className="h-[300px]">
+            {loading ? (
+              <ChartSkeleton />
+            ) : chartTransactions.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                Belum ada data transaksi.
+              </div>
+            ) : (
+              <Line data={revenueData} options={chartOptions} />
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
+          <h2 className="text-[15px] font-bold text-[#0a1628] mb-1 flex items-center gap-2">
+            <span className="w-1 h-4 rounded-full bg-[#4a6b9a]" />
+            Status Pembayaran
+          </h2>
+          <p className="text-[11px] text-[#7e91b2] mb-6">
+            Distribusi transaksi terbaru
+          </p>
+          <div className="h-[300px]">
+            {loading ? (
+              <ChartSkeleton />
+            ) : transactions.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                Belum ada data pembayaran.
+              </div>
+            ) : (
+              <Doughnut data={doughnutData} options={doughnutOptions} />
+            )}
+          </div>
+          <div className="mt-3 space-y-2 border-t border-slate-100 pt-4 text-xs">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Berhasil</span>
+              <span className="font-semibold text-emerald-600">
+                {paidTransactions.length}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Menunggu</span>
+              <span className="font-semibold text-amber-600">
+                {pendingTransactions.length}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* LISTS */}
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-[15px] font-bold tracking-[-0.01em] text-[#0a1628] flex items-center gap-2">
-                <FireIcon className="w-4 h-4 text-amber-500" />
-                Event Terlaris
+              <h2 className="text-[15px] font-bold text-[#0a1628] flex items-center gap-2">
+                <FireIcon className="h-4 w-4 text-amber-500" />
+                Event Terbaru
               </h2>
-              <p className="text-[11px] text-[#7e91b2] mt-0.5">
-                Berdasarkan tiket terjual
+              <p className="mt-0.5 text-[11px] text-[#7e91b2]">
+                Event yang baru ditambahkan
               </p>
             </div>
             <Link
               href="/superadmin/events"
-              className="text-[11px] font-semibold text-[#5a7aad] hover:text-[#0a1628] transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 text-[11px] font-semibold text-[#5a7aad] hover:text-[#0a1628]"
             >
               Lihat semua
-              <ArrowUpRightIcon className="w-3 h-3" />
+              <ArrowUpRightIcon className="h-3 w-3" />
             </Link>
           </div>
-
           <div className="space-y-2">
-            {topEvents.map((event, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#f0f5fc] transition-all duration-200 hover:translate-x-1"
-              >
-                <img
-                  src={event.image}
-                  alt={event.name}
-                  className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-[#e0e8f0]"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[#0a1628] truncate">
-                    {event.name}
-                  </p>
-                  <p className="text-[11px] text-[#7e91b2] truncate mt-0.5">
-                    {event.subtitle}
-                  </p>
+            {loading ? (
+              <p className="py-8 text-center text-sm text-slate-400">
+                Memuat event...
+              </p>
+            ) : events.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">
+                Belum ada event.
+              </p>
+            ) : (
+              events.slice(0, 6).map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-[#f0f5fc]"
+                >
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#0a1628] to-[#1b2f4e] text-white">
+                    {event.poster ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={
+                          event.poster.startsWith("http")
+                            ? event.poster
+                            : `${API_BASE.replace(/\/api$/, "")}/uploads/${event.poster.replace(
+                                /^\/+/,
+                                ""
+                              )}`
+                        }
+                        alt={event.event_name || "Event"}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <CalendarIcon className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#0a1628]">
+                      {event.event_name || "Tanpa nama"}
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] text-[#7e91b2]">
+                      {event.organizer_name || "Organizer belum tersedia"}
+                    </p>
+                  </div>
+                  <span className="max-w-[90px] truncate rounded-full bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-600">
+                    {event.approval_status || event.status || "Event"}
+                  </span>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-bold text-[#0a1628]">
-                    {formatNumber(event.sold)}
-                  </p>
-                  <p className="text-[9px] text-[#7e91b2]">terjual</p>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        {/* USER BARU */}
-        <div className="min-w-0 rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 shadow-[0_4px_20px_rgba(10,20,40,0.06)] hover:shadow-[0_8px_30px_rgba(10,20,40,0.10)] transition-all duration-300">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
+          <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-[15px] font-bold tracking-[-0.01em] text-[#0a1628] flex items-center gap-2">
-                <UsersIcon className="w-4 h-4 text-[#3B507D]" />
-                Pengguna Baru
+              <h2 className="text-[15px] font-bold text-[#0a1628] flex items-center gap-2">
+                <UsersIcon className="h-4 w-4 text-[#3B507D]" />
+                Pengguna Terbaru
               </h2>
-              <p className="text-[11px] text-[#7e91b2] mt-0.5">
-                Bergabung dalam 24 jam terakhir
+              <p className="mt-0.5 text-[11px] text-[#7e91b2]">
+                Akun yang baru bergabung
               </p>
             </div>
             <Link
               href="/superadmin/users"
-              className="text-[11px] font-semibold text-[#5a7aad] hover:text-[#0a1628] transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 text-[11px] font-semibold text-[#5a7aad] hover:text-[#0a1628]"
             >
               Lihat semua
-              <ArrowUpRightIcon className="w-3 h-3" />
+              <ArrowUpRightIcon className="h-3 w-3" />
             </Link>
           </div>
-
           <div className="space-y-2">
-            {newUsers.map((user, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#f0f5fc] transition-all duration-200 hover:translate-x-1"
-              >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0a1628] to-[#1b2f4e] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-                  {user.name.charAt(0)}
+            {loading ? (
+              <p className="py-8 text-center text-sm text-slate-400">
+                Memuat pengguna...
+              </p>
+            ) : users.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">
+                Belum ada pengguna.
+              </p>
+            ) : (
+              users.slice(0, 6).map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 rounded-xl p-2.5 transition hover:bg-[#f0f5fc]"
+                >
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0a1628] to-[#1b2f4e] text-sm font-bold text-white">
+                    {(user.fullname || user.email || "U")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#0a1628]">
+                      {user.fullname || "Tanpa nama"}
+                    </p>
+                    <p className="truncate text-xs text-[#7e91b2]">
+                      {user.email || "-"}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-indigo-50 px-2 py-1 text-[9px] font-semibold text-indigo-600">
+                    {user.role || "User"}
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[#0a1628] truncate">
-                    {user.name}
-                  </p>
-                  <p className="text-xs text-[#7e91b2] truncate mt-0.5">
-                    {user.email}
-                  </p>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
-        {/* AKTIVITAS */}
-        <div className="min-w-0 rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 shadow-[0_4px_20px_rgba(10,20,40,0.06)] hover:shadow-[0_8px_30px_rgba(10,20,40,0.10)] transition-all duration-300">
+        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
           <div className="mb-4">
-            <h2 className="text-[15px] font-bold tracking-[-0.01em] text-[#0a1628] flex items-center gap-2">
-              <ClockIcon className="w-4 h-4 text-[#3B507D]" />
+            <h2 className="text-[15px] font-bold text-[#0a1628] flex items-center gap-2">
+              <ClockIcon className="h-4 w-4 text-[#3B507D]" />
               Aktivitas Sistem
             </h2>
-            <p className="text-[11px] text-[#7e91b2] mt-0.5">Terbaru di TicketVerse</p>
+            <p className="mt-0.5 text-[11px] text-[#7e91b2]">
+              Aktivitas terbaru TicketVerse
+            </p>
           </div>
-
           <div className="space-y-4">
-            {recentActivities.map((activity, index) => (
-              <div key={index} className="flex items-start gap-3 group">
-                <div className="relative flex flex-col items-center flex-shrink-0">
-                  <span className="w-2 h-2 rounded-full mt-1.5 bg-[#5a8ad0] shadow-[0_0_8px_rgba(90,138,208,0.4)] group-hover:shadow-[0_0_16px_rgba(90,138,208,0.6)] transition-all duration-300" />
-                  {index !== recentActivities.length - 1 && (
-                    <span className="absolute top-4 w-px h-8 bg-[#d0d8e4] group-hover:bg-[#8ab4f8] transition-colors duration-300" />
-                  )}
+            {loading ? (
+              <p className="py-8 text-center text-sm text-slate-400">
+                Memuat aktivitas...
+              </p>
+            ) : activities.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">
+                Belum ada aktivitas.
+              </p>
+            ) : (
+              activities.map((activity, index) => (
+                <div key={activity.id} className="flex items-start gap-3">
+                  <div className="relative flex flex-shrink-0 flex-col items-center">
+                    <span className="mt-1.5 h-2 w-2 rounded-full bg-[#5a8ad0] shadow-[0_0_8px_rgba(90,138,208,0.4)]" />
+                    {index !== activities.length - 1 && (
+                      <span className="absolute top-4 h-8 w-px bg-[#d0d8e4]" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs leading-relaxed text-[#0a1628] sm:text-sm">
+                      {activity.text}
+                    </p>
+                    <p className="mt-1 text-[10px] text-[#7e91b2]">
+                      {getRelativeTime(activity.date)}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm text-[#0a1628] leading-relaxed">
-                    {activity.text}
-                  </p>
-                  <p className="text-[10px] text-[#7e91b2] mt-1">{activity.time}</p>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </section>
 
-      {/* ======================================================
-          SYSTEM SUMMARY — Premium Cards
-          ====================================================== */}
-
+      {/* SYSTEM */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <SystemCard
-          icon={<CheckCircleIcon className="w-4 h-4" />}
+          icon={<CheckCircleIcon className="h-4 w-4" />}
           iconBg="bg-emerald-500/10"
-          iconColor="text-emerald-400"
+          iconColor="text-emerald-500"
           title="Status Sistem"
-          value="All Systems Operational"
-          subtitle="Version 1.0.0"
-          borderColor="border-emerald-500/20"
-          glowColor="rgba(16,185,129,0.1)"
+          value={systemStatus}
+          subtitle="Status koneksi dashboard"
         />
         <SystemCard
-          icon={<CalendarIcon className="w-4 h-4" />}
+          icon={<CalendarIcon className="h-4 w-4" />}
           iconBg="bg-blue-500/10"
-          iconColor="text-blue-400"
-          title="Event Aktif"
-          value="72"
-          subtitle="dari 128 events"
-          borderColor="border-blue-500/20"
-          glowColor="rgba(59,130,246,0.1)"
+          iconColor="text-blue-500"
+          title="Total Event"
+          value={formatNumber(summary.events)}
+          subtitle="Data dari database events"
         />
         <SystemCard
-          icon={<TicketIcon className="w-4 h-4" />}
+          icon={<TicketIcon className="h-4 w-4" />}
           iconBg="bg-purple-500/10"
-          iconColor="text-purple-400"
-          title="Tiket Terjual"
-          value="18.246"
-          subtitle="dari 24.789 tiket"
-          borderColor="border-purple-500/20"
-          glowColor="rgba(168,85,247,0.1)"
+          iconColor="text-purple-500"
+          title="Total Tiket"
+          value={formatNumber(summary.tickets)}
+          subtitle="Data dari database tickets"
         />
         <SystemCard
-          icon={<ClockIcon className="w-4 h-4" />}
+          icon={<ClockIcon className="h-4 w-4" />}
           iconBg="bg-amber-500/10"
-          iconColor="text-amber-400"
-          title="Pending"
-          value="312"
-          subtitle="perlu verifikasi"
-          borderColor="border-amber-500/20"
-          glowColor="rgba(245,158,11,0.1)"
+          iconColor="text-amber-500"
+          title="Transaksi Pending"
+          value={formatNumber(pendingTransactions.length)}
+          subtitle="Dari data terbaru yang dimuat"
         />
       </section>
 
-      {/* ======================================================
-          STYLE — Animations
-          ====================================================== */}
-
-      <style jsx>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        @keyframes shimmer {
-          0% {
-            background-position: -200% center;
-          }
-          100% {
-            background-position: 200% center;
-          }
-        }
-
-        .animate-shimmer {
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(138, 180, 248, 0.15),
-            transparent
-          );
-          background-size: 200% 100%;
-          animation: shimmer 6s ease-in-out infinite;
-        }
-
-        .animate-in {
-          animation: fadeInUp 0.6s ease both;
-        }
-
-        .delay-100 {
-          animation-delay: 0.1s;
-        }
-        .delay-200 {
-          animation-delay: 0.2s;
-        }
-        .delay-300 {
-          animation-delay: 0.3s;
-        }
-        .delay-75 {
-          animation-delay: 0.75s;
-        }
-        .delay-150 {
-          animation-delay: 1.5s;
-        }
-
-        .fade-in {
-          opacity: 1;
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// ============================================================
-// SYSTEM CARD — Premium
-// ============================================================
-
-function SystemCard({ icon, iconBg, iconColor, title, value, subtitle, borderColor, glowColor }) {
-  return (
-    <div
-      className="group rounded-2xl bg-white/90 backdrop-blur-sm border p-5 shadow-[0_4px_20px_rgba(10,20,40,0.06)] hover:shadow-[0_8px_30px_rgba(10,20,40,0.10)] transition-all duration-300 hover:-translate-y-1"
-      style={{ borderColor: borderColor || "rgba(224,232,240,0.5)" }}
-    >
-      <div className="flex items-center gap-2">
-        <div
-          className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:scale-110`}
-          style={{
-            background: iconBg || "#e6f0fa",
-            boxShadow: glowColor ? `0 0 20px ${glowColor}` : "none",
-          }}
-        >
-          <span className={iconColor || "text-[#4a6b9a]"}>{icon}</span>
-        </div>
-        <p className="text-[11px] font-medium text-[#7e91b2]">{title}</p>
-      </div>
-      <p className="text-[20px] font-bold text-[#0a1628] mt-2">{value}</p>
-      <p className="text-[11px] text-[#7e91b2] mt-0.5">{subtitle}</p>
+      <p className="text-right text-[10px] text-slate-400">
+        Data dashboard diambil dari backend TicketVerse.
+      </p>
     </div>
   );
 }

@@ -1,11 +1,17 @@
 
 const express = require("express");
+const router = express.Router();
+
+const verifyToken = require("../middleware/auth");
+const requireSuperAdmin = require("../middleware/requireSuperAdmin");
 
 const {
   getAllNotifications,
+  getNotificationRecipients,
   getNotificationById,
   getNotificationsByUser,
   createNotification,
+  broadcastNotification,
   updateNotification,
   markAsRead,
   deleteNotification,
@@ -15,30 +21,25 @@ const {
   midtransNotification,
 } = require("../controllers/paymentController");
 
-const router = express.Router();
-
-// ============================================================
-// WEBHOOK MIDTRANS
-// POST /api/notifications/midtrans
-// ============================================================
-// Tidak memakai middleware login karena request berasal dari
-// server Midtrans. Validasi signature dilakukan di controller.
+// WEBHOOK MIDTRANS: TETAP PUBLIC
 router.post("/midtrans", midtransNotification);
 
-// ============================================================
-// NOTIFIKASI APLIKASI
-// ============================================================
+// SEMUA ROUTE APLIKASI WAJIB LOGIN
+router.use(verifyToken);
 
-router.get("/", getAllNotifications);
+// NOTIFIKASI CUSTOMER
 router.get("/user/:userId", getNotificationsByUser);
-
-// Route spesifik diletakkan sebelum route dinamis /:id.
 router.patch("/:id/read", markAsRead);
 
-router.post("/", createNotification);
-router.put("/:id", updateNotification);
-router.delete("/:id", deleteNotification);
+// PENGELOLAAN KHUSUS SUPER ADMIN
+router.get("/", requireSuperAdmin, getAllNotifications);
+router.get("/recipients", requireSuperAdmin, getNotificationRecipients);
+router.get("/:id", requireSuperAdmin, getNotificationById);
 
-router.get("/:id", getNotificationById);
+router.post("/", requireSuperAdmin, createNotification);
+router.post("/broadcast", requireSuperAdmin, broadcastNotification);
+
+router.put("/:id", requireSuperAdmin, updateNotification);
+router.delete("/:id", requireSuperAdmin, deleteNotification);
 
 module.exports = router;

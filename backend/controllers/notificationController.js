@@ -1,8 +1,7 @@
+
 const db = require("../config/db");
 
-// ===============================
-// GET ALL NOTIFICATIONS
-// ===============================
+// GET SEMUA NOTIFIKASI UNTUK ADMIN
 const getAllNotifications = async (req, res) => {
   try {
     const [rows] = await db.query(`
@@ -13,15 +12,11 @@ const getAllNotifications = async (req, res) => {
         n.message,
         n.is_read,
         n.created_at,
-
         u.fullname,
         u.email
-
       FROM notifications n
-      LEFT JOIN users u
-        ON n.user_id = u.id
-
-      ORDER BY n.id DESC
+      LEFT JOIN users u ON n.user_id = u.id
+      ORDER BY n.created_at DESC
     `);
 
     res.json({
@@ -29,46 +24,49 @@ const getAllNotifications = async (req, res) => {
       notifications: rows,
     });
   } catch (error) {
-    console.error("GET NOTIFICATIONS ERROR:", error);
-
+    console.error(error);
     res.status(500).json({
       success: false,
-      message: "Gagal mengambil data notifikasi",
-      error: error.message,
+      message: "Gagal mengambil notifikasi",
     });
   }
 };
 
-// ===============================
-// GET NOTIFICATION BY ID
-// ===============================
+// GET DAFTAR CUSTOMER UNTUK PILIHAN PENERIMA
+const getNotificationRecipients = async (req, res) => {
+  try {
+    const [users] = await db.query(`
+      SELECT id, fullname, email
+      FROM users
+      WHERE role = 'customer'
+      ORDER BY fullname ASC
+    `);
+
+    res.json({
+      success: true,
+      users,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengambil daftar customer",
+    });
+  }
+};
+
+// GET NOTIFIKASI BERDASARKAN ID
 const getNotificationById = async (req, res) => {
   try {
-    const { id } = req.params;
-
     const [rows] = await db.query(
-      `
-      SELECT
-        n.id,
-        n.user_id,
-        n.title,
-        n.message,
-        n.is_read,
-        n.created_at,
-
-        u.fullname,
-        u.email
-
-      FROM notifications n
-      LEFT JOIN users u
-        ON n.user_id = u.id
-
-      WHERE n.id = ?
-      `,
-      [id]
+      `SELECT n.*, u.fullname, u.email
+       FROM notifications n
+       LEFT JOIN users u ON u.id = n.user_id
+       WHERE n.id = ?`,
+      [req.params.id]
     );
 
-    if (rows.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({
         success: false,
         message: "Notifikasi tidak ditemukan",
@@ -80,36 +78,31 @@ const getNotificationById = async (req, res) => {
       notification: rows[0],
     });
   } catch (error) {
-    console.error("GET NOTIFICATION BY ID ERROR:", error);
-
+    console.error(error);
     res.status(500).json({
       success: false,
-      message: "Gagal mengambil data notifikasi",
-      error: error.message,
+      message: "Gagal mengambil notifikasi",
     });
   }
 };
 
-// ===============================
-// GET NOTIFICATIONS BY USER
-// ===============================
+// GET NOTIFIKASI CUSTOMER
 const getNotificationsByUser = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = Number(req.params.userId);
+
+    if (req.user.role !== "super_admin" && req.user.id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Tidak memiliki akses",
+      });
+    }
 
     const [rows] = await db.query(
-      `
-      SELECT
-        id,
-        user_id,
-        title,
-        message,
-        is_read,
-        created_at
-      FROM notifications
-      WHERE user_id = ?
-      ORDER BY id DESC
-      `,
+      `SELECT *
+       FROM notifications
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
       [userId]
     );
 
@@ -118,320 +111,271 @@ const getNotificationsByUser = async (req, res) => {
       notifications: rows,
     });
   } catch (error) {
-    console.error("GET USER NOTIFICATIONS ERROR:", error);
-
+    console.error(error);
     res.status(500).json({
       success: false,
-      message: "Gagal mengambil notifikasi user",
-      error: error.message,
+      message: "Gagal mengambil notifikasi pengguna",
     });
   }
 };
 
-// ===============================
-// CREATE NOTIFICATION
-// ===============================
+// BUAT NOTIFIKASI UNTUK SATU CUSTOMER
 const createNotification = async (req, res) => {
   try {
-    const {
-      user_id,
-      title,
-      message,
-      is_read,
-    } = req.body;
+    const { user_id, title, message } = req.body;
 
-    if (!user_id || !title || !message) {
+    if (!user_id || !title?.trim() || !message?.trim()) {
       return res.status(400).json({
         success: false,
-        message: "user_id, title, dan message wajib diisi",
+        message: "Penerima, judul, dan pesan wajib diisi",
       });
     }
 
-    // Cek user
     const [users] = await db.query(
-      `
-      SELECT id
-      FROM users
-      WHERE id = ?
-      `,
+      `SELECT id FROM users WHERE id = ? AND role = 'customer'`,
       [user_id]
     );
 
-    if (users.length === 0) {
+    if (!users.length) {
       return res.status(404).json({
         success: false,
-        message: "User tidak ditemukan",
+        message: "Customer tidak ditemukan",
       });
     }
 
-    const finalIsRead =
-      is_read === true || is_read === 1 ? 1 : 0;
-
     const [result] = await db.query(
-      `
-      INSERT INTO notifications
-      (
-        user_id,
-        title,
-        message,
-        is_read
-      )
-      VALUES (?, ?, ?, ?)
-      `,
-      [
-        user_id,
-        title,
-        message,
-        finalIsRead,
-      ]
-    );
-
-    const [newNotification] = await db.query(
-      `
-      SELECT
-        n.id,
-        n.user_id,
-        n.title,
-        n.message,
-        n.is_read,
-        n.created_at,
-        u.fullname,
-        u.email
-      FROM notifications n
-      LEFT JOIN users u
-        ON n.user_id = u.id
-      WHERE n.id = ?
-      `,
-      [result.insertId]
+      `INSERT INTO notifications
+       (user_id, title, message, is_read)
+       VALUES (?, ?, ?, 0)`,
+      [user_id, title.trim(), message.trim()]
     );
 
     res.status(201).json({
       success: true,
       message: "Notifikasi berhasil dibuat",
-      notification: newNotification[0],
+      id: result.insertId,
     });
   } catch (error) {
-    console.error("CREATE NOTIFICATION ERROR:", error);
-
+    console.error(error);
     res.status(500).json({
       success: false,
       message: "Gagal membuat notifikasi",
-      error: error.message,
     });
   }
 };
 
-// ===============================
-// UPDATE NOTIFICATION
-// ===============================
-const updateNotification = async (req, res) => {
+// BROADCAST KE SELURUH CUSTOMER ATAU CUSTOMER PILIHAN
+const broadcastNotification = async (req, res) => {
+  const connection = await db.getConnection();
+
   try {
-    const { id } = req.params;
+    const { title, message, recipient_type, user_ids } = req.body;
 
-    const {
-      title,
-      message,
-      is_read,
-    } = req.body;
-
-    if (!title || !message) {
+    if (!title?.trim() || !message?.trim()) {
       return res.status(400).json({
         success: false,
-        message: "title dan message wajib diisi",
+        message: "Judul dan pesan wajib diisi",
       });
     }
 
-    if (
-      is_read !== true &&
-      is_read !== false &&
-      is_read !== 0 &&
-      is_read !== 1
-    ) {
+    let users = [];
+
+    if (recipient_type === "all") {
+      const [rows] = await connection.query(
+        `SELECT id FROM users WHERE role = 'customer'`
+      );
+      users = rows;
+    } else if (recipient_type === "selected") {
+      if (!Array.isArray(user_ids) || user_ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Pilih minimal satu customer",
+        });
+      }
+
+      const ids = [...new Set(
+        user_ids.map(Number).filter(id => Number.isInteger(id) && id > 0)
+      )];
+
+      if (!ids.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Daftar customer tidak valid",
+        });
+      }
+
+      const placeholders = ids.map(() => "?").join(",");
+
+      const [rows] = await connection.query(
+        `SELECT id FROM users
+         WHERE role = 'customer'
+         AND id IN (${placeholders})`,
+        ids
+      );
+
+      if (rows.length !== ids.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Terdapat customer yang tidak valid",
+        });
+      }
+
+      users = rows;
+    } else {
       return res.status(400).json({
         success: false,
-        message: "is_read harus true, false, 0, atau 1",
+        message: "Jenis penerima tidak valid",
       });
     }
 
-    const [notifications] = await db.query(
-      `
-      SELECT id
-      FROM notifications
-      WHERE id = ?
-      `,
-      [id]
+    if (!users.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Tidak ada customer sebagai penerima",
+      });
+    }
+
+    await connection.beginTransaction();
+
+    const values = users.map(user => [
+      user.id,
+      title.trim(),
+      message.trim(),
+      0,
+    ]);
+
+    await connection.query(
+      `INSERT INTO notifications
+       (user_id, title, message, is_read)
+       VALUES ?`,
+      [values]
     );
 
-    if (notifications.length === 0) {
+    await connection.commit();
+
+    res.status(201).json({
+      success: true,
+      message: "Notifikasi berhasil dikirim",
+      total_recipients: users.length,
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengirim notifikasi",
+    });
+  } finally {
+    connection.release();
+  }
+};
+
+// UPDATE NOTIFIKASI
+const updateNotification = async (req, res) => {
+  try {
+    const { title, message } = req.body;
+
+    if (!title?.trim() || !message?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Judul dan pesan wajib diisi",
+      });
+    }
+
+    const [result] = await db.query(
+      `UPDATE notifications
+       SET title = ?, message = ?
+       WHERE id = ?`,
+      [title.trim(), message.trim(), req.params.id]
+    );
+
+    if (!result.affectedRows) {
       return res.status(404).json({
         success: false,
         message: "Notifikasi tidak ditemukan",
       });
     }
-
-    const finalIsRead =
-      is_read === true || is_read === 1 ? 1 : 0;
-
-    await db.query(
-      `
-      UPDATE notifications
-      SET
-        title = ?,
-        message = ?,
-        is_read = ?
-      WHERE id = ?
-      `,
-      [
-        title,
-        message,
-        finalIsRead,
-        id,
-      ]
-    );
-
-    const [updatedNotification] = await db.query(
-      `
-      SELECT
-        n.id,
-        n.user_id,
-        n.title,
-        n.message,
-        n.is_read,
-        n.created_at,
-        u.fullname,
-        u.email
-      FROM notifications n
-      LEFT JOIN users u
-        ON n.user_id = u.id
-      WHERE n.id = ?
-      `,
-      [id]
-    );
 
     res.json({
       success: true,
       message: "Notifikasi berhasil diperbarui",
-      notification: updatedNotification[0],
     });
   } catch (error) {
-    console.error("UPDATE NOTIFICATION ERROR:", error);
-
+    console.error(error);
     res.status(500).json({
       success: false,
       message: "Gagal memperbarui notifikasi",
-      error: error.message,
     });
   }
 };
 
-// ===============================
 // MARK AS READ
-// ===============================
 const markAsRead = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const [notifications] = await db.query(
-      `
-      SELECT id
-      FROM notifications
-      WHERE id = ?
-      `,
-      [id]
+    const [result] = await db.query(
+      `UPDATE notifications
+       SET is_read = 1
+       WHERE id = ?
+       AND user_id = ?`,
+      [req.params.id, req.user.id]
     );
 
-    if (notifications.length === 0) {
+    if (!result.affectedRows) {
       return res.status(404).json({
         success: false,
         message: "Notifikasi tidak ditemukan",
       });
     }
-
-    await db.query(
-      `
-      UPDATE notifications
-      SET is_read = 1
-      WHERE id = ?
-      `,
-      [id]
-    );
-
-    const [updatedNotification] = await db.query(
-      `
-      SELECT *
-      FROM notifications
-      WHERE id = ?
-      `,
-      [id]
-    );
 
     res.json({
       success: true,
-      message: "Notifikasi ditandai sudah dibaca",
-      notification: updatedNotification[0],
+      message: "Notifikasi sudah dibaca",
     });
   } catch (error) {
-    console.error("MARK NOTIFICATION READ ERROR:", error);
-
+    console.error(error);
     res.status(500).json({
       success: false,
-      message: "Gagal menandai notifikasi",
-      error: error.message,
+      message: "Gagal memperbarui status",
     });
   }
 };
 
-// ===============================
-// DELETE NOTIFICATION
-// ===============================
+// DELETE NOTIFIKASI
 const deleteNotification = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const [notifications] = await db.query(
-      `
-      SELECT id
-      FROM notifications
-      WHERE id = ?
-      `,
-      [id]
+    const [result] = await db.query(
+      `DELETE FROM notifications WHERE id = ?`,
+      [req.params.id]
     );
 
-    if (notifications.length === 0) {
+    if (!result.affectedRows) {
       return res.status(404).json({
         success: false,
         message: "Notifikasi tidak ditemukan",
       });
     }
-
-    await db.query(
-      `
-      DELETE FROM notifications
-      WHERE id = ?
-      `,
-      [id]
-    );
 
     res.json({
       success: true,
       message: "Notifikasi berhasil dihapus",
     });
   } catch (error) {
-    console.error("DELETE NOTIFICATION ERROR:", error);
-
+    console.error(error);
     res.status(500).json({
       success: false,
       message: "Gagal menghapus notifikasi",
-      error: error.message,
     });
   }
 };
 
 module.exports = {
   getAllNotifications,
+  getNotificationRecipients,
   getNotificationById,
   getNotificationsByUser,
   createNotification,
+  broadcastNotification,
   updateNotification,
   markAsRead,
   deleteNotification,
