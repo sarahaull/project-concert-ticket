@@ -5,87 +5,99 @@ const db = require("../config/db");
 // GENERATE TICKET
 // =====================================================
 
+
+
+
+// =====================================================
+// GENERATE TICKET
+// =====================================================
+
 const generateTicketsForOrder = async (orderId) => {
-  // Ambil semua order detail
-  const [orderDetails] = await db.query(
-    `
-    SELECT
-      od.id,
-      od.quantity,
-      od.ticket_category_id
-    FROM order_details od
-    WHERE od.order_id = ?
-    `,
-    [orderId]
-  );
+  const connection = await db.getConnection();
 
-  if (orderDetails.length === 0) {
-    throw new Error("Order detail tidak ditemukan");
-  }
+  try {
+    await connection.beginTransaction();
 
-  let totalCreated = 0;
-
-  for (const detail of orderDetails) {
-    // Cek tiket yang sudah dibuat
-    const [existingTickets] = await db.query(
+    const [orderDetails] = await connection.query(
       `
-      SELECT id
-      FROM tickets
-      WHERE order_detail_id = ?
+      SELECT
+        od.id,
+        od.quantity,
+        od.ticket_category_id
+      FROM order_details od
+      WHERE od.order_id = ?
+      FOR UPDATE
       `,
-      [detail.id]
+      [orderId]
     );
 
-    const existingCount = existingTickets.length;
-    const requiredQuantity = Number(detail.quantity || 0);
-
-    // Kalau semua tiket sudah dibuat, skip
-    if (existingCount >= requiredQuantity) {
-      continue;
+    if (!orderDetails.length) {
+      throw new Error("Order detail tidak ditemukan");
     }
 
-    const remainingQuantity =
-      requiredQuantity - existingCount;
+    let totalCreated = 0;
 
-    for (let i = 0; i < remainingQuantity; i++) {
-      const uniquePart =
-        Date.now().toString(36).toUpperCase() +
-        crypto
-          .randomBytes(4)
-          .toString("hex")
-          .toUpperCase();
-
-      const ticketCode =
-        `TV-${uniquePart}`;
-
-      // QR berisi ticket code.
-      // Nanti scanner bisa menggunakan nilai ini.
-      const qrCode = ticketCode;
-
-      await db.query(
+    for (const detail of orderDetails) {
+      const [existingTickets] = await connection.query(
         `
-        INSERT INTO tickets
-        (
-          order_detail_id,
-          qr_code,
-          ticket_code,
-          check_in
-        )
-        VALUES (?, ?, ?, 'Belum')
+        SELECT COUNT(*) AS total
+        FROM tickets
+        WHERE order_detail_id = ?
         `,
-        [
-          detail.id,
-          qrCode,
-          ticketCode,
-        ]
+        [detail.id]
       );
 
-      totalCreated++;
-    }
-  }
+      const existingCount = Number(existingTickets[0].total);
+      const requiredQuantity = Number(detail.quantity || 0);
 
-  return totalCreated;
+      if (existingCount >= requiredQuantity) {
+        continue;
+      }
+
+      const remainingQuantity = requiredQuantity - existingCount;
+
+      for (let i = 0; i < remainingQuantity; i++) {
+        const ticketCode =
+          `TV-${Date.now().toString(36).toUpperCase()}-${crypto
+            .randomBytes(5)
+            .toString("hex")
+            .toUpperCase()}`;
+
+        // Token QR acak, terpisah dari kode tiket.
+        const qrCode = crypto.randomBytes(32).toString("hex");
+
+        await connection.query(
+          `
+          INSERT INTO tickets (
+            order_detail_id,
+            qr_code,
+            ticket_code,
+            check_in
+          )
+          VALUES (?, ?, ?, 'Belum')
+          `,
+          [
+            detail.id,
+            qrCode,
+            ticketCode,
+          ]
+        );
+
+        totalCreated++;
+      }
+    }
+
+    await connection.commit();
+
+    return totalCreated;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };
+
 
 // =====================================================
 // MIDTRANS NOTIFICATION

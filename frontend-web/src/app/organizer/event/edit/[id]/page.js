@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -20,13 +20,11 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  Eye,
+  Info,
+  ImagePlus,
+  Trash2,
+  Sparkles,
 } from "lucide-react";
-
-// ============================================================
-// API CONFIGURATION
-// Mendukung NEXT_PUBLIC_API_URL dengan atau tanpa /api
-// ============================================================
 
 const API_BASE = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -37,16 +35,43 @@ const API_BASE = (
 const API = `${API_BASE}/api`;
 
 const STATUS_OPTIONS = [
-  "Coming Soon",
-  "Available",
-  "Limited",
-  "Sold Out",
-  "Cancelled",
+  {
+    value: "Coming Soon",
+    label: "Coming Soon",
+    dot: "bg-slate-400",
+  },
+  {
+    value: "Available",
+    label: "Available",
+    dot: "bg-sky-500",
+  },
+  {
+    value: "Limited",
+    label: "Limited",
+    dot: "bg-amber-500",
+  },
+  {
+    value: "Sold Out",
+    label: "Sold Out",
+    dot: "bg-rose-500",
+  },
+  {
+    value: "Cancelled",
+    label: "Cancelled",
+    dot: "bg-slate-400",
+  },
 ];
 
-// ============================================================
-// HELPERS
-// ============================================================
+const inputClass =
+  "h-10 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06] disabled:bg-slate-50 disabled:text-slate-500";
+
+const labelClass =
+  "mb-1.5 block text-[12.5px] font-semibold text-slate-700";
+
+function getToken() {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("token") || "";
+}
 
 function getPosterUrl(poster) {
   if (!poster) return "";
@@ -61,10 +86,10 @@ function getPosterUrl(poster) {
 function formatDateForInput(value) {
   if (!value) return "";
 
-  const str = String(value);
+  const stringValue = String(value);
 
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-    return str.slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}/.test(stringValue)) {
+    return stringValue.slice(0, 10);
   }
 
   const date = new Date(value);
@@ -74,15 +99,14 @@ function formatDateForInput(value) {
   return date.toISOString().slice(0, 10);
 }
 
-// Hindari perubahan tanggal karena konversi timezone.
 function formatDateTimeLocalInput(value) {
   if (!value) {
     return { date: "", time: "" };
   }
 
-  const str = String(value);
+  const stringValue = String(value);
 
-  const match = str.match(
+  const match = stringValue.match(
     /^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/
   );
 
@@ -107,14 +131,27 @@ function formatDateTimeLocalInput(value) {
 
 function formatTimeForInput(value) {
   if (!value) return "";
-
   return String(value).slice(0, 5);
 }
 
-function getList(data, keys) {
+function getList(result, keys) {
+  if (!result) return [];
+
   for (const key of keys) {
-    if (Array.isArray(data?.[key])) {
-      return data[key];
+    if (Array.isArray(result[key])) {
+      return result[key];
+    }
+  }
+
+  if (Array.isArray(result.data)) {
+    return result.data;
+  }
+
+  if (result.data && typeof result.data === "object") {
+    for (const key of keys) {
+      if (Array.isArray(result.data[key])) {
+        return result.data[key];
+      }
     }
   }
 
@@ -135,26 +172,31 @@ async function readJson(response) {
 }
 
 async function apiRequest(path, options = {}) {
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("token")
-      : null;
+  const token = getToken();
 
   if (!token) {
-    throw new Error(
-      "Token login tidak ditemukan. Silakan login kembali."
-    );
+    throw new Error("Token login tidak ditemukan. Silakan login kembali.");
+  }
+
+  const isFormData =
+    typeof FormData !== "undefined" &&
+    options.body instanceof FormData;
+
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    ...(!isFormData && options.body
+      ? { "Content-Type": "application/json" }
+      : {}),
+    ...options.headers,
+  };
+
+  if (isFormData) {
+    delete headers["Content-Type"];
   }
 
   const response = await fetch(`${API}${path}`, {
     ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(options.body instanceof FormData
-        ? {}
-        : { "Content-Type": "application/json" }),
-      ...options.headers,
-    },
+    headers,
   });
 
   const data = await readJson(response);
@@ -168,44 +210,52 @@ async function apiRequest(path, options = {}) {
   return data;
 }
 
-// ============================================================
-// COMPONENTS
-// ============================================================
-
-function InputLabel({ children, required = false }) {
+function SectionHeader({ icon: Icon, title, description }) {
   return (
-    <label className="mb-2 block text-sm font-semibold text-slate-700">
-      {children}
-      {required && (
-        <span className="ml-1 text-red-500">*</span>
-      )}
-    </label>
-  );
-}
+    <div className="mb-5 flex items-center gap-3 border-b border-slate-100 pb-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0B1220]/[0.06] text-[#0B1220]">
+        <Icon size={16} />
+      </div>
 
-function FieldIcon({ children }) {
-  return (
-    <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-      {children}
+      <div>
+        <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[#0B1220]">
+          {title}
+        </h2>
+        <p className="mt-0.5 text-[12px] text-slate-500">
+          {description}
+        </p>
+      </div>
     </div>
   );
 }
 
-const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50";
+function Field({ label, required, icon: Icon, children }) {
+  return (
+    <div className="group min-w-0">
+      <label className={labelClass}>
+        {label}
+        {required && <span className="ml-0.5 text-rose-500">*</span>}
+      </label>
 
-const iconInputClass = `${inputClass} pl-11`;
+      <div className="relative">
+        {Icon && (
+          <Icon
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400 transition-colors duration-200 group-focus-within:text-[#0B1220]"
+          />
+        )}
 
-// ============================================================
-// MAIN PAGE
-// ============================================================
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function EditEventPage() {
   const params = useParams();
   const router = useRouter();
 
-  const id = params?.id;
-
+  const id = params?.id ? String(params.id) : "";
   const fileInputRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
@@ -239,156 +289,84 @@ export default function EditEventPage() {
     status: "Coming Soon",
   });
 
-  // ==========================================================
-  // LOAD EVENT + MASTER DATA
-  // ==========================================================
-
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!id) return;
 
-    let cancelled = false;
+    setLoading(true);
+    setLoadingOptions(true);
+    setError("");
 
-    async function fetchData() {
-      try {
-        setLoading(true);
-        setLoadingOptions(true);
-        setError("");
+    try {
+      const results = await Promise.allSettled([
+        apiRequest(`/events/${encodeURIComponent(id)}`),
+        apiRequest("/categories"),
+        apiRequest("/artists"),
+        apiRequest("/venues"),
+      ]);
 
-        const token = localStorage.getItem("token");
+      const eventResult = results[0];
 
-        if (!token) {
-          throw new Error(
-            "Token login tidak ditemukan. Silakan login kembali."
-          );
-        }
-
-        // Ambil detail event dan data pilihan.
-        const results = await Promise.allSettled([
-          apiRequest(`/events/${id}`),
-          apiRequest("/categories"),
-          apiRequest("/artists"),
-          apiRequest("/venues"),
-        ]);
-
-        if (cancelled) return;
-
-        // Detail event wajib berhasil.
-        const eventResult = results[0];
-
-        if (eventResult.status === "rejected") {
-          throw eventResult.reason;
-        }
-
-        const eventData = eventResult.value;
-        const event = eventData.event;
-
-        if (!eventData.success || !event) {
-          throw new Error(
-            eventData.message || "Data event tidak ditemukan."
-          );
-        }
-
-        // Isi pilihan kategori, artis, venue.
-        const categoryResult = results[1];
-        const artistResult = results[2];
-        const venueResult = results[3];
-
-        if (categoryResult.status === "fulfilled") {
-          setCategories(
-            getList(categoryResult.value, [
-              "categories",
-              "data",
-            ])
-          );
-        }
-
-        if (artistResult.status === "fulfilled") {
-          setArtists(
-            getList(artistResult.value, [
-              "artists",
-              "data",
-            ])
-          );
-        }
-
-        if (venueResult.status === "fulfilled") {
-          setVenues(
-            getList(venueResult.value, [
-              "venues",
-              "data",
-            ])
-          );
-        }
-
-        // Parsing jadwal penjualan.
-        const start = formatDateTimeLocalInput(
-          event.ticket_sale_start
-        );
-
-        const end = formatDateTimeLocalInput(
-          event.ticket_sale_end
-        );
-
-        setForm({
-          category_id: event.category_id
-            ? String(event.category_id)
-            : "",
-
-          artist_id: event.artist_id
-            ? String(event.artist_id)
-            : "",
-
-          venue_id: event.venue_id
-            ? String(event.venue_id)
-            : "",
-
-          event_name: event.event_name || "",
-          description: event.description || "",
-          poster: event.poster || "",
-
-          event_date: formatDateForInput(event.event_date),
-          event_time: formatTimeForInput(event.event_time),
-
-          ticket_sale_start_date: start.date,
-          ticket_sale_start_time: start.time,
-
-          ticket_sale_end_date: end.date,
-          ticket_sale_end_time: end.time,
-
-          status: event.status || "Coming Soon",
-        });
-
-        setPosterMode(
-          event.poster &&
-            !/^https?:\/\//i.test(event.poster)
-            ? "file"
-            : "url"
-        );
-      } catch (err) {
-        if (!cancelled) {
-          console.error("FETCH EDIT EVENT ERROR:", err);
-          setError(
-            err.message || "Gagal mengambil data event."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setLoadingOptions(false);
-        }
+      if (eventResult.status === "rejected") {
+        throw eventResult.reason;
       }
+
+      const eventData = eventResult.value;
+
+      const event =
+        eventData.event ||
+        eventData.data?.event ||
+        eventData.data;
+
+      if (!event || !event.id) {
+        throw new Error("Data event tidak ditemukan.");
+      }
+
+      if (results[1].status === "fulfilled") {
+        setCategories(getList(results[1].value, ["categories"]));
+      }
+
+      if (results[2].status === "fulfilled") {
+        setArtists(getList(results[2].value, ["artists"]));
+      }
+
+      if (results[3].status === "fulfilled") {
+        setVenues(getList(results[3].value, ["venues"]));
+      }
+
+      const saleStart = formatDateTimeLocalInput(event.ticket_sale_start);
+      const saleEnd = formatDateTimeLocalInput(event.ticket_sale_end);
+
+      setForm({
+        category_id: event.category_id ? String(event.category_id) : "",
+        artist_id: event.artist_id ? String(event.artist_id) : "",
+        venue_id: event.venue_id ? String(event.venue_id) : "",
+        event_name: event.event_name || "",
+        description: event.description || "",
+        poster: event.poster || "",
+        event_date: formatDateForInput(event.event_date),
+        event_time: formatTimeForInput(event.event_time),
+        ticket_sale_start_date: saleStart.date,
+        ticket_sale_start_time: saleStart.time,
+        ticket_sale_end_date: saleEnd.date,
+        ticket_sale_end_time: saleEnd.time,
+        status: event.status || "Coming Soon",
+      });
+
+      setPosterMode(
+        event.poster && !/^https?:\/\//i.test(event.poster) ? "file" : "url"
+      );
+    } catch (err) {
+      console.error("FETCH EDIT EVENT ERROR:", err);
+      setError(err.message || "Gagal mengambil data event.");
+    } finally {
+      setLoading(false);
+      setLoadingOptions(false);
     }
-
-    fetchData();
-
-    return () => {
-      cancelled = true;
-    };
   }, [id]);
 
-  // ==========================================================
-  // POSTER PREVIEW
-  // ==========================================================
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (!posterFile) {
@@ -397,12 +375,9 @@ export default function EditEventPage() {
     }
 
     const objectUrl = URL.createObjectURL(posterFile);
-
     setFilePreview(objectUrl);
 
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
+    return () => URL.revokeObjectURL(objectUrl);
   }, [posterFile]);
 
   const preview =
@@ -410,16 +385,22 @@ export default function EditEventPage() {
       ? filePreview
       : getPosterUrl(form.poster);
 
-  // ==========================================================
-  // FORM HANDLERS
-  // ==========================================================
+  const handleChange = (event) => {
+    const { name, value } = event.target;
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       [name]: value,
+    }));
+
+    setError("");
+    setSuccess("");
+  };
+
+  const handleStatusChange = (status) => {
+    setForm((previous) => ({
+      ...previous,
+      status,
     }));
 
     setError("");
@@ -428,13 +409,11 @@ export default function EditEventPage() {
 
   const handlePosterModeChange = (mode) => {
     setPosterMode(mode);
-
     setError("");
     setSuccess("");
 
     if (mode === "url") {
       setPosterFile(null);
-      setFilePreview("");
 
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
@@ -442,26 +421,22 @@ export default function EditEventPage() {
     }
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
 
     if (!file) return;
 
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
 
     if (!allowedTypes.includes(file.type)) {
       setError("Format poster harus JPG, PNG, atau WEBP.");
-      e.target.value = "";
+      event.target.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       setError("Ukuran poster maksimal 5 MB.");
-      e.target.value = "";
+      event.target.value = "";
       return;
     }
 
@@ -470,76 +445,65 @@ export default function EditEventPage() {
     setSuccess("");
   };
 
-  // ==========================================================
-  // UPLOAD POSTER
-  // ==========================================================
+  const removeSelectedPoster = () => {
+    setPosterFile(null);
 
-  async function uploadPoster() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  async function uploadPoster(eventId) {
     if (!posterFile) {
       throw new Error("Silakan pilih poster terlebih dahulu.");
+    }
+
+    if (!eventId) {
+      throw new Error("ID event tidak ditemukan.");
     }
 
     const formData = new FormData();
 
     formData.append("poster", posterFile);
+    formData.append("event_id", String(eventId));
+    formData.append("eventId", String(eventId));
+    formData.append("id", String(eventId));
 
     const data = await apiRequest("/uploads/event-poster", {
       method: "POST",
       body: formData,
     });
 
-    if (!data.poster) {
-      throw new Error(
-        "Server tidak mengembalikan lokasi poster."
-      );
+    const poster =
+      data.poster ||
+      data.data?.poster ||
+      data.file?.path ||
+      data.data?.file?.path ||
+      data.path;
+
+    if (!poster) {
+      throw new Error("Server tidak mengembalikan lokasi poster.");
     }
 
-    return data.poster;
+    return poster;
   }
 
-  // ==========================================================
-  // VALIDATION
-  // ==========================================================
-
   function validateForm() {
-    if (!form.category_id) {
-      return "Kategori event wajib dipilih.";
+    if (!id) return "ID event tidak ditemukan.";
+
+    if (!form.category_id) return "Kategori event wajib dipilih.";
+    if (!form.artist_id) return "Artis wajib dipilih.";
+    if (!form.venue_id) return "Venue wajib dipilih.";
+    if (!form.event_name.trim()) return "Nama event wajib diisi.";
+    if (!form.event_date) return "Tanggal event wajib diisi.";
+    if (!form.event_time) return "Waktu event wajib diisi.";
+
+    if (!form.ticket_sale_start_date || !form.ticket_sale_start_time) {
+      return "Jadwal mulai penjualan wajib diisi.";
     }
 
-    if (!form.artist_id) {
-      return "Artis wajib dipilih.";
-    }
-
-    if (!form.venue_id) {
-      return "Venue wajib dipilih.";
-    }
-
-    if (!form.event_name.trim()) {
-      return "Nama event wajib diisi.";
-    }
-
-    if (!form.event_date) {
-      return "Tanggal event wajib diisi.";
-    }
-
-    if (!form.event_time) {
-      return "Waktu event wajib diisi.";
-    }
-
-    if (!form.ticket_sale_start_date) {
-      return "Tanggal mulai penjualan wajib diisi.";
-    }
-
-    if (!form.ticket_sale_start_time) {
-      return "Waktu mulai penjualan wajib diisi.";
-    }
-
-    if (!form.ticket_sale_end_date) {
-      return "Tanggal berakhir penjualan wajib diisi.";
-    }
-
-    if (!form.ticket_sale_end_time) {
-      return "Waktu berakhir penjualan wajib diisi.";
+    if (!form.ticket_sale_end_date || !form.ticket_sale_end_time) {
+      return "Jadwal akhir penjualan wajib diisi.";
     }
 
     const saleStart = new Date(
@@ -550,10 +514,7 @@ export default function EditEventPage() {
       `${form.ticket_sale_end_date}T${form.ticket_sale_end_time}:00`
     );
 
-    if (
-      Number.isNaN(saleStart.getTime()) ||
-      Number.isNaN(saleEnd.getTime())
-    ) {
+    if (Number.isNaN(saleStart.getTime()) || Number.isNaN(saleEnd.getTime())) {
       return "Jadwal penjualan tiket tidak valid.";
     }
 
@@ -561,19 +522,19 @@ export default function EditEventPage() {
       return "Waktu mulai penjualan harus lebih awal dari waktu berakhir.";
     }
 
-    if (!form.poster.trim() && !posterFile) {
-      return "Poster event wajib diisi atau diupload.";
+    if (posterMode === "url" && !form.poster.trim()) {
+      return "URL poster wajib diisi.";
+    }
+
+    if (posterMode === "file" && !posterFile && !form.poster.trim()) {
+      return "Silakan pilih poster.";
     }
 
     return "";
   }
 
-  // ==========================================================
-  // UPDATE EVENT
-  // ==========================================================
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
     if (saving) return;
 
@@ -584,12 +545,7 @@ export default function EditEventPage() {
 
     if (validationError) {
       setError(validationError);
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
@@ -598,53 +554,37 @@ export default function EditEventPage() {
 
       let posterValue = form.poster.trim();
 
-      // Upload hanya jika user memilih file poster baru.
       if (posterMode === "file" && posterFile) {
-        posterValue = await uploadPoster();
+        posterValue = await uploadPoster(id);
       }
 
-      // Payload disesuaikan dengan updateEvent backend.
       const payload = {
         category_id: Number(form.category_id),
         artist_id: Number(form.artist_id),
         venue_id: Number(form.venue_id),
-
         event_name: form.event_name.trim(),
         description: form.description.trim() || null,
-
         poster: posterValue || null,
-
         event_date: form.event_date,
         event_time: form.event_time,
-
-        ticket_sale_start:
-          `${form.ticket_sale_start_date} ${form.ticket_sale_start_time}:00`,
-
-        ticket_sale_end:
-          `${form.ticket_sale_end_date} ${form.ticket_sale_end_time}:00`,
-
+        ticket_sale_start: `${form.ticket_sale_start_date} ${form.ticket_sale_start_time}:00`,
+        ticket_sale_end: `${form.ticket_sale_end_date} ${form.ticket_sale_end_time}:00`,
         status: form.status,
       };
 
-      const data = await apiRequest(`/events/${id}`, {
+      const result = await apiRequest(`/events/${encodeURIComponent(id)}`, {
         method: "PUT",
         body: JSON.stringify(payload),
       });
 
-      if (!data.success) {
-        throw new Error(
-          data.message || "Gagal memperbarui event."
-        );
-      }
+      setForm((previous) => ({
+        ...previous,
+        poster: posterValue,
+      }));
 
-      setSuccess(
-        data.message || "Event berhasil diperbarui."
-      );
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
+      setPosterFile(null);
+      setSuccess(result.message || "Event berhasil diperbarui.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
 
       setTimeout(() => {
         router.push(`/organizer/event/${id}`);
@@ -652,639 +592,427 @@ export default function EditEventPage() {
       }, 1000);
     } catch (err) {
       console.error("UPDATE EVENT ERROR:", err);
-
-      setError(
-        err.message || "Terjadi kesalahan saat memperbarui event."
-      );
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
+      setError(err.message || "Terjadi kesalahan saat memperbarui event.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSaving(false);
     }
   };
 
-  // ==========================================================
-  // LOADING
-  // ==========================================================
-
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex min-h-[65vh] flex-col items-center justify-center gap-4">
+        <div className="relative">
+          <div className="absolute inset-0 animate-ping rounded-xl bg-[#0B1220]/10" />
+          <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-[#0B1220]/[0.06]">
+            <Loader2 size={22} className="animate-spin text-[#0B1220]" />
+          </div>
+        </div>
         <div className="text-center">
-          <Loader2
-            size={34}
-            className="mx-auto animate-spin text-blue-600"
-          />
-
-          <p className="mt-4 text-sm font-medium text-slate-500">
+          <p className="text-[13.5px] font-semibold text-slate-800">
             Memuat data event...
+          </p>
+          <p className="mt-0.5 text-[12px] text-slate-400">
+            Mengambil informasi event dan data pendukung
           </p>
         </div>
       </div>
     );
   }
 
-  // ==========================================================
-  // ERROR WITHOUT EVENT
-  // ==========================================================
-
   if (error && !form.event_name) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-12">
-        <div className="rounded-2xl border border-red-200 bg-white p-7 shadow-sm">
-          <div className="flex items-start gap-3">
-            <AlertCircle
-              size={23}
-              className="shrink-0 text-red-500"
-            />
-
-            <div>
-              <h2 className="font-bold text-slate-900">
-                Event tidak dapat dimuat
-              </h2>
-
-              <p className="mt-2 text-sm text-slate-500">
-                {error}
-              </p>
-            </div>
+      <div className="mx-auto flex min-h-[65vh] max-w-xl items-center justify-center">
+        <div className="w-full rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+            <AlertCircle size={22} />
           </div>
 
-          <Link
-            href="/organizer/event"
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+          <h2 className="mt-4 text-[15px] font-semibold text-slate-900">
+            Event tidak dapat dimuat
+          </h2>
+
+          <p className="mt-2 text-[13px] leading-6 text-slate-500">{error}</p>
+
+          <button
+            onClick={loadData}
+            className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942]"
           >
-            <ArrowLeft size={17} />
-            Kembali ke Event
-          </Link>
+            Coba Lagi
+          </button>
         </div>
       </div>
     );
   }
 
-  // ==========================================================
-  // MAIN UI
-  // ==========================================================
-
   return (
-    <div className="relative min-w-0 w-full pb-28">
-      <div className="mx-auto w-full max-w-6xl">
+    <div className="w-full min-w-0 text-[#0B1220]">
+      <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/60 bg-gradient-to-br from-[#0B1220] via-[#1B2942] to-[#2F3F63] p-6 shadow-[0_8px_32px_rgba(11,18,32,0.18)] sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-20 left-1/3 h-56 w-56 rounded-full bg-violet-400/15 blur-3xl" />
 
-        {/* HEADER */}
-        <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
-              <Link
-                href="/organizer/event"
-                className="transition hover:text-blue-600"
-              >
-                Event
-              </Link>
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
+        />
 
-              <span>/</span>
-
-              <Link
-                href={`/organizer/event/${id}`}
-                className="transition hover:text-blue-600"
-              >
-                Detail
-              </Link>
-
-              <span>/</span>
-
-              <span className="font-medium text-slate-600">
-                Edit
-              </span>
-            </div>
-
-            <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Edit Event
-            </h1>
-
-            <p className="mt-2 text-sm text-slate-500">
-              Perbarui informasi event yang kamu kelola.
-            </p>
-          </div>
-
-          <Link
-            href={`/organizer/event/${id}`}
-            className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-          >
-            <ArrowLeft size={17} />
-            Kembali
-          </Link>
-        </div>
-
-        {/* ERROR */}
-        {error && (
-          <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-            <AlertCircle
-              size={20}
-              className="mt-0.5 shrink-0"
-            />
-
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">
-                Gagal memperbarui event
-              </p>
-
-              <p className="mt-1 text-sm">
-                {error}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setError("")}
-              className="text-red-500 hover:text-red-700"
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex items-start gap-4">
+            <Link
+              href={`/organizer/event/${id}`}
+              className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/[0.08] text-white backdrop-blur transition hover:bg-white/[0.14]"
+              aria-label="Kembali ke detail event"
             >
-              <X size={18} />
-            </button>
-          </div>
-        )}
-
-        {/* SUCCESS */}
-        {success && (
-          <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-700">
-            <CheckCircle2
-              size={20}
-              className="mt-0.5 shrink-0"
-            />
+              <ArrowLeft size={17} />
+            </Link>
 
             <div>
-              <p className="text-sm font-bold">
-                Berhasil
-              </p>
-
-              <p className="mt-1 text-sm">
-                {success}
+              <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-white sm:text-[32px]">
+                Edit Event
+              </h1>
+              <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-white/60">
+                Perbarui informasi, jadwal, dan poster event Anda. Perubahan
+                akan langsung tersimpan setelah Anda menekan tombol simpan.
               </p>
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        <form
-          id="edit-event-form"
-          onSubmit={handleSubmit}
-        >
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_350px]">
+      {error && (
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+          <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-600" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] font-semibold text-rose-800">
+              Gagal menyimpan perubahan
+            </p>
+            <p className="mt-0.5 text-[12.5px] leading-5 text-rose-700">
+              {error}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setError("")}
+            className="rounded-md p-1 text-rose-400 transition hover:bg-rose-100 hover:text-rose-700"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
-            {/* LEFT CONTENT */}
-            <div className="min-w-0 space-y-6">
+      {success && (
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <CheckCircle2
+            size={16}
+            className="mt-0.5 shrink-0 text-emerald-600"
+          />
+          <div>
+            <p className="text-[12.5px] font-semibold text-emerald-800">
+              Berhasil
+            </p>
+            <p className="mt-0.5 text-[12.5px] leading-5 text-emerald-700">
+              {success}
+            </p>
+          </div>
+        </div>
+      )}
 
-              {/* INFORMASI EVENT */}
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-bold text-slate-900">
-                    Informasi Event
-                  </h2>
+      <form id="edit-event-form" onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0 space-y-6">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="p-5 sm:p-6">
+                <SectionHeader
+                  icon={FileText}
+                  title="Informasi Utama"
+                  description="Informasi dasar mengenai event yang diselenggarakan."
+                />
 
-                  <p className="mt-1 text-sm text-slate-400">
-                    Informasi dasar mengenai event.
-                  </p>
-                </div>
-
-                <div className="grid gap-5 md:grid-cols-2">
-
-                  {/* CATEGORY */}
-                  <div>
-                    <InputLabel required>
-                      Kategori Event
-                    </InputLabel>
-
-                    <div className="relative">
-                      <FieldIcon>
-                        <Tag size={18} />
-                      </FieldIcon>
-
-                      <select
-                        name="category_id"
-                        value={form.category_id}
-                        onChange={handleChange}
-                        disabled={loadingOptions}
-                        className={iconInputClass}
-                        required
-                      >
-                        <option value="">
-                          {loadingOptions
-                            ? "Memuat kategori..."
-                            : "Pilih kategori"}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field label="Kategori Event" required icon={Tag}>
+                    <select
+                      name="category_id"
+                      value={form.category_id}
+                      onChange={handleChange}
+                      disabled={loadingOptions}
+                      className={`${inputClass} pl-9`}
+                    >
+                      <option value="">Pilih kategori</option>
+                      {categories.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name || item.category_name || item.nama_kategori}
                         </option>
+                      ))}
+                    </select>
+                  </Field>
 
-                        {categories.map((item) => (
-                          <option
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name ||
-                              item.category_name ||
-                              item.nama_kategori}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {categories.length === 0 && !loadingOptions && (
-                      <p className="mt-2 text-xs text-red-500">
-                        Data kategori tidak tersedia. Periksa endpoint GET /api/categories.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* ARTIST */}
-                  <div>
-                    <InputLabel required>
-                      Artis / Performer
-                    </InputLabel>
-
-                    <div className="relative">
-                      <FieldIcon>
-                        <UserRound size={18} />
-                      </FieldIcon>
-
-                      <select
-                        name="artist_id"
-                        value={form.artist_id}
-                        onChange={handleChange}
-                        disabled={loadingOptions}
-                        className={iconInputClass}
-                        required
-                      >
-                        <option value="">
-                          {loadingOptions
-                            ? "Memuat artis..."
-                            : "Pilih artis"}
+                  <Field label="Artis / Performer" required icon={UserRound}>
+                    <select
+                      name="artist_id"
+                      value={form.artist_id}
+                      onChange={handleChange}
+                      disabled={loadingOptions}
+                      className={`${inputClass} pl-9`}
+                    >
+                      <option value="">Pilih artis</option>
+                      {artists.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name || item.artist_name || item.nama_artis}
                         </option>
+                      ))}
+                    </select>
+                  </Field>
 
-                        {artists.map((item) => (
-                          <option
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name ||
-                              item.artist_name ||
-                              item.nama_artis}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {artists.length === 0 && !loadingOptions && (
-                      <p className="mt-2 text-xs text-red-500">
-                        Data artis tidak tersedia. Periksa endpoint GET /api/artists.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* EVENT NAME */}
                   <div className="md:col-span-2">
-                    <InputLabel required>
-                      Nama Event
-                    </InputLabel>
-
-                    <div className="relative">
-                      <FieldIcon>
-                        <Ticket size={18} />
-                      </FieldIcon>
-
+                    <Field label="Nama Event" required icon={Ticket}>
                       <input
                         type="text"
                         name="event_name"
                         value={form.event_name}
                         onChange={handleChange}
-                        placeholder="Contoh: GIGI Live Concert"
-                        className={iconInputClass}
-                        required
+                        placeholder="Contoh: Konser Musik Indonesia"
+                        className={`${inputClass} pl-9`}
                       />
-                    </div>
+                    </Field>
                   </div>
 
-                  {/* DESCRIPTION */}
                   <div className="md:col-span-2">
-                    <InputLabel>
-                      Deskripsi Event
-                    </InputLabel>
-
-                    <div className="relative">
-                      <FileText
-                        size={18}
-                        className="absolute left-3.5 top-4 text-slate-400"
-                      />
-
+                    <Field label="Deskripsi Event" icon={FileText}>
                       <textarea
                         name="description"
                         value={form.description}
                         onChange={handleChange}
                         rows={5}
-                        placeholder="Tuliskan informasi mengenai event..."
-                        className={`${inputClass} resize-y pl-11`}
+                        placeholder="Tuliskan deskripsi lengkap mengenai event..."
+                        className={`${inputClass} h-auto resize-y py-2.5`}
                       />
-                    </div>
+                    </Field>
                   </div>
                 </div>
-              </section>
+              </div>
+            </section>
 
-              {/* LOKASI DAN WAKTU */}
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <div className="mb-6">
-                  <h2 className="text-lg font-bold text-slate-900">
-                    Lokasi & Waktu
-                  </h2>
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="p-5 sm:p-6">
+                <SectionHeader
+                  icon={CalendarDays}
+                  title="Jadwal & Lokasi"
+                  description="Atur tempat, tanggal, dan waktu penyelenggaraan event."
+                />
 
-                  <p className="mt-1 text-sm text-slate-400">
-                    Atur lokasi dan jadwal penyelenggaraan event.
-                  </p>
-                </div>
-
-                <div className="space-y-5">
-
-                  {/* VENUE */}
-                  <div>
-                    <InputLabel required>
-                      Venue
-                    </InputLabel>
-
-                    <div className="relative">
-                      <FieldIcon>
-                        <MapPin size={18} />
-                      </FieldIcon>
-
-                      <select
-                        name="venue_id"
-                        value={form.venue_id}
-                        onChange={handleChange}
-                        disabled={loadingOptions}
-                        className={iconInputClass}
-                        required
-                      >
-                        <option value="">
-                          {loadingOptions
-                            ? "Memuat venue..."
-                            : "Pilih venue"}
+                <div className="space-y-4">
+                  <Field label="Venue" required icon={MapPin}>
+                    <select
+                      name="venue_id"
+                      value={form.venue_id}
+                      onChange={handleChange}
+                      disabled={loadingOptions}
+                      className={`${inputClass} pl-9`}
+                    >
+                      <option value="">Pilih venue</option>
+                      {venues.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name || item.venue_name || item.nama_venue}
+                          {item.city ? ` — ${item.city}` : ""}
                         </option>
+                      ))}
+                    </select>
+                  </Field>
 
-                        {venues.map((item) => (
-                          <option
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name ||
-                              item.venue_name ||
-                              item.nama_venue}
-                            {item.city ? ` — ${item.city}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Field label="Tanggal Event" required icon={CalendarDays}>
+                      <input
+                        type="date"
+                        name="event_date"
+                        value={form.event_date}
+                        onChange={handleChange}
+                        className={`${inputClass} pl-9`}
+                      />
+                    </Field>
 
-                    {venues.length === 0 && !loadingOptions && (
-                      <p className="mt-2 text-xs text-red-500">
-                        Data venue tidak tersedia. Periksa endpoint GET /api/venues.
-                      </p>
-                    )}
+                    <Field label="Waktu Event" required icon={Clock3}>
+                      <input
+                        type="time"
+                        name="event_time"
+                        value={form.event_time}
+                        onChange={handleChange}
+                        className={`${inputClass} pl-9`}
+                      />
+                    </Field>
                   </div>
 
-                  {/* EVENT DATE AND TIME */}
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <div>
-                      <InputLabel required>
-                        Tanggal Event
-                      </InputLabel>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <h3 className="text-[12.5px] font-semibold text-emerald-800">
+                          Mulai Penjualan
+                        </h3>
+                      </div>
 
-                      <div className="relative">
-                        <FieldIcon>
-                          <CalendarDays size={18} />
-                        </FieldIcon>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                        <Field label="Tanggal Mulai" required>
+                          <input
+                            type="date"
+                            name="ticket_sale_start_date"
+                            value={form.ticket_sale_start_date}
+                            onChange={handleChange}
+                            className={inputClass}
+                          />
+                        </Field>
 
-                        <input
-                          type="date"
-                          name="event_date"
-                          value={form.event_date}
-                          onChange={handleChange}
-                          className={iconInputClass}
-                          required
-                        />
+                        <Field label="Waktu Mulai" required>
+                          <input
+                            type="time"
+                            name="ticket_sale_start_time"
+                            value={form.ticket_sale_start_time}
+                            onChange={handleChange}
+                            className={inputClass}
+                          />
+                        </Field>
                       </div>
                     </div>
 
-                    <div>
-                      <InputLabel required>
-                        Waktu Event
-                      </InputLabel>
-
-                      <div className="relative">
-                        <FieldIcon>
-                          <Clock3 size={18} />
-                        </FieldIcon>
-
-                        <input
-                          type="time"
-                          name="event_time"
-                          value={form.event_time}
-                          onChange={handleChange}
-                          className={iconInputClass}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* SALE START */}
-                  <div>
-                    <p className="mb-3 text-sm font-bold text-slate-800">
-                      Mulai Penjualan Tiket
-                    </p>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <InputLabel required>
-                          Tanggal
-                        </InputLabel>
-
-                        <input
-                          type="date"
-                          name="ticket_sale_start_date"
-                          value={form.ticket_sale_start_date}
-                          onChange={handleChange}
-                          className={inputClass}
-                          required
-                        />
+                    <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-rose-500" />
+                        <h3 className="text-[12.5px] font-semibold text-rose-800">
+                          Berakhir Penjualan
+                        </h3>
                       </div>
 
-                      <div>
-                        <InputLabel required>
-                          Waktu
-                        </InputLabel>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                        <Field label="Tanggal Berakhir" required>
+                          <input
+                            type="date"
+                            name="ticket_sale_end_date"
+                            value={form.ticket_sale_end_date}
+                            onChange={handleChange}
+                            className={inputClass}
+                          />
+                        </Field>
 
-                        <input
-                          type="time"
-                          name="ticket_sale_start_time"
-                          value={form.ticket_sale_start_time}
-                          onChange={handleChange}
-                          className={inputClass}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* SALE END */}
-                  <div>
-                    <p className="mb-3 text-sm font-bold text-slate-800">
-                      Berakhir Penjualan Tiket
-                    </p>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <InputLabel required>
-                          Tanggal
-                        </InputLabel>
-
-                        <input
-                          type="date"
-                          name="ticket_sale_end_date"
-                          value={form.ticket_sale_end_date}
-                          onChange={handleChange}
-                          className={inputClass}
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <InputLabel required>
-                          Waktu
-                        </InputLabel>
-
-                        <input
-                          type="time"
-                          name="ticket_sale_end_time"
-                          value={form.ticket_sale_end_time}
-                          onChange={handleChange}
-                          className={inputClass}
-                          required
-                        />
+                        <Field label="Waktu Berakhir" required>
+                          <input
+                            type="time"
+                            name="ticket_sale_end_time"
+                            value={form.ticket_sale_end_time}
+                            onChange={handleChange}
+                            className={inputClass}
+                          />
+                        </Field>
                       </div>
                     </div>
                   </div>
                 </div>
-              </section>
+              </div>
+            </section>
 
-              {/* STATUS EVENT */}
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <h2 className="text-lg font-bold text-slate-900">
-                  Status Event
-                </h2>
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="p-5 sm:p-6">
+                <SectionHeader
+                  icon={Ticket}
+                  title="Status Event"
+                  description="Atur status ketersediaan event."
+                />
 
-                <p className="mb-5 mt-1 text-sm text-slate-400">
-                  Tentukan status event yang akan ditampilkan.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
                   {STATUS_OPTIONS.map((status) => {
-                    const active = form.status === status;
+                    const active = form.status === status.value;
 
                     return (
                       <button
-                        key={status}
+                        key={status.value}
                         type="button"
-                        onClick={() => {
-                          setForm((prev) => ({
-                            ...prev,
-                            status,
-                          }));
-
-                          setError("");
-                          setSuccess("");
-                        }}
-                        className={`rounded-xl border px-3 py-3 text-sm font-semibold transition ${
+                        onClick={() => handleStatusChange(status.value)}
+                        className={`flex h-10 items-center justify-center gap-2 rounded-lg border px-3 text-[12px] font-semibold transition ${
                           active
-                            ? "border-blue-600 bg-blue-600 text-white shadow-sm"
-                            : "border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:bg-blue-50"
+                            ? "border-transparent bg-[#0B1220] text-white shadow-sm"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                       >
-                        {status}
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            active ? "bg-white" : status.dot
+                          }`}
+                        />
+                        <span className="truncate">{status.label}</span>
                       </button>
                     );
                   })}
                 </div>
-              </section>
-            </div>
 
-            {/* RIGHT CONTENT */}
-            <div className="min-w-0 space-y-6">
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[11.5px] leading-5 text-slate-600">
+                  <Info size={14} className="mt-0.5 shrink-0 text-slate-500" />
+                  Status ini mengatur ketersediaan event. Persetujuan publikasi
+                  event tetap mengikuti proses verifikasi administrator.
+                </div>
+              </div>
+            </section>
+          </div>
 
-              {/* POSTER */}
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:sticky lg:top-6">
-                <h2 className="text-lg font-bold text-slate-900">
-                  Poster Event
-                </h2>
+          <aside className="min-w-0 space-y-6 xl:sticky xl:top-6">
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+              <div className="p-5 sm:p-6">
+                <SectionHeader
+                  icon={ImagePlus}
+                  title="Poster Event"
+                  description="Gunakan poster yang jelas dan berkualitas."
+                />
 
-                <p className="mb-5 mt-1 text-sm text-slate-400">
-                  Gunakan URL atau upload poster baru.
-                </p>
-
-                {/* MODE */}
-                <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+                <div className="relative mb-4 grid grid-cols-2 rounded-lg bg-slate-100 p-1">
+                  <div
+                    className={`absolute inset-y-1 w-[calc(50%-4px)] rounded-md bg-white shadow-sm transition-all duration-300 ${
+                      posterMode === "file"
+                        ? "translate-x-[calc(100%+4px)]"
+                        : "translate-x-1"
+                    }`}
+                  />
                   <button
                     type="button"
                     onClick={() => handlePosterModeChange("url")}
-                    className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+                    className={`relative z-10 flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-[12px] font-semibold transition-colors ${
                       posterMode === "url"
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-slate-500"
+                        ? "text-slate-900"
+                        : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    <Link2 size={16} />
-                    URL
+                    <Link2 size={13} />
+                    URL Poster
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handlePosterModeChange("file")}
-                    className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+                    className={`relative z-10 flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-[12px] font-semibold transition-colors ${
                       posterMode === "file"
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-slate-500"
+                        ? "text-slate-900"
+                        : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    <Upload size={16} />
+                    <Upload size={13} />
                     Upload
                   </button>
                 </div>
 
-                {/* URL INPUT */}
                 {posterMode === "url" ? (
-                  <div className="mt-5">
-                    <InputLabel>
-                      URL Poster
-                    </InputLabel>
-
-                    <div className="relative">
-                      <FieldIcon>
-                        <Link2 size={18} />
-                      </FieldIcon>
-
-                      <input
-                        type="url"
-                        name="poster"
-                        value={form.poster}
-                        onChange={handleChange}
-                        placeholder="https://example.com/poster.jpg"
-                        className={iconInputClass}
-                      />
-                    </div>
-
-                    <p className="mt-2 text-xs leading-5 text-slate-400">
-                      Gunakan URL gambar yang dapat diakses publik.
-                    </p>
-                  </div>
+                  <Field label="URL Poster" required icon={Link2}>
+                    <input
+                      type="url"
+                      name="poster"
+                      value={form.poster}
+                      onChange={handleChange}
+                      placeholder="https://example.com/poster.jpg"
+                      className={`${inputClass} pl-9`}
+                    />
+                  </Field>
                 ) : (
-                  <div className="mt-5">
-                    <InputLabel>
-                      Upload Poster Baru
-                    </InputLabel>
+                  <div>
+                    <label className={labelClass}>Pilih File Poster</label>
 
                     <input
                       ref={fileInputRef}
@@ -1297,148 +1025,131 @@ export default function EditEventPage() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center transition hover:border-blue-300 hover:bg-blue-50/40"
+                      className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center transition hover:border-[#0B1220]/30 hover:bg-slate-50"
                     >
-                      <Upload
-                        size={25}
-                        className="text-blue-600"
-                      />
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-[#0B1220]/[0.06] text-[#0B1220]">
+                        <Upload size={18} />
+                      </div>
 
-                      <p className="mt-3 text-sm font-bold text-slate-700">
-                        Pilih poster baru
-                      </p>
+                      <span className="text-[12.5px] font-semibold text-slate-700">
+                        Klik untuk memilih poster
+                      </span>
 
-                      <p className="mt-1 text-xs text-slate-400">
+                      <span className="mt-0.5 text-[11px] text-slate-400">
                         JPG, PNG, WEBP · Maksimal 5 MB
-                      </p>
+                      </span>
                     </button>
 
                     {posterFile && (
-                      <div className="mt-3 rounded-xl bg-blue-50 p-3">
-                        <p className="truncate text-xs font-semibold text-blue-700">
-                          {posterFile.name}
-                        </p>
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-[12px] font-semibold text-slate-800">
+                            {posterFile.name}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-slate-500">
+                            {(posterFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
 
-                        <p className="mt-1 text-xs text-blue-500">
-                          {(posterFile.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
+                        <button
+                          type="button"
+                          onClick={removeSelectedPoster}
+                          className="rounded-md p-1.5 text-rose-500 transition hover:bg-rose-100"
+                          title="Hapus pilihan poster"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                    )}
-
-                    {!posterFile && form.poster && (
-                      <p className="mt-3 text-xs text-slate-500">
-                        Poster lama tetap digunakan jika kamu tidak memilih file baru.
-                      </p>
                     )}
                   </div>
                 )}
 
-                {/* PREVIEW */}
-                <div className="mt-6">
+                <div className="mt-5">
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-700">
+                    <p className="text-[12px] font-semibold text-slate-600">
                       Preview Poster
                     </p>
-
-                    {preview && (
-                      <Eye
-                        size={17}
-                        className="text-slate-400"
-                      />
-                    )}
+                    <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10.5px] font-medium text-slate-500">
+                      Rasio 3:4
+                    </span>
                   </div>
 
-                  <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-slate-100">
+                  <div className="relative mx-auto aspect-[3/4] w-full max-w-[260px] overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                     {preview ? (
                       <img
                         src={preview}
                         alt="Preview poster event"
                         className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
                         }}
                       />
                     ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
-                        <ImageIcon
-                          size={38}
-                          strokeWidth={1.5}
-                        />
-
-                        <p className="mt-3 text-xs">
-                          Belum ada poster
-                        </p>
+                      <div className="flex h-full flex-col items-center justify-center text-slate-400">
+                        <ImageIcon size={34} strokeWidth={1.5} />
+                        <p className="mt-2 text-[12px]">Belum ada poster</p>
                       </div>
                     )}
                   </div>
                 </div>
-              </section>
+              </div>
+            </section>
 
-              {/* INFO */}
-              <section className="rounded-2xl border border-blue-100 bg-blue-50/70 p-5">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-xl bg-white p-2 text-blue-600 shadow-sm">
-                    <AlertCircle size={19} />
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800">
-                      Informasi Perubahan
-                    </h3>
-
-                    <p className="mt-2 text-xs leading-6 text-slate-600">
-                      Perubahan informasi event akan dikirim ke server.
-                      Kategori tiket dan denah kursi yang sudah dibuat
-                      tidak diubah melalui halaman ini.
-                    </p>
-                  </div>
+            <section className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0B1220]/[0.06] text-[#0B1220]">
+                  <Info size={16} />
                 </div>
-              </section>
-            </div>
-          </div>
-        </form>
-      </div>
 
-      {/* FIXED ACTION BAR */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
-          <Link
-            href={`/organizer/event/${id}`}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-          >
-            <ArrowLeft size={17} />
-            <span className="hidden sm:inline">
-              Batal
-            </span>
-          </Link>
-
-          <button
-            type="button"
-            onClick={() =>
-              document
-                .getElementById("edit-event-form")
-                ?.requestSubmit()
-            }
-            disabled={saving || loadingOptions}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {saving ? (
-              <>
-                <Loader2
-                  size={18}
-                  className="animate-spin"
-                />
-                Menyimpan...
-              </>
-            ) : (
-              <>
-                <Save size={18} />
-                Simpan Perubahan
-              </>
-            )}
-          </button>
+                <div>
+                  <h3 className="text-[13px] font-semibold text-[#0B1220]">
+                    Informasi Pengaturan
+                  </h3>
+                  <p className="mt-1.5 text-[11.5px] leading-5 text-slate-600">
+                    Perubahan di halaman ini hanya memperbarui informasi
+                    event, jadwal, lokasi, poster, dan status ketersediaan.
+                    Pengaturan kategori tiket, harga, dan denah kursi
+                    dilakukan melalui menu terpisah.
+                  </p>
+                </div>
+              </div>
+            </section>
+          </aside>
         </div>
-      </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p className="text-[12px] text-slate-500">
+            Pastikan seluruh informasi event sudah benar sebelum disimpan.
+          </p>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Link
+              href={`/organizer/event/${id}`}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Batal
+            </Link>
+
+            <button
+              type="submit"
+              disabled={saving || loadingOptions}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <Save size={15} />
+                  Simpan Perubahan
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

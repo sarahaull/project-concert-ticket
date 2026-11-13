@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -23,11 +22,10 @@ import {
   AlertCircle,
   Music,
   ImageOff,
+  Star,
+  Flame,
+  ShieldCheck,
 } from "lucide-react";
-
-/* =========================================================
-   CONFIGURATION
-========================================================= */
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -46,20 +44,16 @@ function getPosterUrl(poster) {
     return null;
   }
 
-  // Jika poster sudah berupa URL lengkap, gunakan langsung.
   if (/^https?:\/\//i.test(value)) {
     return value;
   }
 
-  // Jika poster berupa path absolut, misalnya /uploads/events/abc.jpg.
   if (value.startsWith("/")) {
     return `${API_URL}${value}`;
   }
 
-  // Jika poster hanya nama file, misalnya tulus-concert.jpg.
   return `${API_URL}/uploads/events/${value}`;
 }
-
 
 const CATEGORY_ICONS = {
   Music: Ticket,
@@ -70,10 +64,6 @@ const CATEGORY_ICONS = {
   Art: Tag,
   EDM: TrendingUp,
 };
-
-/* =========================================================
-   HELPERS
-========================================================= */
 
 function formatCurrency(value) {
   if (
@@ -114,10 +104,6 @@ function formatTime(time) {
   return `${String(time).slice(0, 5)} WIB`;
 }
 
-/*
- * Ambil URL gambar dari field backend yang umum digunakan.
- * Sesuaikan lagi jika nama field gambar di database berbeda.
- */
 function getEventImage(event) {
   const possibleImages = [
     event?.poster,
@@ -156,16 +142,7 @@ function normalizeEvent(event) {
   };
 }
 
-/* =========================================================
-   IMAGE COMPONENT
-========================================================= */
-
-function EventImage({
-  src,
-  alt,
-  className = "",
-  iconSize = 36,
-}) {
+function EventImage({ src, alt, className = "", iconSize = 36 }) {
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
@@ -196,10 +173,6 @@ function EventImage({
   );
 }
 
-/* =========================================================
-   PAGE
-========================================================= */
-
 export default function CariEventPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -210,10 +183,6 @@ export default function CariEventPage() {
   const [location, setLocation] = useState("Semua Lokasi");
   const [sort, setSort] = useState("Terpopuler");
   const [page, setPage] = useState(1);
-
-  /* =======================================================
-     FETCH EVENTS
-  ======================================================= */
 
   useEffect(() => {
     const controller = new AbortController();
@@ -235,9 +204,7 @@ export default function CariEventPage() {
         const data = await response.json();
 
         if (!response.ok || data?.success === false) {
-          throw new Error(
-            data?.message || "Gagal mengambil data event."
-          );
+          throw new Error(data?.message || "Gagal mengambil data event.");
         }
 
         const eventData = Array.isArray(data?.events)
@@ -254,9 +221,7 @@ export default function CariEventPage() {
 
         console.error("FETCH EVENTS ERROR:", err);
 
-        setError(
-          err.message || "Terjadi kesalahan saat mengambil data event."
-        );
+        setError(err.message || "Terjadi kesalahan saat mengambil data event.");
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -269,26 +234,11 @@ export default function CariEventPage() {
     return () => controller.abort();
   }, []);
 
-  /* =======================================================
-     MAP BACKEND DATA
-  ======================================================= */
-
-  const mappedEvents = useMemo(
-    () => events.map(normalizeEvent),
-    [events]
-  );
-
-  /* =======================================================
-     CATEGORY OPTIONS
-  ======================================================= */
+  const mappedEvents = useMemo(() => events.map(normalizeEvent), [events]);
 
   const categories = useMemo(() => {
     const names = [
-      ...new Set(
-        mappedEvents
-          .map((event) => event.category)
-          .filter(Boolean)
-      ),
+      ...new Set(mappedEvents.map((event) => event.category).filter(Boolean)),
     ];
 
     return [
@@ -300,28 +250,17 @@ export default function CariEventPage() {
     ];
   }, [mappedEvents]);
 
-  /* =======================================================
-     LOCATION OPTIONS
-  ======================================================= */
-
   const locations = useMemo(() => {
     const cities = [
       ...new Set(
         mappedEvents
           .map((event) => event.city)
-          .filter(
-            (city) =>
-              city && city !== "Kota belum tersedia"
-          )
+          .filter((city) => city && city !== "Kota belum tersedia")
       ),
     ];
 
     return ["Semua Lokasi", ...cities];
   }, [mappedEvents]);
-
-  /* =======================================================
-     FILTER AND SORT
-  ======================================================= */
 
   const filteredEvents = useMemo(() => {
     const keyword = search.toLowerCase().trim();
@@ -356,10 +295,6 @@ export default function CariEventPage() {
     return result;
   }, [mappedEvents, search, category, location, sort]);
 
-  /* =======================================================
-     PAGINATION
-  ======================================================= */
-
   const totalPages = Math.ceil(filteredEvents.length / PER_PAGE);
   const currentPage = Math.min(page, Math.max(totalPages, 1));
 
@@ -368,15 +303,7 @@ export default function CariEventPage() {
     currentPage * PER_PAGE
   );
 
-  /* =======================================================
-     FEATURED EVENTS
-  ======================================================= */
-
   const featuredEvents = mappedEvents.slice(0, 3);
-
-  /* =======================================================
-     RESET FILTER
-  ======================================================= */
 
   function resetFilter() {
     setSearch("");
@@ -386,26 +313,21 @@ export default function CariEventPage() {
     setPage(1);
   }
 
-  /* =======================================================
-     LOADING
-  ======================================================= */
-
   if (loading) {
     return (
       <div className="flex min-h-[60vh] w-full items-center justify-center text-[#112250]">
-        <div className="flex flex-col items-center text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-            <Loader2
-              size={26}
-              className="animate-spin text-[#112250]"
-            />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="pointer-events-none absolute -inset-10 rounded-full bg-gradient-to-br from-[#EAF0FA] via-[#F5F8FC] to-[#E6EEF9] blur-2xl" />
+
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-[#DDE4ED] bg-white shadow-[0_10px_30px_rgba(17,34,80,0.12)]">
+            <Loader2 size={28} className="animate-spin text-[#112250]" />
           </div>
 
-          <h2 className="mt-4 text-base font-bold">
+          <h2 className="relative mt-5 text-base font-bold">
             Memuat event...
           </h2>
 
-          <p className="mt-1 text-sm text-[#8793A3]">
+          <p className="relative mt-1 text-sm text-[#8793A3]">
             Sedang mengambil data event dari server.
           </p>
         </div>
@@ -413,30 +335,24 @@ export default function CariEventPage() {
     );
   }
 
-  /* =======================================================
-     ERROR
-  ======================================================= */
-
   if (error) {
     return (
       <div className="flex min-h-[60vh] w-full items-center justify-center text-[#112250]">
-        <div className="w-full max-w-md rounded-[22px] border border-[#DDE4ED] bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#FFF1F1] text-red-500">
-            <AlertCircle size={26} />
+        <div className="relative w-full max-w-md overflow-hidden rounded-[24px] border border-[#DDE4ED] bg-white p-8 text-center shadow-[0_20px_60px_rgba(17,34,80,0.12)]">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#DCE7F7] via-[#112250] to-[#DCE7F7]" />
+
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#FFF1F1] text-red-500 ring-1 ring-red-100">
+            <AlertCircle size={28} />
           </div>
 
-          <h2 className="mt-5 text-lg font-bold">
-            Gagal memuat event
-          </h2>
+          <h2 className="mt-5 text-lg font-bold">Gagal memuat event</h2>
 
-          <p className="mt-2 text-sm leading-6 text-[#8793A3]">
-            {error}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-[#8793A3]">{error}</p>
 
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-[#112250] px-5 text-xs font-semibold text-white transition hover:bg-[#1A326A]"
+            className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-[#112250] px-6 text-xs font-semibold text-white shadow-lg shadow-[#112250]/25 transition hover:bg-[#1A326A] hover:shadow-xl hover:shadow-[#112250]/30"
           >
             Coba Lagi
           </button>
@@ -445,111 +361,134 @@ export default function CariEventPage() {
     );
   }
 
-  /* =======================================================
-     MAIN PAGE
-  ======================================================= */
-
   return (
     <div className="w-full min-w-0 text-[#112250]">
       {/* HERO */}
-      <section className="relative isolate overflow-hidden rounded-2xl bg-[#0D1F42]">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full border border-white/10" />
-        <div className="pointer-events-none absolute -right-10 top-10 h-52 w-52 rounded-full border border-white/[0.06]" />
-        <div className="pointer-events-none absolute -left-24 bottom-[-120px] h-72 w-72 rounded-full border border-white/[0.06]" />
+      <section className="relative isolate overflow-hidden rounded-[32px] bg-gradient-to-br from-[#0D1F42] via-[#112250] to-[#1A326A] shadow-[0_30px_80px_-20px_rgba(13,31,66,0.55)]">
+        {/* Dekorasi */}
+        <div className="pointer-events-none absolute -right-28 -top-28 h-[28rem] w-[28rem] rounded-full border border-white/10" />
+        <div className="pointer-events-none absolute -right-16 top-16 h-64 w-64 rounded-full border border-white/[0.07]" />
+        <div className="pointer-events-none absolute -left-32 bottom-[-140px] h-80 w-80 rounded-full border border-white/[0.06]" />
+        <div className="pointer-events-none absolute left-1/3 -top-10 h-52 w-52 rounded-full bg-white/[0.05] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 right-1/4 h-64 w-64 rounded-full bg-[#3C5C99]/20 blur-3xl" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.08),transparent_55%)]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
-        <div className="relative w-full px-5 py-9 sm:px-8 sm:py-12 lg:px-10">
-          <div className="mb-7 flex items-center gap-2 text-xs text-blue-200/70">
+        <div className="relative w-full px-5 py-12 sm:px-8 sm:py-16 lg:px-14 lg:py-20">
+          <div className="mb-8 flex items-center gap-2.5 text-xs text-blue-200/70">
             <Link href="/" className="transition hover:text-white">
               Beranda
             </Link>
-            <span>/</span>
-            <span className="font-medium text-white">
-              Cari Event
-            </span>
+            <span className="text-blue-200/40">/</span>
+            <span className="font-medium text-white">Cari Event</span>
           </div>
 
           <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-xs font-medium text-blue-100 backdrop-blur-sm">
-              <Sparkles size={13} />
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.08] px-4 py-1.5 text-xs font-medium text-blue-100 backdrop-blur-md">
+              <Sparkles size={13} className="text-[#BFD6F8]" />
               Temukan event favoritmu
+              <span className="ml-1 h-1 w-1 rounded-full bg-[#9FB9E4]" />
+              <span className="text-blue-200/80">Ribuan pilihan</span>
             </div>
 
-            <h1 className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl lg:text-5xl">
+            <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-white sm:text-5xl lg:text-[3.4rem]">
               Cari event yang ingin
-              <span className="block text-blue-200">
+              <span className="mt-1 block bg-gradient-to-r from-[#BFD6F8] via-[#DCE7F7] to-[#9FB9E4] bg-clip-text text-transparent">
                 kamu hadiri
               </span>
             </h1>
 
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-blue-100/70 sm:text-base">
-              Temukan konser, festival, fan meeting, comedy show,
-              dan berbagai event menarik lainnya di TicketVerse.
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-blue-100/70 sm:text-base">
+              Temukan konser, festival, fan meeting, comedy show, dan berbagai
+              event menarik lainnya di TicketVerse — semua dalam satu tempat.
             </p>
           </div>
 
           {/* SEARCH */}
-          <div className="mt-9 max-w-5xl rounded-2xl border border-white/10 bg-white p-2 shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
-            <div className="flex flex-col gap-2 lg:flex-row">
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  size={20}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8090A8]"
-                />
+          <div className="mt-10 max-w-5xl">
+            <div className="rounded-[22px] border border-white/25 bg-white/95 p-2 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+              <div className="flex flex-col gap-2 lg:flex-row">
+                <div className="relative min-w-0 flex-1">
+                  <Search
+                    size={20}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8090A8]"
+                  />
 
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Cari nama event, artis, atau venue..."
-                  className="h-14 w-full rounded-xl bg-[#F7F9FC] pl-12 pr-4 text-sm text-[#112250] outline-none transition placeholder:text-[#9AA5B5] focus:bg-white focus:ring-2 focus:ring-[#DCE7F7]"
-                />
-              </div>
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="Cari nama event, artis, atau venue..."
+                    className="h-14 w-full rounded-[14px] bg-[#F7F9FC] pl-12 pr-4 text-sm text-[#112250] outline-none transition placeholder:text-[#9AA5B5] focus:bg-white focus:ring-2 focus:ring-[#DCE7F7]"
+                  />
+                </div>
 
-              <div className="relative w-full lg:w-52 lg:shrink-0">
-                <MapPin
-                  size={17}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7E97]"
-                />
+                <div className="relative w-full lg:w-52 lg:shrink-0">
+                  <MapPin
+                    size={17}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[#6E7E97]"
+                  />
 
-                <select
-                  value={location}
-                  onChange={(e) => {
-                    setLocation(e.target.value);
-                    setPage(1);
-                  }}
-                  className="h-14 w-full appearance-none rounded-xl border-0 bg-[#F7F9FC] pl-11 pr-10 text-sm text-[#44546A] outline-none focus:ring-2 focus:ring-[#DCE7F7]"
+                  <select
+                    value={location}
+                    onChange={(e) => {
+                      setLocation(e.target.value);
+                      setPage(1);
+                    }}
+                    className="h-14 w-full appearance-none rounded-[14px] border-0 bg-[#F7F9FC] pl-11 pr-10 text-sm text-[#44546A] outline-none focus:ring-2 focus:ring-[#DCE7F7]"
+                  >
+                    {locations.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+
+                  <ChevronDown
+                    size={16}
+                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#718096]"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPage(1)}
+                  className="group relative h-14 w-full shrink-0 overflow-hidden rounded-[14px] bg-gradient-to-r from-[#112250] to-[#1A326A] px-7 text-sm font-semibold text-white shadow-lg shadow-[#112250]/30 transition hover:shadow-xl hover:shadow-[#112250]/40 active:scale-[0.99] lg:w-auto"
                 >
-                  {locations.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-
-                <ChevronDown
-                  size={16}
-                  className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#718096]"
-                />
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    <Search size={16} />
+                    Cari Event
+                  </span>
+                  <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setPage(1)}
-                className="h-14 w-full shrink-0 rounded-xl bg-[#112250] px-7 text-sm font-semibold text-white transition hover:bg-[#1A326A] active:scale-[0.99] lg:w-auto"
-              >
-                Cari Event
-              </button>
+              {/* Quick stats */}
+              <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 px-3 pb-2 pt-2 text-[11px] text-[#8793A3]">
+                <span className="inline-flex items-center gap-1.5">
+                  <Flame size={13} className="text-[#D9882E]" />
+                  {mappedEvents.length} event tersedia
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck size={13} className="text-[#3C7A5C]" />
+                  Pembelian tiket aman
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Star size={13} className="text-[#C9A227]" />
+                  Event terverifikasi
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* CATEGORY */}
-      <section className="mt-5 rounded-xl border-b border-[#E4E9F0] bg-white">
-        <div className="flex w-full gap-2 overflow-x-auto px-4 py-4 scrollbar-none">
+      <section className="mt-7 rounded-[20px] border border-[#E4E9F0] bg-white p-2 shadow-[0_10px_30px_rgba(17,34,80,0.06)]">
+        <div className="flex w-full items-center gap-2 overflow-x-auto px-2 py-2 scrollbar-none">
           {categories.map((item) => {
             const Icon = item.icon;
             const active = category === item.name;
@@ -564,7 +503,7 @@ export default function CariEventPage() {
                 }}
                 className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold transition ${
                   active
-                    ? "bg-[#112250] text-white shadow-sm"
+                    ? "bg-gradient-to-r from-[#112250] to-[#1A326A] text-white shadow-md shadow-[#112250]/30 ring-1 ring-[#112250]/20"
                     : "bg-[#F5F7FA] text-[#65748A] hover:bg-[#EEF3F9] hover:text-[#112250]"
                 }`}
               >
@@ -577,17 +516,19 @@ export default function CariEventPage() {
       </section>
 
       {/* MAIN CONTENT */}
-      <div className="w-full py-8">
+      <div className="w-full py-10">
         {/* FEATURED */}
         {category === "Semua" &&
           !search.trim() &&
           location === "Semua Lokasi" &&
           featuredEvents.length > 0 && (
             <section>
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#6F82A0]">
-                    <Sparkles size={14} />
+                  <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6F82A0]">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-[#EEF3F9] to-[#E1EAF6] ring-1 ring-[#DDE4ED]">
+                      <Sparkles size={13} className="text-[#112250]" />
+                    </span>
                     Pilihan TicketVerse
                   </div>
 
@@ -596,21 +537,24 @@ export default function CariEventPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-[#8490A1]">
-                    Event pilihan yang tersedia di TicketVerse.
+                    Event pilihan terbaik yang siap kamu hadiri.
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={resetFilter}
-                  className="hidden items-center gap-1 text-xs font-semibold text-[#526B92] transition hover:text-[#112250] sm:flex"
+                  className="group hidden items-center gap-1.5 rounded-xl border border-[#DDE4ED] bg-white px-4 py-2 text-xs font-semibold text-[#526B92] transition hover:border-[#112250] hover:bg-[#112250] hover:text-white sm:flex"
                 >
                   Lihat semua
-                  <ArrowRight size={14} />
+                  <ArrowRight
+                    size={14}
+                    className="transition group-hover:translate-x-0.5"
+                  />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {featuredEvents.map((event) => (
                   <FeaturedEventCard key={event.id} event={event} />
                 ))}
@@ -619,11 +563,13 @@ export default function CariEventPage() {
           )}
 
         {/* ALL EVENTS */}
-        <section className="mt-11">
-          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <section className="mt-14">
+          <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-[#6F82A0]">
-                <TrendingUp size={14} />
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6F82A0]">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-[#EEF3F9] to-[#E1EAF6] ring-1 ring-[#DDE4ED]">
+                  <TrendingUp size={13} className="text-[#112250]" />
+                </span>
                 Event Terbaru
               </div>
 
@@ -649,7 +595,7 @@ export default function CariEventPage() {
                     setSort(e.target.value);
                     setPage(1);
                   }}
-                  className="h-10 w-full appearance-none rounded-xl border border-[#DDE4ED] bg-white pl-4 pr-9 text-xs font-medium text-[#52627A] outline-none transition focus:border-[#9DAFC7] sm:w-auto"
+                  className="h-10 w-full appearance-none rounded-xl border border-[#DDE4ED] bg-white pl-4 pr-9 text-xs font-medium text-[#52627A] outline-none transition focus:border-[#9DAFC7] focus:ring-2 focus:ring-[#EDF2F9] sm:w-auto"
                 >
                   <option value="Terpopuler">Terpopuler</option>
                   <option value="Tanggal Terdekat">Tanggal Terdekat</option>
@@ -664,13 +610,19 @@ export default function CariEventPage() {
           </div>
 
           {/* RESULT COUNT */}
-          <div className="mb-5 flex items-center justify-between gap-3">
+          <div className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-[#EEF1F5] bg-[#FAFBFD] px-4 py-2.5">
             <p className="text-xs text-[#8793A3]">
               Menampilkan{" "}
-              <span className="font-semibold text-[#52627A]">
+              <span className="font-semibold text-[#112250]">
                 {filteredEvents.length}
               </span>{" "}
               event
+              {totalPages > 1 && (
+                <span className="text-[#A0A9B6]">
+                  {" "}
+                  · Halaman {currentPage} dari {totalPages}
+                </span>
+              )}
             </p>
 
             {(search ||
@@ -690,7 +642,7 @@ export default function CariEventPage() {
 
           {/* EVENT GRID */}
           {displayedEvents.length > 0 ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {displayedEvents.map((event) => (
                 <EventCard key={event.id} event={event} />
               ))}
@@ -701,43 +653,40 @@ export default function CariEventPage() {
 
           {/* PAGINATION */}
           {totalPages > 1 && (
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-1.5">
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-1.5">
               <button
                 type="button"
                 disabled={currentPage === 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#DDE4ED] bg-white text-[#63728A] transition hover:bg-[#F3F6FA] disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#DDE4ED] bg-white text-[#63728A] shadow-sm transition hover:border-[#112250] hover:bg-[#112250] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#DDE4ED] disabled:hover:bg-white disabled:hover:text-[#63728A]"
                 aria-label="Halaman sebelumnya"
               >
                 <ChevronLeft size={16} />
               </button>
 
-              {Array.from(
-                { length: totalPages },
-                (_, index) => index + 1
-              ).map((number) => (
-                <button
-                  key={number}
-                  type="button"
-                  onClick={() => setPage(number)}
-                  aria-current={currentPage === number ? "page" : undefined}
-                  className={`h-9 w-9 rounded-lg text-xs font-semibold transition ${
-                    currentPage === number
-                      ? "bg-[#112250] text-white"
-                      : "bg-white text-[#65748A] hover:bg-[#EEF3F9]"
-                  }`}
-                >
-                  {number}
-                </button>
-              ))}
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map(
+                (number) => (
+                  <button
+                    key={number}
+                    type="button"
+                    onClick={() => setPage(number)}
+                    aria-current={currentPage === number ? "page" : undefined}
+                    className={`h-10 w-10 rounded-xl text-xs font-semibold transition ${
+                      currentPage === number
+                        ? "bg-gradient-to-r from-[#112250] to-[#1A326A] text-white shadow-md shadow-[#112250]/30"
+                        : "border border-transparent bg-white text-[#65748A] hover:bg-[#EEF3F9] hover:text-[#112250]"
+                    }`}
+                  >
+                    {number}
+                  </button>
+                )
+              )}
 
               <button
                 type="button"
                 disabled={currentPage === totalPages}
-                onClick={() =>
-                  setPage((p) => Math.min(totalPages, p + 1))
-                }
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#DDE4ED] bg-white text-[#63728A] transition hover:bg-[#F3F6FA] disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#DDE4ED] bg-white text-[#63728A] shadow-sm transition hover:border-[#112250] hover:bg-[#112250] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#DDE4ED] disabled:hover:bg-white disabled:hover:text-[#63728A]"
                 aria-label="Halaman berikutnya"
               >
                 <ChevronRight size={16} />
@@ -747,33 +696,39 @@ export default function CariEventPage() {
         </section>
 
         {/* CTA */}
-        <section className="relative isolate mt-14 overflow-hidden rounded-[24px] bg-[#112250] sm:rounded-[28px]">
-          <div className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full border border-white/[0.08]" />
-          <div className="pointer-events-none absolute -bottom-28 -left-16 h-64 w-64 rounded-full border border-white/[0.06]" />
+        <section className="relative isolate mt-16 overflow-hidden rounded-[32px] bg-gradient-to-r from-[#0D1F42] via-[#112250] to-[#1A326A] shadow-[0_30px_80px_-20px_rgba(13,31,66,0.5)]">
+          <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full border border-white/[0.08]" />
+          <div className="pointer-events-none absolute -bottom-32 -left-20 h-72 w-72 rounded-full border border-white/[0.06]" />
+          <div className="pointer-events-none absolute right-1/3 top-1/2 h-48 w-48 rounded-full bg-[#3C5C99]/20 blur-3xl" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(255,255,255,0.06),transparent_55%)]" />
 
-          <div className="relative flex flex-col gap-6 px-6 py-9 sm:px-10 sm:py-10 lg:flex-row lg:items-center lg:justify-between lg:px-14">
+          <div className="relative flex flex-col gap-7 px-6 py-12 sm:px-10 sm:py-14 lg:flex-row lg:items-center lg:justify-between lg:px-14">
             <div className="max-w-2xl">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-[11px] font-medium text-blue-100">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.08] px-3.5 py-1.5 text-[11px] font-medium text-blue-100 backdrop-blur-sm">
                 <Ticket size={13} />
                 TicketVerse
               </div>
 
-              <h2 className="text-2xl font-bold text-white sm:text-3xl">
+              <h2 className="text-2xl font-bold leading-tight text-white sm:text-3xl">
                 Jangan sampai ketinggalan event favoritmu.
               </h2>
 
-              <p className="mt-2 text-sm leading-6 text-blue-100/65">
-                Temukan event menarik dan dapatkan pengalaman terbaik
-                bersama TicketVerse.
+              <p className="mt-3 text-sm leading-6 text-blue-100/65">
+                Temukan event menarik dan dapatkan pengalaman terbaik bersama
+                TicketVerse. Ribuan event menanti untuk kamu jelajahi.
               </p>
             </div>
 
             <Link
               href="/cari-acara"
-              className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-semibold text-[#112250] transition hover:bg-[#EEF3F9] sm:w-auto"
+              className="group inline-flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-[#112250] shadow-lg shadow-black/20 transition hover:bg-[#EEF3F9] hover:shadow-xl sm:w-auto"
             >
               Jelajahi Event
-              <ArrowRight size={16} />
+              <ArrowRight
+                size={16}
+                className="transition group-hover:translate-x-0.5"
+              />
             </Link>
           </div>
         </section>
@@ -782,39 +737,37 @@ export default function CariEventPage() {
   );
 }
 
-/* =========================================================
-   FEATURED EVENT CARD
-========================================================= */
-
 function FeaturedEventCard({ event }) {
   return (
-    <article className="group relative overflow-hidden rounded-[22px] border border-[#DDE4ED] bg-white shadow-[0_8px_30px_rgba(17,34,80,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(17,34,80,0.12)]">
+    <article className="group relative overflow-hidden rounded-[24px] border border-[#DDE4ED] bg-white shadow-[0_12px_45px_rgba(17,34,80,0.08)] transition duration-300 hover:-translate-y-2 hover:border-[#C3D0E3] hover:shadow-[0_28px_65px_rgba(17,34,80,0.18)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-[#DCE7F7] via-[#112250] to-[#DCE7F7] opacity-0 transition group-hover:opacity-100" />
+
       <Link href={`/cari-acara/${event.id}`} className="block">
-        <div className="relative h-52 overflow-hidden bg-[#E9EDF3] sm:h-56">
+        <div className="relative h-56 overflow-hidden bg-[#E9EDF3] sm:h-60">
           <EventImage
             src={event.image}
             alt={event.title}
-            className="transition duration-700 group-hover:scale-105"
+            className="transition duration-700 group-hover:scale-110"
           />
 
-          <div className="absolute inset-0 bg-gradient-to-t from-[#07162F]/85 via-[#07162F]/10 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#07162F]/95 via-[#07162F]/25 to-transparent" />
 
           <div className="absolute left-4 top-4 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-bold text-[#112250] shadow-sm">
+            <span className="rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-bold text-[#112250] shadow-sm backdrop-blur">
               {event.category}
             </span>
 
-            <span className="rounded-full border border-white/15 bg-[#112250]/80 px-3 py-1.5 text-[10px] font-semibold text-white backdrop-blur">
+            <span className="rounded-full border border-white/20 bg-[#112250]/80 px-3 py-1.5 text-[10px] font-semibold text-white backdrop-blur">
               {event.status}
             </span>
           </div>
 
           <div className="absolute bottom-4 left-4 right-4">
-            <p className="truncate text-[10px] font-medium uppercase tracking-widest text-blue-200">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-200">
               {event.artist}
             </p>
 
-            <h3 className="mt-1 line-clamp-2 text-lg font-bold text-white">
+            <h3 className="mt-1.5 line-clamp-2 text-lg font-bold leading-snug text-white">
               {event.title}
             </h3>
           </div>
@@ -846,7 +799,7 @@ function FeaturedEventCard({ event }) {
               </p>
             </div>
 
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#526B92]">
+            <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#EEF3F9] px-3.5 py-2 text-xs font-semibold text-[#526B92] transition group-hover:bg-[#112250] group-hover:text-white group-hover:shadow-md group-hover:shadow-[#112250]/25">
               Detail
               <ArrowRight
                 size={14}
@@ -860,13 +813,11 @@ function FeaturedEventCard({ event }) {
   );
 }
 
-/* =========================================================
-   EVENT CARD
-========================================================= */
-
 function EventCard({ event }) {
   return (
-    <article className="group relative min-w-0 overflow-hidden rounded-[20px] border border-[#DDE4ED] bg-white shadow-[0_6px_24px_rgba(17,34,80,0.045)] transition duration-300 hover:-translate-y-1 hover:border-[#CBD6E5] hover:shadow-[0_15px_35px_rgba(17,34,80,0.09)]">
+    <article className="group relative min-w-0 overflow-hidden rounded-[20px] border border-[#DDE4ED] bg-white shadow-[0_8px_30px_rgba(17,34,80,0.06)] transition duration-300 hover:-translate-y-1.5 hover:border-[#C3D0E3] hover:shadow-[0_22px_55px_rgba(17,34,80,0.14)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-[#DCE7F7] via-[#112250] to-[#DCE7F7] opacity-0 transition group-hover:opacity-100" />
+
       <Link href={`/cari-acara/${event.id}`} className="block">
         <div className="relative h-48 overflow-hidden bg-[#E9EDF3]">
           <EventImage
@@ -875,10 +826,10 @@ function EventCard({ event }) {
             className="transition duration-700 group-hover:scale-105"
           />
 
-          <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
 
           <div className="absolute left-4 top-4">
-            <span className="rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-semibold text-[#112250] shadow-sm">
+            <span className="rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-semibold text-[#112250] shadow-sm backdrop-blur">
               {event.category}
             </span>
           </div>
@@ -915,9 +866,7 @@ function EventCard({ event }) {
 
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[10px] text-[#9AA4B3]">
-                Status event
-              </p>
+              <p className="text-[10px] text-[#9AA4B3]">Status event</p>
 
               <p className="mt-0.5 truncate text-sm font-bold text-[#112250]">
                 {event.status}
@@ -935,14 +884,10 @@ function EventCard({ event }) {
   );
 }
 
-/* =========================================================
-   MINI INFO
-========================================================= */
-
 function MiniInfo({ icon, label, value }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#EEF3F9] text-[#526B92]">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#EEF3F9] to-[#E1EAF6] text-[#526B92] ring-1 ring-[#DDE4ED]">
         {icon}
       </div>
 
@@ -959,30 +904,29 @@ function MiniInfo({ icon, label, value }) {
   );
 }
 
-/* =========================================================
-   EMPTY STATE
-========================================================= */
-
 function EmptyState({ resetFilter }) {
   return (
-    <div className="rounded-[22px] border border-[#DDE4ED] bg-white px-6 py-16 text-center sm:py-20">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EEF3F9] text-[#526B92]">
+    <div className="relative overflow-hidden rounded-[24px] border border-[#DDE4ED] bg-gradient-to-br from-white via-[#FAFBFD] to-[#F2F6FB] px-6 py-16 text-center shadow-[0_10px_40px_rgba(17,34,80,0.06)] sm:py-20">
+      <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#EAF0FA]/70 blur-2xl" />
+      <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-[#E6EEF9]/70 blur-2xl" />
+
+      <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#112250] to-[#1A326A] text-white shadow-lg shadow-[#112250]/30 ring-4 ring-[#EEF3F9]">
         <Search size={27} />
       </div>
 
-      <h3 className="mt-5 text-base font-bold text-[#112250]">
+      <h3 className="relative mt-5 text-base font-bold text-[#112250]">
         Event tidak ditemukan
       </h3>
 
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#8793A3]">
-        Kami belum menemukan event yang sesuai dengan pencarian
-        atau filter yang kamu pilih.
+      <p className="relative mx-auto mt-2 max-w-md text-sm leading-6 text-[#8793A3]">
+        Kami belum menemukan event yang sesuai dengan pencarian atau filter yang
+        kamu pilih.
       </p>
 
       <button
         type="button"
         onClick={resetFilter}
-        className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-[#112250] px-5 text-xs font-semibold text-white transition hover:bg-[#1A326A]"
+        className="relative mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-[#112250] px-5 text-xs font-semibold text-white shadow-lg shadow-[#112250]/25 transition hover:bg-[#1A326A] hover:shadow-xl hover:shadow-[#112250]/30"
       >
         Reset pencarian
         <X size={14} />

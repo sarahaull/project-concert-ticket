@@ -26,6 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Crown,
+  Image as ImageIcon,
 } from "lucide-react";
 
 const DEFAULT_WIDTH = 260;
@@ -184,7 +185,8 @@ export default function SidebarSuperAdmin() {
       items: [
         { label: "Ulasan Konser", href: "/superadmin/kelola-ulasan", icon: Star },
         { label: "Notifikasi", href: "/superadmin/kelola-notif", icon: Bell },
-            ],
+        { label: "Kelola Banner Publik", href: "/superadmin/banners", icon: ImageIcon },
+      ],
     },
     {
       title: "System",

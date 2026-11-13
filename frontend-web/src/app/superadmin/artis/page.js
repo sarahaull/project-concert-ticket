@@ -1,199 +1,403 @@
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  MicrophoneIcon,
   ArrowLeftIcon,
   MagnifyingGlassIcon,
   PlusIcon,
   PencilSquareIcon,
   TrashIcon,
-  StarIcon,
+  MicrophoneIcon,
   MusicalNoteIcon,
-  UserGroupIcon,
   GlobeAltIcon,
-  EllipsisHorizontalIcon,
+  XMarkIcon,
+  ArrowPathIcon,
+  EyeIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 
-const mockArtists = [
-  {
-    id: 1,
-    name: "Coldplay",
-    genre: "Alternative Rock",
-    origin: "London, UK",
-    events: 2,
-    popularity: 98,
-    status: "Aktif",
-    image: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=150&h=150&fit=crop",
-  },
-  {
-    id: 2,
-    name: "BLACKPINK",
-    genre: "K-Pop",
-    origin: "Seoul, KR",
-    events: 3,
-    popularity: 99,
-    status: "Aktif",
-    image: "https://images.unsplash.com/photo-1524368535928-5b5e00ddc76b?w=150&h=150&fit=crop",
-  },
-  {
-    id: 3,
-    name: "NCT DREAM",
-    genre: "K-Pop",
-    origin: "Seoul, KR",
-    events: 1,
-    popularity: 92,
-    status: "Aktif",
-    image: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=150&h=150&fit=crop",
-  },
-  {
-    id: 4,
-    name: "Sheila On 7",
-    genre: "Pop Rock",
-    origin: "Yogyakarta, ID",
-    events: 4,
-    popularity: 95,
-    status: "Aktif",
-    image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=150&h=150&fit=crop",
-  },
-  {
-    id: 5,
-    name: "Deep Purple",
-    genre: "Hard Rock",
-    origin: "Hertford, UK",
-    events: 1,
-    popularity: 88,
-    status: "Tidak Aktif",
-    image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=150&h=150&fit=crop",
-  },
-  {
-    id: 6,
-    name: "Taylor Swift",
-    genre: "Pop",
-    origin: "Nashville, US",
-    events: 2,
-    popularity: 100,
-    status: "Aktif",
-    image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=150&h=150&fit=crop",
-  },
-];
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "");
 
-export default function DataArtis() {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("Semua");
+const ARTIST_ENDPOINT = `${API_URL}/api/artists`;
 
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
+const initialForm = {
+  artist_name: "",
+  photo: "",
+  description: "",
+  instagram: "",
+};
 
-  const filteredArtists = mockArtists.filter((artist) => {
-    const matchSearch = artist.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = filterStatus === "Semua" || artist.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+function getToken() {
+  if (typeof window === "undefined") return "";
 
   return (
-    <div className={`w-full space-y-6 ${isLoaded ? "animate-in fade-in duration-500" : "opacity-0"}`}>
-      <section className="relative overflow-hidden w-full rounded-2xl px-6 py-8 shadow-[0_8px_30px_rgba(10,20,40,0.25)]">
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#13213b] to-[#1b2f4e]" />
-        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#5a8ad0]/15 blur-3xl animate-pulse" />
-        <div className="absolute -bottom-20 left-20 h-48 w-48 rounded-full bg-[#8ab4f8]/10 blur-3xl animate-pulse delay-75" />
-        <div className="absolute right-1/3 top-1/2 h-32 w-32 rounded-full bg-[#4a6b9a]/15 blur-2xl animate-pulse delay-150" />
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("authToken") ||
+    sessionStorage.getItem("token") ||
+    ""
+  );
+}
 
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+async function apiRequest(url, options = {}) {
+  const token = getToken();
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      result.message || `Request gagal (${response.status})`
+    );
+  }
+
+  if (result.success === false) {
+    throw new Error(result.message || "Permintaan gagal");
+  }
+
+  return result;
+}
+
+function formatDate(date) {
+  if (!date) return "-";
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) return "-";
+
+  return parsed.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export default function DataArtis() {
+  const [artists, setArtists] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [showModal, setShowModal] = useState(false);
+  const [selectedArtist, setSelectedArtist] = useState(null);
+  const [detailArtist, setDetailArtist] = useState(null);
+
+  const [form, setForm] = useState(initialForm);
+
+  // =====================================================
+  // GET ARTISTS
+  // =====================================================
+
+  const fetchArtists = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const result = await apiRequest(ARTIST_ENDPOINT);
+
+      setArtists(
+        Array.isArray(result.artists) ? result.artists : []
+      );
+    } catch (err) {
+      setError(err.message || "Gagal mengambil data artis.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchArtists();
+  }, [fetchArtists]);
+
+  // =====================================================
+  // SEARCH
+  // =====================================================
+
+  const filteredArtists = useMemo(() => {
+    const keyword = searchTerm.toLowerCase().trim();
+
+    return artists.filter((artist) => {
+      return (
+        artist.artist_name?.toLowerCase().includes(keyword) ||
+        artist.description?.toLowerCase().includes(keyword) ||
+        artist.instagram?.toLowerCase().includes(keyword)
+      );
+    });
+  }, [artists, searchTerm]);
+
+  // =====================================================
+  // OPEN CREATE MODAL
+  // =====================================================
+
+  const handleAdd = () => {
+    setSelectedArtist(null);
+    setForm(initialForm);
+    setError("");
+    setShowModal(true);
+  };
+
+  // =====================================================
+  // OPEN EDIT MODAL
+  // =====================================================
+
+  const handleEdit = (artist) => {
+    setSelectedArtist(artist);
+
+    setForm({
+      artist_name: artist.artist_name || "",
+      photo: artist.photo || "",
+      description: artist.description || "",
+      instagram: artist.instagram || "",
+    });
+
+    setError("");
+    setShowModal(true);
+  };
+
+  // =====================================================
+  // FORM CHANGE
+  // =====================================================
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // =====================================================
+  // CREATE / UPDATE
+  // =====================================================
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!form.artist_name.trim()) {
+      setError("Nama artis wajib diisi.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError("");
+
+      const payload = {
+        artist_name: form.artist_name.trim(),
+        photo: form.photo.trim() || null,
+        description: form.description.trim() || null,
+        instagram: form.instagram.trim() || null,
+      };
+
+      if (selectedArtist) {
+        await apiRequest(
+          `${ARTIST_ENDPOINT}/${selectedArtist.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          }
+        );
+
+        setSuccess("Data artis berhasil diperbarui.");
+      } else {
+        await apiRequest(ARTIST_ENDPOINT, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        setSuccess("Artis berhasil ditambahkan.");
+      }
+
+      setShowModal(false);
+      setSelectedArtist(null);
+      setForm(initialForm);
+
+      await fetchArtists();
+    } catch (err) {
+      setError(err.message || "Gagal menyimpan data artis.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // =====================================================
+  // DELETE
+  // =====================================================
+
+  const handleDelete = async (artist) => {
+    const confirmed = window.confirm(
+      `Yakin ingin menghapus artis "${artist.artist_name}"?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setError("");
+      setSuccess("");
+
+      await apiRequest(`${ARTIST_ENDPOINT}/${artist.id}`, {
+        method: "DELETE",
+      });
+
+      setSuccess("Artis berhasil dihapus.");
+
+      if (detailArtist?.id === artist.id) {
+        setDetailArtist(null);
+      }
+
+      await fetchArtists();
+    } catch (err) {
+      setError(err.message || "Gagal menghapus artis.");
+    }
+  };
+
+  // =====================================================
+  // CLOSE MODAL
+  // =====================================================
+
+  const closeModal = () => {
+    if (submitting) return;
+
+    setShowModal(false);
+    setSelectedArtist(null);
+    setForm(initialForm);
+    setError("");
+  };
+
+  return (
+    <div className="w-full space-y-6">
+
+      {/* HEADER */}
+
+      <section className="relative overflow-hidden rounded-2xl px-6 py-8 shadow-lg">
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#13213b] to-[#1b2f4e]" />
+
+        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[#5a8ad0]/15 blur-3xl" />
+
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div>
             <Link
               href="/superadmin"
-              className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] uppercase text-[#8aa0c0] hover:text-white transition-colors mb-3"
+              className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase text-[#8aa0c0] hover:text-white mb-3"
             >
               <ArrowLeftIcon className="w-3 h-3" />
               Kembali ke Dashboard
             </Link>
-            <h1 className="text-[26px] sm:text-[32px] font-bold tracking-[-0.03em] text-white">
-              Data <span className="bg-gradient-to-r from-[#8ab4f8] to-[#b0c8e0] bg-clip-text text-transparent">Artis</span>
+
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">
+              Data <span className="text-[#8ab4f8]">Artis</span>
             </h1>
-            <p className="mt-1.5 text-sm text-[#8aa0c0] max-w-xl">
-              Kelola daftar artis, musisi, dan performer yang terdaftar di platform TicketVerse.
+
+            <p className="mt-2 text-sm text-[#8aa0c0] max-w-xl">
+              Kelola data artis dan performer yang terdaftar
+              di platform TicketVerse.
             </p>
           </div>
-          
-          <button className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#8ab4f8] to-[#5a8ad0] text-[#0a1628] text-sm font-bold px-5 py-3 rounded-xl hover:shadow-[0_8px_25px_rgba(138,180,248,0.3)] hover:-translate-y-0.5 transition-all duration-300 self-start sm:self-auto">
+
+          <button
+            onClick={handleAdd}
+            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#8ab4f8] to-[#5a8ad0] text-[#0a1628] text-sm font-bold px-5 py-3 rounded-xl hover:shadow-lg transition"
+          >
             <PlusIcon className="w-4 h-4" />
             Tambah Artis
           </button>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-5 shadow-[0_4px_20px_rgba(10,20,40,0.06)] flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-[#e6f0fa] flex items-center justify-center text-[#4a6b9a]">
-            <MicrophoneIcon className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-[11px] font-medium text-[#7e91b2] uppercase tracking-wider">Total Artis</p>
-            <p className="text-xl font-bold text-[#0a1628]">{mockArtists.length}</p>
-          </div>
+      {/* ALERT */}
+
+      {error && !showModal && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <ExclamationTriangleIcon className="w-5 h-5 shrink-0" />
+          <span>{error}</span>
         </div>
-        <div className="rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-5 shadow-[0_4px_20px_rgba(10,20,40,0.06)] flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
-            <StarIcon className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-[11px] font-medium text-[#7e91b2] uppercase tracking-wider">Artis Aktif</p>
-            <p className="text-xl font-bold text-[#0a1628]">
-              {mockArtists.filter((a) => a.status === "Aktif").length}
-            </p>
-          </div>
+      )}
+
+      {success && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          <CheckCircleIcon className="w-5 h-5 shrink-0" />
+          <span>{success}</span>
+          <button
+            onClick={() => setSuccess("")}
+            className="ml-auto"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
         </div>
-        <div className="rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-5 shadow-[0_4px_20px_rgba(10,20,40,0.06)] flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600">
-            <MusicalNoteIcon className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-[11px] font-medium text-[#7e91b2] uppercase tracking-wider">Total Event</p>
-            <p className="text-xl font-bold text-[#0a1628]">
-              {mockArtists.reduce((acc, curr) => acc + curr.events, 0)}
-            </p>
-          </div>
-        </div>
+      )}
+
+      {/* SUMMARY */}
+
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <SummaryCard
+          icon={MicrophoneIcon}
+          title="Total Artis"
+          value={artists.length}
+        />
+
+        <SummaryCard
+          icon={MusicalNoteIcon}
+          title="Hasil Pencarian"
+          value={filteredArtists.length}
+        />
       </section>
 
-      <section className="rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 shadow-[0_4px_20px_rgba(10,20,40,0.06)] hover:shadow-[0_8px_30px_rgba(10,20,40,0.10)] transition-all duration-300 overflow-hidden">
-        <div className="p-6 border-b border-[#e0e8f0]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* TABLE */}
+
+      <section className="rounded-2xl bg-white border border-[#e0e8f0]/60 shadow-sm overflow-hidden">
+
+        <div className="p-5 sm:p-6 border-b border-[#e0e8f0] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-[15px] font-bold tracking-[-0.01em] text-[#0a1628] flex items-center gap-2">
-              <span className="w-1 h-4 rounded-full bg-[#4a6b9a]" />
+            <h2 className="text-base font-bold text-[#0a1628]">
               Daftar Artis
             </h2>
-            <p className="text-[11px] text-[#7e91b2] mt-0.5">
-              Menampilkan {filteredArtists.length} dari {mockArtists.length} artis
+
+            <p className="text-xs text-[#7e91b2] mt-1">
+              Menampilkan {filteredArtists.length} dari {artists.length} artis
             </p>
           </div>
-          
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+
+          <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <MagnifyingGlassIcon className="h-4 w-4 text-[#7e91b2]" />
-              </div>
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7e91b2]" />
+
               <input
                 type="text"
-                placeholder="Cari nama artis..."
+                placeholder="Cari nama, deskripsi, Instagram..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full sm:w-64 pl-9 pr-4 py-2 bg-[#f8fafc] border border-[#d0d8e4] rounded-xl text-xs font-medium text-[#0a1628] placeholder:text-[#a0b0c8] outline-none focus:border-[#8ab4f8] focus:ring-2 focus:ring-[#8ab4f8]/20 transition-all"
+                className="w-full sm:w-72 pl-9 pr-4 py-2.5 bg-[#f8fafc] border border-[#d0d8e4] rounded-xl text-xs text-[#0a1628] outline-none focus:border-[#8ab4f8] focus:ring-2 focus:ring-[#8ab4f8]/20"
               />
             </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="bg-white border border-[#d0d8e4] rounded-xl px-3 py-2 text-xs font-medium text-[#0a1628] outline-none focus:border-[#8ab4f8] focus:ring-2 focus:ring-[#8ab4f8]/20 cursor-pointer transition"
+
+            <button
+              onClick={fetchArtists}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[#d0d8e4] text-xs font-semibold text-[#4a6b9a] hover:bg-[#f8fafc] disabled:opacity-50"
             >
-              <option value="Semua">Semua Status</option>
-              <option value="Aktif">Aktif</option>
-              <option value="Tidak Aktif">Tidak Aktif</option>
-            </select>
+              <ArrowPathIcon
+                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </button>
           </div>
         </div>
 
@@ -201,131 +405,413 @@ export default function DataArtis() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f8fafc] border-b border-[#e0e8f0]">
-                <th className="py-3 px-6 text-[10px] font-semibold text-[#7e91b2] uppercase tracking-wider">Artis</th>
-                <th className="py-3 px-6 text-[10px] font-semibold text-[#7e91b2] uppercase tracking-wider">Genre</th>
-                <th className="py-3 px-6 text-[10px] font-semibold text-[#7e91b2] uppercase tracking-wider">Asal</th>
-                <th className="py-3 px-6 text-[10px] font-semibold text-[#7e91b2] uppercase tracking-wider text-center">Event</th>
-                <th className="py-3 px-6 text-[10px] font-semibold text-[#7e91b2] uppercase tracking-wider">Popularitas</th>
-                <th className="py-3 px-6 text-[10px] font-semibold text-[#7e91b2] uppercase tracking-wider">Status</th>
-                <th className="py-3 px-6 text-[10px] font-semibold text-[#7e91b2] uppercase tracking-wider text-right">Aksi</th>
+                <th className="py-4 px-5 text-[10px] font-bold text-[#7e91b2] uppercase">
+                  Artis
+                </th>
+
+                <th className="py-4 px-5 text-[10px] font-bold text-[#7e91b2] uppercase">
+                  Deskripsi
+                </th>
+
+                <th className="py-4 px-5 text-[10px] font-bold text-[#7e91b2] uppercase">
+                  Instagram
+                </th>
+
+                <th className="py-4 px-5 text-[10px] font-bold text-[#7e91b2] uppercase">
+                  Tanggal Dibuat
+                </th>
+
+                <th className="py-4 px-5 text-[10px] font-bold text-[#7e91b2] uppercase text-right">
+                  Aksi
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#e0e8f0]/50">
-              {filteredArtists.length > 0 ? (
+
+            <tbody className="divide-y divide-[#e0e8f0]/60">
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="py-14 text-center">
+                    <ArrowPathIcon className="w-6 h-6 animate-spin mx-auto text-[#5a7aad]" />
+                    <p className="text-xs text-[#7e91b2] mt-3">
+                      Mengambil data artis dari server...
+                    </p>
+                  </td>
+                </tr>
+              ) : filteredArtists.length > 0 ? (
                 filteredArtists.map((artist) => (
-                  <tr key={artist.id} className="group hover:bg-[#f0f5fc] transition-colors duration-200">
-                    <td className="py-3 px-6">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={artist.image}
-                          alt={artist.name}
-                          className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm"
-                        />
-                        <div className="flex flex-col">
-                          <span className="text-sm font-bold text-[#0a1628]">{artist.name}</span>
-                          <span className="text-[10px] text-[#7e91b2]">ID: ART-{artist.id.toString().padStart(3, '0')}</span>
+                  <tr
+                    key={artist.id}
+                    className="hover:bg-[#f8fafc] transition-colors"
+                  >
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-3 min-w-[180px]">
+                        <div className="w-11 h-11 rounded-full overflow-hidden bg-[#e6f0fa] border border-[#d0d8e4] shrink-0 flex items-center justify-center">
+                          {artist.photo ? (
+                            <img
+                              src={artist.photo}
+                              alt={artist.artist_name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <MicrophoneIcon className="w-5 h-5 text-[#5a7aad]" />
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-sm font-bold text-[#0a1628]">
+                            {artist.artist_name}
+                          </p>
+                          <p className="text-[10px] text-[#7e91b2]">
+                            ID: {artist.id}
+                          </p>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-6">
-                      <span className="inline-flex items-center px-2 py-1 rounded-md bg-[#e6f0fa] text-[10px] font-medium text-[#4a6b9a] border border-[#d0d8e4]">
-                        {artist.genre}
-                      </span>
+
+                    <td className="py-4 px-5">
+                      <p className="text-xs text-[#64748b] max-w-[240px] line-clamp-2">
+                        {artist.description || "-"}
+                      </p>
                     </td>
-                    <td className="py-3 px-6">
-                      <div className="flex items-center gap-1.5 text-xs text-[#0a1628]">
-                        <GlobeAltIcon className="w-3.5 h-3.5 text-[#7e91b2]" />
-                        {artist.origin}
-                      </div>
+
+                    <td className="py-4 px-5">
+                      {artist.instagram ? (
+                        <a
+                          href={
+                            artist.instagram.startsWith("http")
+                              ? artist.instagram
+                              : `https://instagram.com/${artist.instagram.replace("@", "")}`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-medium text-[#4a6b9a] hover:underline"
+                        >
+                          {artist.instagram}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-[#94a3b8]">-</span>
+                      )}
                     </td>
-                    <td className="py-3 px-6 text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#f0f5fc] text-xs font-bold text-[#0a1628]">
-                        {artist.events}
-                      </span>
+
+                    <td className="py-4 px-5 text-xs text-[#64748b] whitespace-nowrap">
+                      {formatDate(artist.created_at)}
                     </td>
-                    <td className="py-3 px-6">
-                      <div className="flex items-center gap-2">
-                        <div className="w-full max-w-[100px] h-1.5 bg-[#e0e8f0] rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-[#8ab4f8] to-[#4a6b9a] rounded-full"
-                            style={{ width: `${artist.popularity}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-bold text-[#0a1628]">{artist.popularity}%</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold ${
-                        artist.status === "Aktif"
-                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
-                          : "bg-red-500/10 border-red-500/20 text-red-600"
-                      }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${artist.status === "Aktif" ? "bg-emerald-500" : "bg-red-500"}`} />
-                        {artist.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-6 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <button className="p-1.5 rounded-lg text-[#7e91b2] hover:text-[#0a1628] hover:bg-white transition-colors" title="Edit">
+
+                    <td className="py-4 px-5">
+                      <div className="flex items-center justify-end gap-1">
+                        <ActionButton
+                          title="Detail"
+                          onClick={() => setDetailArtist(artist)}
+                        >
+                          <EyeIcon className="w-4 h-4" />
+                        </ActionButton>
+
+                        <ActionButton
+                          title="Edit"
+                          onClick={() => handleEdit(artist)}
+                        >
                           <PencilSquareIcon className="w-4 h-4" />
-                        </button>
-                        <button className="p-1.5 rounded-lg text-[#7e91b2] hover:text-red-600 hover:bg-red-50 transition-colors" title="Hapus">
+                        </ActionButton>
+
+                        <ActionButton
+                          title="Hapus"
+                          danger
+                          onClick={() => handleDelete(artist)}
+                        >
                           <TrashIcon className="w-4 h-4" />
-                        </button>
+                        </ActionButton>
                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-sm text-[#7e91b2]">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <UserGroupIcon className="w-8 h-8 text-[#d0d8e4]" />
-                      <p>Tidak ada data artis yang ditemukan.</p>
-                    </div>
+                  <td colSpan="5" className="py-14 text-center">
+                    <MicrophoneIcon className="w-9 h-9 mx-auto text-[#cbd5e1]" />
+                    <p className="text-sm font-semibold text-[#64748b] mt-3">
+                      Tidak ada data artis
+                    </p>
+                    <p className="text-xs text-[#94a3b8] mt-1">
+                      Coba ubah kata kunci pencarian atau tambahkan artis baru.
+                    </p>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        
-        <div className="p-4 border-t border-[#e0e8f0]/50 flex items-center justify-between text-[11px] text-[#7e91b2]">
-          <span>Menampilkan 1-{filteredArtists.length} dari {filteredArtists.length} data</span>
-          <div className="flex items-center gap-1">
-            <button className="px-3 py-1.5 rounded-lg border border-[#d0d8e4] hover:bg-[#f8fafc] transition-colors disabled:opacity-50" disabled>Sebelumnya</button>
-            <button className="px-3 py-1.5 rounded-lg border border-[#d0d8e4] hover:bg-[#f8fafc] transition-colors">Selanjutnya</button>
-          </div>
+
+        <div className="px-5 py-4 border-t border-[#e0e8f0] text-xs text-[#7e91b2]">
+          Total {filteredArtists.length} data artis
         </div>
       </section>
 
+      {/* CREATE / EDIT MODAL */}
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-[#0a1628]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+
+            <div className="flex items-center justify-between p-5 border-b border-[#e0e8f0]">
+              <div>
+                <h2 className="text-lg font-bold text-[#0a1628]">
+                  {selectedArtist ? "Edit Artis" : "Tambah Artis"}
+                </h2>
+
+                <p className="text-xs text-[#7e91b2] mt-1">
+                  Isi informasi artis sesuai data yang akan disimpan.
+                </p>
+              </div>
+
+              <button
+                onClick={closeModal}
+                className="p-2 rounded-lg hover:bg-[#f1f5f9]"
+              >
+                <XMarkIcon className="w-5 h-5 text-[#64748b]" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+
+              {error && (
+                <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <FormField label="Nama Artis" required>
+                <input
+                  type="text"
+                  name="artist_name"
+                  value={form.artist_name}
+                  onChange={handleChange}
+                  placeholder="Masukkan nama artis"
+                  required
+                  className="form-input"
+                />
+              </FormField>
+
+              <FormField label="URL Foto">
+                <input
+                  type="url"
+                  name="photo"
+                  value={form.photo}
+                  onChange={handleChange}
+                  placeholder="https://example.com/foto.jpg"
+                  className="form-input"
+                />
+              </FormField>
+
+              {form.photo && (
+                <div className="flex items-center gap-3">
+                  <img
+                    src={form.photo}
+                    alt="Preview foto artis"
+                    className="w-16 h-16 rounded-xl object-cover border border-[#e0e8f0]"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                  <p className="text-xs text-[#7e91b2]">
+                    Preview foto artis
+                  </p>
+                </div>
+              )}
+
+              <FormField label="Deskripsi">
+                <textarea
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  rows={4}
+                  placeholder="Masukkan deskripsi artis"
+                  className="form-input resize-none"
+                />
+              </FormField>
+
+              <FormField label="Instagram">
+                <input
+                  type="text"
+                  name="instagram"
+                  value={form.instagram}
+                  onChange={handleChange}
+                  placeholder="@username atau URL Instagram"
+                  className="form-input"
+                />
+              </FormField>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-[#e0e8f0]">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={submitting}
+                  className="px-5 py-2.5 rounded-xl border border-[#d0d8e4] text-sm font-semibold text-[#64748b]"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 rounded-xl bg-[#13213b] text-white text-sm font-semibold hover:bg-[#1b2f4e] disabled:opacity-50"
+                >
+                  {submitting
+                    ? "Menyimpan..."
+                    : selectedArtist
+                    ? "Simpan Perubahan"
+                    : "Tambah Artis"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL MODAL */}
+
+      {detailArtist && (
+        <div className="fixed inset-0 z-50 bg-[#0a1628]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-[#e0e8f0]">
+              <h2 className="font-bold text-[#0a1628]">
+                Detail Artis
+              </h2>
+
+              <button
+                onClick={() => setDetailArtist(null)}
+                className="p-2 rounded-lg hover:bg-[#f1f5f9]"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 text-center">
+              <div className="w-24 h-24 rounded-full mx-auto overflow-hidden bg-[#e6f0fa] flex items-center justify-center">
+                {detailArtist.photo ? (
+                  <img
+                    src={detailArtist.photo}
+                    alt={detailArtist.artist_name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <MicrophoneIcon className="w-10 h-10 text-[#5a7aad]" />
+                )}
+              </div>
+
+              <h3 className="mt-4 text-xl font-bold text-[#0a1628]">
+                {detailArtist.artist_name}
+              </h3>
+
+              <p className="text-xs text-[#7e91b2] mt-1">
+                ID: {detailArtist.id}
+              </p>
+            </div>
+
+            <div className="px-6 pb-6 space-y-4">
+              <DetailRow
+                label="Instagram"
+                value={detailArtist.instagram || "-"}
+              />
+
+              <DetailRow
+                label="Tanggal Dibuat"
+                value={formatDate(detailArtist.created_at)}
+              />
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#94a3b8]">
+                  Deskripsi
+                </p>
+                <p className="text-sm text-[#475569] mt-1 whitespace-pre-wrap">
+                  {detailArtist.description || "-"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+        .form-input {
+          width: 100%;
+          padding: 11px 13px;
+          border: 1px solid #d0d8e4;
+          border-radius: 10px;
+          background: #f8fafc;
+          color: #0a1628;
+          font-size: 13px;
+          outline: none;
         }
 
-        .animate-in {
-          animation: fadeInUp 0.6s ease both;
-        }
-
-        .delay-75 {
-          animation-delay: 0.75s;
-        }
-        .delay-150 {
-          animation-delay: 1.5s;
-        }
-
-        .fade-in {
-          opacity: 1;
+        .form-input:focus {
+          border-color: #8ab4f8;
+          box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.15);
         }
       `}</style>
+    </div>
+  );
+}
+
+// =====================================================
+// COMPONENTS
+// =====================================================
+
+function SummaryCard({ icon: Icon, title, value }) {
+  return (
+    <div className="rounded-2xl bg-white border border-[#e0e8f0]/60 p-5 shadow-sm flex items-center gap-4">
+      <div className="w-12 h-12 rounded-xl bg-[#e6f0fa] flex items-center justify-center text-[#4a6b9a]">
+        <Icon className="w-6 h-6" />
+      </div>
+
+      <div>
+        <p className="text-[11px] font-medium text-[#7e91b2] uppercase tracking-wider">
+          {title}
+        </p>
+
+        <p className="text-xl font-bold text-[#0a1628] mt-1">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({ children, title, onClick, danger }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`p-2 rounded-lg transition-colors ${
+        danger
+          ? "text-red-500 hover:bg-red-50"
+          : "text-[#7e91b2] hover:text-[#0a1628] hover:bg-[#f0f5fc]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FormField({ label, required, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-[#334155] mb-2">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <div className="flex justify-between gap-4 border-b border-[#e0e8f0] pb-3">
+      <span className="text-xs text-[#94a3b8]">{label}</span>
+      <span className="text-xs font-semibold text-[#334155] text-right break-all">
+        {value}
+      </span>
     </div>
   );
 }

@@ -13,9 +13,22 @@ const app = express();
 // MIDDLEWARE
 // ======================================================
 
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:8081",
+  "http://127.0.0.1:8081",
+];
+
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Mengizinkan request tanpa origin, misalnya dari Postman
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked: ${origin}`));
+    },
     credentials: true,
   })
 );
@@ -48,14 +61,14 @@ const profileRoutes = require("./routes/profileRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const midtransRoutes = require("./routes/midtransRoutes");
 const seatRoutes = require("./routes/seatRoutes");
+const bannerRoutes = require("./routes/bannerRoutes");
 
 // ======================================================
 // API ROUTES
 // ======================================================
 
 app.use("/api/auth", authRoutes);
-app.use("/api/user", userRoutes);
-app.use("/api/organizer", organizerRoutes);
+app.use("/api/users", userRoutes);app.use("/api/organizer", organizerRoutes);
 app.use("/api/sadmin", sadminRoutes);
 
 app.use("/api/categories", categoryRoutes);
@@ -63,6 +76,7 @@ app.use("/api/artists", artistRoutes);
 app.use("/api/venues", venueRoutes);
 
 app.use("/api/events", eventRoutes);
+app.use("/api/banners", bannerRoutes);
 app.use("/api/ticket-categories", ticketCategoryRoutes);
 
 app.use("/api/orders", orderRoutes);

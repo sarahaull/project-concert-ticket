@@ -1,721 +1,758 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-    User,
-    Mail,
-    Phone,
-    CalendarDays,
-    ShieldCheck,
-    Edit3,
-    Save,
-    X,
-    Loader2,
-    CheckCircle2,
-    AlertCircle,
-    AtSign,
-    Camera,
-    ArrowLeft,
-    Sparkles,
+  User,
+  Mail,
+  Phone,
+  CalendarDays,
+  ShieldCheck,
+  Edit3,
+  Save,
+  X,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  AtSign,
+  Camera,
+  ArrowLeft,
+  Sparkles,
+  ImagePlus,
 } from "lucide-react";
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
+const PROFILE_API = `${API_URL}/api/users/profile`;
+
+const initialForm = {
+  fullname: "",
+  phone: "",
+  gender: "",
+  birth_date: "",
+};
+
 export default function ProfilePage() {
-    const router = useRouter();
+  const router = useRouter();
+  const fileInputRef = useRef(null);
 
-    const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const [user, setUser] = useState(null);
+  const [form, setForm] = useState(initialForm);
 
-    const [user, setUser] = useState(null);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState("");
 
-    const [form, setForm] = useState({
-        fullname: "",
-        username: "",
-        email: "",
-        phone: "",
-        gender: "",
-        birth_date: "",
-        photo: null,
-        role: "",
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const getToken = () => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("token");
+  };
+
+  const getPhotoUrl = (photo) => {
+    if (!photo) return "";
+
+    if (
+      photo.startsWith("http://") ||
+      photo.startsWith("https://") ||
+      photo.startsWith("data:")
+    ) {
+      return photo;
+    }
+
+    return `${API_URL}${photo.startsWith("/") ? "" : "/"}${photo}`;
+  };
+
+  const formatDate = (date) => {
+    if (!date) return "";
+    return String(date).slice(0, 10);
+  };
+
+  const formatRole = (role) => {
+    if (!role) return "Customer";
+
+    return String(role)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const setProfileForm = (profile) => {
+    setForm({
+      fullname: profile.fullname || "",
+      phone: profile.phone || "",
+      gender: profile.gender || "",
+      birth_date: formatDate(profile.birth_date),
     });
 
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [editing, setEditing] = useState(false);
+    setSelectedPhoto(null);
+    setPhotoPreview(getPhotoUrl(profile.photo));
+  };
 
-    const [successMessage, setSuccessMessage] = useState("");
-    const [errorMessage, setErrorMessage] = useState("");
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      setErrorMessage("");
 
-    // =========================
-    // HELPER
-    // =========================
+      const token = getToken();
 
-    const getUserId = (parsedUser) => {
-        return (
-            parsedUser?.id ||
-            parsedUser?.user_id ||
-            parsedUser?.userId
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(PROFILE_API, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        router.replace("/login");
+        return;
+      }
+
+      if (!response.ok || !data.success || !data.user) {
+        throw new Error(
+          data.message || "Gagal mengambil profil."
         );
-    };
+      }
 
-    const formatDate = (date) => {
-        if (!date) return "";
+      setUser(data.user);
+      setProfileForm(data.user);
+    } catch (error) {
+      console.error("FETCH PROFILE ERROR:", error);
+      setErrorMessage(error.message || "Gagal mengambil profil.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        return String(date).slice(0, 10);
-    };
+  useEffect(() => {
+    fetchProfile();
+  }, []);
 
-    const setProfileForm = (profile) => {
-        setForm({
-            fullname: profile?.fullname || "",
-            username: profile?.username || "",
-            email: profile?.email || "",
-            phone: profile?.phone || "",
-            gender: profile?.gender || "",
-            birth_date: formatDate(profile?.birth_date),
-            photo: profile?.photo || null,
-            role: profile?.role || "",
-        });
-    };
+  const handleChange = (event) => {
+    const { name, value } = event.target;
 
-    const formatRole = (role) => {
-        if (!role) return "Customer";
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
 
-        return role
-            .replace(/_/g, " ")
-            .replace(/\b\w/g, (char) => char.toUpperCase());
-    };
+  const handlePhotoChange = (event) => {
+    const file = event.target.files?.[0];
 
-    const getInitial = () => {
-        const name =
-            user?.fullname ||
-            user?.username ||
-            "U";
+    if (!file) return;
 
-        return name.charAt(0).toUpperCase();
-    };
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
 
-    // =========================
-    // GET PROFILE
-    // =========================
+    if (!allowedTypes.includes(file.type)) {
+      setErrorMessage("Gunakan foto JPG, PNG, atau WEBP.");
+      event.target.value = "";
+      return;
+    }
 
-    useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                const token = localStorage.getItem("token");
-                const storedUser = localStorage.getItem("user");
+    if (file.size > 5 * 1024 * 1024) {
+      setErrorMessage("Ukuran foto maksimal 5 MB.");
+      event.target.value = "";
+      return;
+    }
 
-                if (!token) {
-                    router.push("/login");
-                    return;
-                }
+    setErrorMessage("");
+    setSelectedPhoto(file);
 
-                if (!storedUser) {
-                    throw new Error("Data user tidak ditemukan.");
-                }
+    const preview = URL.createObjectURL(file);
+    setPhotoPreview(preview);
+  };
 
-                const parsedUser = JSON.parse(storedUser);
-                const userId = getUserId(parsedUser);
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setErrorMessage("");
+      setSuccessMessage("");
 
-                if (!userId) {
-                    throw new Error("ID user tidak ditemukan.");
-                }
+      const token = getToken();
 
-                const response = await fetch(
-                    `${API_URL}/api/profile/${userId}`,
-                    {
-                        method: "GET",
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
-                );
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
 
-                const data = await response.json();
+      if (!form.fullname.trim()) {
+        throw new Error("Nama lengkap wajib diisi.");
+      }
 
-                if (!response.ok || !data.success) {
-                    throw new Error(
-                        data.message ||
-                            "Gagal mengambil data profile."
-                    );
-                }
+      const formData = new FormData();
 
-                const profile = data.user;
+      formData.append("fullname", form.fullname.trim());
+      formData.append("phone", form.phone.trim());
+      formData.append("gender", form.gender);
+      formData.append("birth_date", form.birth_date);
 
-                setUser(profile);
-                setProfileForm(profile);
-            } catch (error) {
-                console.error("PROFILE ERROR:", error);
+      if (selectedPhoto) {
+        formData.append("photo", selectedPhoto);
+      }
 
-                setErrorMessage(
-                    error.message ||
-                        "Gagal mengambil data profile."
-                );
-            } finally {
-                setLoading(false);
-            }
-        };
+      const response = await fetch(PROFILE_API, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
 
-        fetchProfile();
-    }, [API_URL, router]);
+      const data = await response.json();
 
-    // =========================
-    // HANDLE INPUT
-    // =========================
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        router.replace("/login");
+        return;
+      }
 
-    const handleChange = (event) => {
-        const { name, value } = event.target;
+      if (!response.ok || !data.success || !data.user) {
+        throw new Error(
+          data.message || "Gagal menyimpan profil."
+        );
+      }
 
-        setForm((prev) => ({
-            ...prev,
-            [name]: value,
-        }));
-    };
+      // Gunakan data terbaru yang dikembalikan database.
+      setUser(data.user);
+      setProfileForm(data.user);
 
-    // =========================
-    // UPDATE PROFILE
-    // =========================
+      // Perbarui informasi profil di localStorage
+      // tanpa mengubah token autentikasi.
+      const storedUser = localStorage.getItem("user");
 
-    const handleSave = async () => {
+      if (storedUser) {
         try {
-            setSaving(true);
-            setSuccessMessage("");
-            setErrorMessage("");
+          const parsedUser = JSON.parse(storedUser);
 
-            const token = localStorage.getItem("token");
-            const storedUser = localStorage.getItem("user");
-
-            if (!token || !storedUser) {
-                router.push("/login");
-                return;
-            }
-
-            const parsedUser = JSON.parse(storedUser);
-            const userId = getUserId(parsedUser);
-
-            if (!userId) {
-                throw new Error("ID user tidak ditemukan.");
-            }
-
-            const response = await fetch(
-                `${API_URL}/api/profile/${userId}`,
-                {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        fullname: form.fullname,
-                        phone: form.phone || null,
-                        gender: form.gender || null,
-                        birth_date: form.birth_date || null,
-                        photo: form.photo || null,
-                    }),
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(
-                    data.message ||
-                        "Gagal memperbarui profile."
-                );
-            }
-
-            const updatedUser = data.user;
-
-            setUser(updatedUser);
-            setProfileForm(updatedUser);
-
-            localStorage.setItem(
-                "user",
-                JSON.stringify({
-                    ...parsedUser,
-                    ...updatedUser,
-                })
-            );
-
-            setEditing(false);
-            setSuccessMessage(
-                "Profile berhasil diperbarui."
-            );
-
-            setTimeout(() => {
-                setSuccessMessage("");
-            }, 3500);
+          localStorage.setItem(
+            "user",
+            JSON.stringify({
+              ...parsedUser,
+              ...data.user,
+            })
+          );
         } catch (error) {
-            console.error(
-                "UPDATE PROFILE ERROR:",
-                error
-            );
-
-            setErrorMessage(
-                error.message ||
-                    "Gagal memperbarui profile."
-            );
-        } finally {
-            setSaving(false);
+          console.warn("LOCAL USER UPDATE:", error);
         }
-    };
+      }
 
-    // =========================
-    // CANCEL EDIT
-    // =========================
+      setEditing(false);
+      setSuccessMessage(
+        data.message || "Profil berhasil diperbarui."
+      );
+    } catch (error) {
+      console.error("SAVE PROFILE ERROR:", error);
 
-    const handleCancel = () => {
-        if (!user) return;
-
-        setProfileForm(user);
-        setEditing(false);
-        setErrorMessage("");
-    };
-
-    // =========================
-    // LOADING
-    // =========================
-
-    if (loading) {
-        return (
-            <div className="flex min-h-[60vh] items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                    <div className="w-11 h-11 rounded-full border-4 border-[#112250]/10 border-t-[#112250] animate-spin" />
-
-                    <p className="text-sm font-medium text-slate-500">
-                        Memuat profile...
-                    </p>
-                </div>
-            </div>
-        );
+      setErrorMessage(
+        error.message || "Gagal memperbarui profil."
+      );
+    } finally {
+      setSaving(false);
     }
+  };
 
-    // =========================
-    // ERROR
-    // =========================
+  const handleCancel = () => {
+    if (!user) return;
 
-    if (!user) {
-        return (
-            <div className="flex min-h-[60vh] items-center justify-center px-6">
-                <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-                    <div className="w-14 h-14 mx-auto rounded-2xl bg-red-50 flex items-center justify-center mb-4">
-                        <AlertCircle
-                            size={27}
-                            className="text-red-500"
-                        />
-                    </div>
+    setProfileForm(user);
+    setEditing(false);
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
 
-                    <h2 className="text-lg font-bold text-slate-900">
-                        Profile tidak dapat dimuat
-                    </h2>
-
-                    <p className="text-sm text-slate-500 mt-2">
-                        {errorMessage ||
-                            "Terjadi kesalahan saat mengambil data profile."}
-                    </p>
-
-                    <button
-                        onClick={() =>
-                            window.location.reload()
-                        }
-                        className="mt-6 px-5 py-2.5 rounded-xl bg-[#112250] hover:bg-[#1A326A] text-white text-sm font-semibold transition"
-                    >
-                        Coba Lagi
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
+  const getInitial = () => {
     return (
-        <div className="w-full min-w-0">
-            {/* HEADER HALAMAN (Mengikuti gaya Cari Event & Pesanan Saya) */}
-            <section className="relative isolate overflow-hidden rounded-2xl bg-white border border-slate-200/80 shadow-sm mb-6">
-                <div className="relative w-full px-5 py-6 sm:px-8 sm:py-8">
-                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => router.back()}
-                                className="w-10 h-10 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-600 transition shadow-sm"
-                                title="Kembali"
-                            >
-                                <ArrowLeft size={18} />
-                            </button>
+      user?.fullname?.charAt(0)?.toUpperCase() ||
+      user?.username?.charAt(0)?.toUpperCase() ||
+      "U"
+    );
+  };
 
-                            <div>
-                                
+  if (loading) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center">
+        <div className="text-center">
+          <Loader2
+            size={38}
+            className="mx-auto animate-spin text-[#112250]"
+          />
+          <p className="mt-4 text-sm font-semibold text-slate-500">
+            Memuat profil Anda...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-                                <h1 className="text-2xl font-bold tracking-tight text-[#14213D] sm:text-3xl">
-                                    Profile
-                                </h1>
+  if (!user) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center px-5">
+        <div className="w-full max-w-md rounded-3xl border border-red-100 bg-white p-8 text-center shadow-xl">
+          <AlertCircle
+            size={40}
+            className="mx-auto text-red-500"
+          />
 
-                                <p className="mt-1 text-sm text-slate-500">
-                                    Kelola informasi identitas akun TicketVerse Anda.
-                                </p>
-                            </div>
-                        </div>
+          <h2 className="mt-4 text-xl font-black text-[#112250]">
+            Profil Tidak Dapat Dimuat
+          </h2>
 
-                        {!editing ? (
-                            <button
-                                onClick={() => {
-                                    setEditing(true);
-                                    setSuccessMessage("");
-                                    setErrorMessage("");
-                                }}
-                                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#112250] hover:bg-[#1A326A] text-white text-sm font-bold transition shadow-sm hover:-translate-y-0.5"
-                            >
-                                <Edit3 size={17} />
-                                <span>Edit Profile</span>
-                            </button>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={handleCancel}
-                                    disabled={saving}
-                                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-bold transition disabled:opacity-50"
-                                >
-                                    <X size={17} />
-                                    <span className="hidden sm:inline">Batal</span>
-                                </button>
+          <p className="mt-2 text-sm text-slate-500">
+            {errorMessage}
+          </p>
 
-                                <button
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition shadow-sm disabled:opacity-60 hover:-translate-y-0.5"
-                                >
-                                    {saving ? (
-                                        <Loader2 size={17} className="animate-spin" />
-                                    ) : (
-                                        <Save size={17} />
-                                    )}
-                                    <span>
-                                        {saving ? "Menyimpan..." : "Simpan"}
-                                    </span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </section>
+          <button
+            onClick={fetchProfile}
+            className="mt-6 rounded-xl bg-[#112250] px-6 py-3 text-sm font-bold text-white"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-            {/* ALERT */}
-            {(successMessage || errorMessage) && (
-                <div className="mb-6">
-                    {successMessage && (
-                        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 shadow-sm">
-                            <CheckCircle2 size={18} />
-                            <span>{successMessage}</span>
-                        </div>
-                    )}
+  return (
+    <div className="w-full space-y-6 pb-12 text-[#112250]">
 
-                    {errorMessage && (
-                        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 shadow-sm mt-3">
-                            <AlertCircle size={18} />
-                            <span>{errorMessage}</span>
-                        </div>
-                    )}
-                </div>
+      {/* HEADER */}
+      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-50 blur-3xl" />
+
+        <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.back()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 transition hover:bg-slate-50"
+            >
+              <ArrowLeft size={19} />
+            </button>
+
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600">
+                <Sparkles size={13} />
+                Pengaturan Akun
+              </div>
+
+              <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+                Profile Saya
+              </h1>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Kelola informasi pribadi akun TicketVerse Anda.
+              </p>
+            </div>
+          </div>
+
+          {!editing ? (
+            <button
+              onClick={() => {
+                setEditing(true);
+                setErrorMessage("");
+                setSuccessMessage("");
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#112250] px-6 py-3 font-bold text-white transition hover:bg-[#1A326A]"
+            >
+              <Edit3 size={17} />
+              Edit Profile
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={handleCancel}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold hover:bg-slate-50 disabled:opacity-50"
+              >
+                <X size={17} />
+                Batal
+              </button>
+
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#112250] px-5 py-3 text-sm font-bold text-white hover:bg-[#1A326A] disabled:opacity-60"
+              >
+                {saving ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <Save size={17} />
+                )}
+                {saving ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* NOTIFICATION */}
+      {successMessage && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+          <CheckCircle2 size={20} />
+          {successMessage}
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+          <AlertCircle size={20} />
+          {errorMessage}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+
+        {/* PROFILE CARD */}
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="relative h-32 bg-gradient-to-br from-[#0D1F42] via-[#112250] to-[#294A85]">
+            <div className="absolute -right-8 -top-12 h-40 w-40 rounded-full border border-white/10" />
+          </div>
+
+          <div className="px-6 pb-7">
+            <div className="-mt-16 flex justify-center">
+              <div className="relative">
+                {photoPreview ? (
+                  <img
+                    src={photoPreview}
+                    alt="Foto profil"
+                    className="h-32 w-32 rounded-3xl border-4 border-white bg-white object-cover shadow-xl"
+                  />
+                ) : (
+                  <div className="flex h-32 w-32 items-center justify-center rounded-3xl border-4 border-white bg-[#EEF3F9] text-5xl font-black shadow-xl">
+                    {getInitial()}
+                  </div>
+                )}
+
+                {editing && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute -bottom-2 -right-2 flex h-11 w-11 items-center justify-center rounded-xl border-4 border-white bg-[#112250] text-white shadow-lg transition hover:scale-105"
+                      title="Ubah foto profil"
+                    >
+                      <Camera size={18} />
+                    </button>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handlePhotoChange}
+                      className="hidden"
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+
+            {editing && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="mx-auto mt-4 flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-800"
+              >
+                <ImagePlus size={15} />
+                Pilih Foto Profil
+              </button>
             )}
 
-            {/* MAIN CONTENT */}
-            <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-6">
-                
-                {/* PROFILE CARD (KIRI) */}
-                <section className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden h-fit">
-                    {/* Cover Gradient */}
-                    <div className="h-32 bg-gradient-to-r from-[#112250] via-[#3B507D] to-[#112250] relative">
-                        <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top_right,white,transparent)]" />
-                    </div>
+            <div className="mt-5 text-center">
+              <h2 className="text-xl font-black">
+                {user.fullname || "Nama User"}
+              </h2>
 
-                    <div className="px-6 pb-6">
-                        <div className="-mt-14 flex justify-center">
-                            <div className="relative">
-                                {user.photo ? (
-                                    <img
-                                        src={user.photo}
-                                        alt={user.fullname || "Profile"}
-                                        className="w-28 h-28 rounded-2xl object-cover border-4 border-white shadow-lg"
-                                    />
-                                ) : (
-                                    <div className="w-28 h-28 rounded-2xl border-4 border-white shadow-lg bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-                                        <span className="text-4xl font-black text-[#112250]">
-                                            {getInitial()}
-                                        </span>
-                                    </div>
-                                )}
+              <p className="mt-1 text-sm text-slate-500">
+                @{user.username || "-"}
+              </p>
 
-                                {editing && (
-                                    <button
-                                        type="button"
-                                        className="absolute -right-2 -bottom-2 w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center border-4 border-white shadow-md hover:bg-blue-700 transition"
-                                        title="Ubah Foto Profile"
-                                    >
-                                        <Camera size={16} />
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="text-center mt-5">
-                            <h2 className="text-xl font-extrabold text-[#14213D]">
-                                {user.fullname || "Nama User"}
-                            </h2>
-
-                            <p className="text-sm font-medium text-slate-500 mt-1">
-                                @{user.username || "-"}
-                            </p>
-
-                            <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
-                                <ShieldCheck size={14} />
-                                {formatRole(user.role)}
-                            </div>
-                        </div>
-
-                        <div className="mt-8 pt-6 border-t border-slate-100 space-y-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
-                                    <Mail size={17} className="text-slate-500" />
-                                </div>
-
-                                <div className="min-w-0">
-                                    <p className="text-[11px] uppercase tracking-wide text-slate-400 font-bold">
-                                        Email
-                                    </p>
-                                    <p className="text-sm font-medium text-slate-700 truncate mt-0.5">
-                                        {user.email || "-"}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
-                                    <Phone size={17} className="text-slate-500" />
-                                </div>
-
-                                <div className="min-w-0">
-                                    <p className="text-[11px] uppercase tracking-wide text-slate-400 font-bold">
-                                        Nomor HP
-                                    </p>
-                                    <p className="text-sm font-medium text-slate-700 truncate mt-0.5">
-                                        {user.phone || "Belum diisi"}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* DETAIL PROFILE (KANAN) */}
-                <section className="bg-white rounded-2xl border border-slate-200/80 shadow-sm">
-                    <div className="px-6 sm:px-8 py-6 border-b border-slate-100">
-                        <h2 className="text-lg font-bold text-[#14213D]">
-                            Informasi Personal
-                        </h2>
-                        <p className="text-sm text-slate-500 mt-1">
-                            Informasi dasar yang digunakan pada akun TicketVerse Anda.
-                        </p>
-                    </div>
-
-                    <div className="p-6 sm:p-8">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* NAMA LENGKAP */}
-                            <div>
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                                    Nama Lengkap
-                                </label>
-
-                                {editing ? (
-                                    <div className="relative">
-                                        <User size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input
-                                            type="text"
-                                            name="fullname"
-                                            value={form.fullname}
-                                            onChange={handleChange}
-                                            placeholder="Masukkan nama lengkap"
-                                            className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="h-11 rounded-xl bg-slate-50/80 border border-slate-200 flex items-center px-4 text-sm font-medium text-slate-700">
-                                        {user.fullname || "-"}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* USERNAME */}
-                            <div>
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                                    Username
-                                </label>
-
-                                <div className="relative">
-                                    <AtSign size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <div className="w-full h-11 rounded-xl bg-slate-100/50 border border-slate-200 flex items-center pl-11 pr-4 text-sm font-medium text-slate-500 cursor-not-allowed">
-                                        {user.username || "-"}
-                                    </div>
-                                </div>
-                                <p className="text-[11px] font-medium text-slate-400 mt-2">
-                                    Username tidak dapat diubah.
-                                </p>
-                            </div>
-
-                            {/* EMAIL */}
-                            <div>
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                                    Email
-                                </label>
-
-                                <div className="relative">
-                                    <Mail size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <div className="w-full h-11 rounded-xl bg-slate-100/50 border border-slate-200 flex items-center pl-11 pr-4 text-sm font-medium text-slate-500 truncate cursor-not-allowed">
-                                        {user.email || "-"}
-                                    </div>
-                                </div>
-                                <p className="text-[11px] font-medium text-slate-400 mt-2">
-                                    Email digunakan sebagai identitas akun.
-                                </p>
-                            </div>
-
-                            {/* NOMOR HP */}
-                            <div>
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                                    Nomor HP
-                                </label>
-
-                                {editing ? (
-                                    <div className="relative">
-                                        <Phone size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input
-                                            type="tel"
-                                            name="phone"
-                                            value={form.phone}
-                                            onChange={handleChange}
-                                            placeholder="Contoh: 08123456789"
-                                            className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="h-11 rounded-xl bg-slate-50/80 border border-slate-200 flex items-center px-4 text-sm font-medium text-slate-700">
-                                        {user.phone || "Belum diisi"}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* JENIS KELAMIN */}
-                            <div>
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                                    Jenis Kelamin
-                                </label>
-
-                                {editing ? (
-                                    <select
-                                        name="gender"
-                                        value={form.gender}
-                                        onChange={handleChange}
-                                        className="w-full h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
-                                    >
-                                        <option value="">Pilih jenis kelamin</option>
-                                        <option value="Laki-laki">Laki-laki</option>
-                                        <option value="Perempuan">Perempuan</option>
-                                    </select>
-                                ) : (
-                                    <div className="h-11 rounded-xl bg-slate-50/80 border border-slate-200 flex items-center px-4 text-sm font-medium text-slate-700">
-                                        {user.gender || "Belum diisi"}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* TANGGAL LAHIR */}
-                            <div>
-                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                                    Tanggal Lahir
-                                </label>
-
-                                {editing ? (
-                                    <div className="relative">
-                                        <CalendarDays size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                        <input
-                                            type="date"
-                                            name="birth_date"
-                                            value={form.birth_date}
-                                            onChange={handleChange}
-                                            className="w-full h-11 rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="h-11 rounded-xl bg-slate-50/80 border border-slate-200 flex items-center px-4 text-sm font-medium text-slate-700">
-                                        {user.birth_date ? formatDate(user.birth_date) : "Belum diisi"}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* INFORMASI AKUN */}
-                        <div className="mt-9 pt-8 border-t border-slate-100">
-                            <h3 className="text-sm font-bold text-[#14213D]">
-                                Informasi Akun
-                            </h3>
-
-                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
-                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-                                        Account ID
-                                    </p>
-                                    <p className="text-sm font-bold text-slate-700 mt-1">
-                                        #{user.id}
-                                    </p>
-                                </div>
-
-                                <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
-                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-                                        Account Type
-                                    </p>
-                                    <p className="text-sm font-bold text-slate-700 mt-1">
-                                        {formatRole(user.role)}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* SAVE AREA (BAWAH) */}
-                        {editing && (
-                            <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <div>
-                                    <p className="text-sm font-bold text-slate-800">
-                                        Simpan perubahan profile
-                                    </p>
-                                    <p className="text-xs font-medium text-slate-400 mt-1">
-                                        Pastikan informasi yang Anda masukkan sudah benar.
-                                    </p>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={handleCancel}
-                                        disabled={saving}
-                                        className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
-                                    >
-                                        Batal
-                                    </button>
-
-                                    <button
-                                        onClick={handleSave}
-                                        disabled={saving}
-                                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#112250] hover:bg-[#1A326A] text-white text-sm font-bold transition shadow-sm disabled:opacity-60 hover:-translate-y-0.5"
-                                    >
-                                        {saving ? (
-                                            <Loader2 size={16} className="animate-spin" />
-                                        ) : (
-                                            <Save size={16} />
-                                        )}
-                                        {saving ? "Menyimpan..." : "Simpan Perubahan"}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </section>
+              <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold">
+                <ShieldCheck size={15} className="text-emerald-500" />
+                {formatRole(user.role)}
+              </span>
             </div>
-        </div>
-    );
+
+            <div className="mt-7 space-y-4 border-t border-dashed border-slate-200 pt-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                  <Mail size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Email
+                  </p>
+                  <p className="truncate text-sm font-semibold">
+                    {user.email || "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                  <Phone size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Nomor HP
+                  </p>
+                  <p className="truncate text-sm font-semibold">
+                    {user.phone || "Belum diisi"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* PERSONAL INFORMATION */}
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-6 sm:p-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#112250]">
+                <User size={21} />
+              </div>
+
+              <div>
+                <h2 className="text-lg font-black">
+                  Informasi Personal
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Informasi pribadi akun TicketVerse Anda.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 sm:p-8">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+
+              {/* FULLNAME */}
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-500">
+                  Nama Lengkap
+                </label>
+
+                {editing ? (
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+
+                    <input
+                      type="text"
+                      name="fullname"
+                      value={form.fullname}
+                      onChange={handleChange}
+                      maxLength={150}
+                      placeholder="Nama lengkap"
+                      className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold">
+                    {user.fullname || "-"}
+                  </div>
+                )}
+              </div>
+
+              {/* USERNAME */}
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-500">
+                  Username
+                </label>
+
+                <div className="relative">
+                  <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+
+                  <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-100 pl-11 pr-4 text-sm font-semibold text-slate-500">
+                    {user.username || "-"}
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  Username tidak dapat diubah.
+                </p>
+              </div>
+
+              {/* EMAIL */}
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-500">
+                  Email
+                </label>
+
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+
+                  <div className="flex h-12 items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100 pl-11 pr-4 text-sm font-semibold text-slate-500">
+                    <span className="truncate">
+                      {user.email || "-"}
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-slate-400">
+                  Email digunakan sebagai identitas akun.
+                </p>
+              </div>
+
+              {/* PHONE */}
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-500">
+                  Nomor HP
+                </label>
+
+                {editing ? (
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={form.phone}
+                      onChange={handleChange}
+                      placeholder="08123456789"
+                      className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold">
+                    {user.phone || "Belum diisi"}
+                  </div>
+                )}
+              </div>
+
+              {/* GENDER */}
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-500">
+                  Jenis Kelamin
+                </label>
+
+                {editing ? (
+                  <select
+                    name="gender"
+                    value={form.gender}
+                    onChange={handleChange}
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                  >
+                    <option value="">Pilih jenis kelamin</option>
+                    <option value="Laki-laki">Laki-laki</option>
+                    <option value="Perempuan">Perempuan</option>
+                  </select>
+                ) : (
+                  <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold">
+                    {user.gender || "Belum diisi"}
+                  </div>
+                )}
+              </div>
+
+              {/* BIRTH DATE */}
+              <div>
+                <label className="mb-2 block text-xs font-bold text-slate-500">
+                  Tanggal Lahir
+                </label>
+
+                {editing ? (
+                  <div className="relative">
+                    <CalendarDays className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+
+                    <input
+                      type="date"
+                      name="birth_date"
+                      value={form.birth_date}
+                      onChange={handleChange}
+                      className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold">
+                    {formatDate(user.birth_date) || "Belum diisi"}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ACCOUNT INFORMATION */}
+            <div className="mt-9 border-t border-dashed border-slate-200 pt-7">
+              <h3 className="flex items-center gap-2 text-sm font-black">
+                <ShieldCheck size={18} />
+                Informasi Akun
+              </h3>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Account ID
+                  </p>
+                  <p className="mt-2 text-sm font-black">
+                    #{user.id}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                    Account Type
+                  </p>
+                  <p className="mt-2 text-sm font-black">
+                    {formatRole(user.role)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* SAVE BUTTON */}
+            {editing && (
+              <div className="mt-8 flex flex-col justify-between gap-4 border-t border-dashed border-slate-200 pt-6 sm:flex-row sm:items-center">
+                <div>
+                  <p className="text-sm font-bold">
+                    Simpan perubahan profil
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Perubahan akan disimpan ke database akun Anda.
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCancel}
+                    disabled={saving}
+                    className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#112250] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#1A326A] disabled:opacity-60"
+                  >
+                    {saving ? (
+                      <Loader2 size={17} className="animate-spin" />
+                    ) : (
+                      <Save size={17} />
+                    )}
+                    {saving ? "Menyimpan..." : "Simpan Perubahan"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }

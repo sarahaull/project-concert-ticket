@@ -1,8 +1,13 @@
+
 const express = require("express");
 const router = express.Router();
+
 const verifyToken = require("../middleware/auth");
+const uploadProfile = require("../middleware/uploadProfile");
+
 const {
   getProfile,
+  updateProfile,
   getTicketStats,
   getActiveTickets,
   getBookingHistory,
@@ -10,8 +15,17 @@ const {
   getPromos,
 } = require("../controllers/userController");
 
-// Semua endpoint di bawah membutuhkan token dan role 'customer' (opsional)
+// PROFILE
 router.get("/profile", verifyToken, getProfile);
+
+router.put(
+  "/profile",
+  verifyToken,
+  uploadProfile.single("photo"),
+  updateProfile
+);
+
+// USER DATA
 router.get("/stats", verifyToken, getTicketStats);
 router.get("/tickets/active", verifyToken, getActiveTickets);
 router.get("/bookings", verifyToken, getBookingHistory);

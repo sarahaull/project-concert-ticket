@@ -29,11 +29,8 @@ const NOTIFICATIONS_API = `${API_BASE}/api/notifications`;
 
 function formatDate(value) {
   if (!value) return "-";
-
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) return "-";
-
   return new Intl.DateTimeFormat("id-ID", {
     day: "2-digit",
     month: "long",
@@ -47,9 +44,7 @@ function formatDate(value) {
 
 function formatRelativeTime(value) {
   if (!value) return "-";
-
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) return "-";
 
   const now = new Date();
@@ -70,9 +65,7 @@ function formatRelativeTime(value) {
 function getStoredUser() {
   try {
     const storedUser = localStorage.getItem("user");
-
     if (!storedUser) return null;
-
     return JSON.parse(storedUser);
   } catch (error) {
     console.error("Gagal membaca user dari localStorage:", error);
@@ -94,11 +87,8 @@ export default function NotificationsPage() {
   const fetchNotifications = useCallback(
     async (showLoading = true) => {
       try {
-        if (showLoading) {
-          setLoading(true);
-        } else {
-          setRefreshing(true);
-        }
+        if (showLoading) setLoading(true);
+        else setRefreshing(true);
 
         setError("");
 
@@ -110,17 +100,14 @@ export default function NotificationsPage() {
           return;
         }
 
-        const response = await fetch(
-          `${NOTIFICATIONS_API}/user/${user.id}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/json",
-            },
-            cache: "no-store",
-          }
-        );
+        const response = await fetch(`${NOTIFICATIONS_API}/user/${user.id}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+        });
 
         if (response.status === 401) {
           localStorage.removeItem("token");
@@ -132,22 +119,13 @@ export default function NotificationsPage() {
         const data = await response.json();
 
         if (!response.ok || !data?.success) {
-          throw new Error(
-            data?.message || "Gagal mengambil notifikasi."
-          );
+          throw new Error(data?.message || "Gagal mengambil notifikasi.");
         }
 
-        setNotifications(
-          Array.isArray(data.notifications)
-            ? data.notifications
-            : []
-        );
+        setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
       } catch (err) {
         console.error("GET NOTIFICATIONS ERROR:", err);
-        setError(
-          err?.message ||
-            "Terjadi kesalahan saat mengambil notifikasi."
-        );
+        setError(err?.message || "Terjadi kesalahan saat mengambil notifikasi.");
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -158,24 +136,19 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     fetchNotifications(true);
-
     const interval = setInterval(() => {
       fetchNotifications(false);
     }, 15000);
-
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
   const handleMarkAsRead = async (id) => {
     try {
       const token = localStorage.getItem("token");
-
       if (!token) return;
 
       setNotifications((current) =>
-        current.map((item) =>
-          item.id === id ? { ...item, is_read: 1 } : item
-        )
+        current.map((item) => (item.id === id ? { ...item, is_read: 1 } : item))
       );
 
       await fetch(`${NOTIFICATIONS_API}/${id}/read`, {
@@ -192,14 +165,11 @@ export default function NotificationsPage() {
 
   const handleMarkAllAsRead = async () => {
     const unread = notifications.filter((n) => !Number(n.is_read));
-
     if (unread.length === 0) return;
 
     try {
       setMarkingAll(true);
-
       const token = localStorage.getItem("token");
-
       if (!token) return;
 
       await Promise.allSettled(
@@ -214,9 +184,7 @@ export default function NotificationsPage() {
         )
       );
 
-      setNotifications((current) =>
-        current.map((item) => ({ ...item, is_read: 1 }))
-      );
+      setNotifications((current) => current.map((item) => ({ ...item, is_read: 1 })));
     } catch (err) {
       console.error("MARK ALL AS READ ERROR:", err);
     } finally {
@@ -229,41 +197,27 @@ export default function NotificationsPage() {
 
     try {
       const token = localStorage.getItem("token");
-
       if (!token) return;
 
-      const response = await fetch(
-        `${NOTIFICATIONS_API}/${id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
+      const response = await fetch(`${NOTIFICATIONS_API}/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
 
-      if (!response.ok) {
-        throw new Error("Gagal menghapus notifikasi.");
-      }
+      if (!response.ok) throw new Error("Gagal menghapus notifikasi.");
 
-      setNotifications((current) =>
-        current.filter((item) => item.id !== id)
-      );
+      setNotifications((current) => current.filter((item) => item.id !== id));
     } catch (err) {
       console.error("DELETE NOTIFICATION ERROR:", err);
     }
   };
 
   const filteredNotifications = useMemo(() => {
-    if (filter === "unread") {
-      return notifications.filter((item) => !Number(item.is_read));
-    }
-
-    if (filter === "read") {
-      return notifications.filter((item) => Number(item.is_read));
-    }
-
+    if (filter === "unread") return notifications.filter((item) => !Number(item.is_read));
+    if (filter === "read") return notifications.filter((item) => Number(item.is_read));
     return notifications;
   }, [notifications, filter]);
 
@@ -285,20 +239,14 @@ export default function NotificationsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex min-h-[70vh] items-center justify-center">
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D8D0C4]/40 bg-white shadow-lg">
-            <Loader2
-              size={26}
-              className="animate-spin text-[#112250]"
-            />
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-[#DDE4ED] bg-white shadow-[0_10px_30px_rgba(17,34,80,0.1)]">
+            <div className="absolute inset-0 animate-ping rounded-2xl bg-[#112250] opacity-10"></div>
+            <Loader2 size={28} className="animate-spin text-[#112250]" />
           </div>
-          <h2 className="mt-4 text-base font-bold text-[#112250]">
-            Memuat notifikasi...
-          </h2>
-          <p className="mt-1 text-sm text-[#9B907F]">
-            Mengambil data notifikasi dari server.
-          </p>
+          <h2 className="mt-6 text-lg font-bold text-[#112250]">Memuat notifikasi...</h2>
+          <p className="mt-1 text-sm text-slate-500">Mengambil data notifikasi dari server.</p>
         </div>
       </div>
     );
@@ -306,57 +254,55 @@ export default function NotificationsPage() {
 
   if (error) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#D8D0C4]/40 bg-white p-8 text-center shadow-lg">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
-            <AlertCircle size={28} />
+      <div className="flex min-h-[70vh] items-center justify-center px-4">
+        <div className="w-full max-w-md overflow-hidden rounded-[24px] border border-[#DDE4ED] bg-white shadow-[0_20px_60px_rgba(17,34,80,0.08)]">
+          <div className="h-2 w-full bg-red-500"></div>
+          <div className="p-8 text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-50 text-red-500 ring-8 ring-red-50/50">
+              <AlertCircle size={36} />
+            </div>
+            <h2 className="mt-6 text-xl font-bold text-[#112250]">Gagal Memuat Notifikasi</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">{error}</p>
+            <button
+              type="button"
+              onClick={() => fetchNotifications()}
+              className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#112250] px-5 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#112250]/20 transition hover:-translate-y-0.5 hover:bg-[#1A326A]"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Coba Lagi
+            </button>
           </div>
-          <h2 className="mt-5 text-lg font-bold text-[#112250]">
-            Gagal Memuat Notifikasi
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-[#9B907F]">
-            {error}
-          </p>
-          <button
-            type="button"
-            onClick={() => fetchNotifications()}
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-5 py-2.5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Coba Lagi
-          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full min-w-0">
-      <section className="relative isolate mb-6 overflow-hidden rounded-2xl border border-[#D8D0C4]/40 bg-gradient-to-br from-[#112250] via-[#1A326A] to-[#3B507D] shadow-lg">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(229,194,122,0.15),transparent_50%)]" />
+    <div className="w-full min-w-0 space-y-6 pb-12 text-[#112250]">
+      <section className="relative isolate overflow-hidden rounded-[28px] bg-gradient-to-br from-[#0D1F42] via-[#112250] to-[#1A326A] shadow-[0_20px_50px_-15px_rgba(17,34,80,0.3)]">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full border border-white/10" />
+        <div className="pointer-events-none absolute -left-16 bottom-[-100px] h-56 w-56 rounded-full bg-[#E5C27A]/10 blur-3xl" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.08),transparent_50%)]" />
 
-        <div className="relative w-full px-5 py-7 sm:px-8 sm:py-9">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full px-6 py-8 sm:px-10 sm:py-10">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-[#E5C27A]">
-                <Sparkles size={14} />
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#E5C27A] backdrop-blur-md">
+                <Sparkles size={13} />
                 Pusat Informasi
               </div>
-
-              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
                 Notifikasi
               </h1>
-
-              <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
-                Semua pemberitahuan penting tentang tiket dan
-                aktivitas akun kamu.
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-blue-100/80">
+                Semua pemberitahuan penting tentang tiket dan aktivitas akun kamu.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2 sm:gap-3">
-              <div className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-bold text-white backdrop-blur-sm">
-                <BellRing className="h-4 w-4" />
-                <span>{unreadCount} belum dibaca</span>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-md">
+                <BellRing className="h-4 w-4 text-[#E5C27A]" />
+                <span>{unreadCount} Belum Dibaca</span>
               </div>
 
               {unreadCount > 0 && (
@@ -364,7 +310,7 @@ export default function NotificationsPage() {
                   type="button"
                   onClick={handleMarkAllAsRead}
                   disabled={markingAll}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#E5C27A]/40 bg-[#E5C27A] px-4 py-2 text-xs font-bold text-[#112250] shadow-sm transition hover:bg-[#d8b46b] disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#E5C27A] px-5 py-2.5 text-xs font-bold text-[#112250] shadow-[0_0_20px_rgba(229,194,122,0.3)] transition hover:-translate-y-0.5 hover:bg-[#d8b46b] hover:shadow-[0_0_30px_rgba(229,194,122,0.5)] disabled:opacity-60"
                 >
                   {markingAll ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -379,12 +325,10 @@ export default function NotificationsPage() {
                 type="button"
                 onClick={() => fetchNotifications(false)}
                 disabled={refreshing}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/20 disabled:opacity-60"
+                className="group inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 py-2.5 text-xs font-bold text-white backdrop-blur-md transition hover:bg-white/20 disabled:opacity-60"
               >
                 <RefreshCw
-                  className={`h-4 w-4 ${
-                    refreshing ? "animate-spin" : ""
-                  }`}
+                  className={`h-4 w-4 ${refreshing ? "animate-spin" : "transition group-hover:rotate-180"}`}
                 />
                 Perbarui
               </button>
@@ -393,33 +337,34 @@ export default function NotificationsPage() {
         </div>
       </section>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
-          icon={<Bell size={21} />}
+          icon={<Bell size={22} />}
           label="Total Notifikasi"
           value={notifications.length}
           description="Seluruh pemberitahuan"
           className="bg-blue-50 text-blue-600"
+          accentColor="bg-blue-400"
         />
-
         <StatCard
-          icon={<BellRing size={21} />}
+          icon={<BellRing size={22} />}
           label="Belum Dibaca"
           value={unreadCount}
           description="Perlu kamu periksa"
           className="bg-amber-50 text-amber-600"
+          accentColor="bg-amber-400"
         />
-
         <StatCard
-          icon={<CheckCircle2 size={21} />}
+          icon={<CheckCircle2 size={22} />}
           label="Sudah Dibaca"
           value={readCount}
           description="Sudah kamu periksa"
           className="bg-emerald-50 text-emerald-600"
+          accentColor="bg-emerald-400"
         />
       </div>
 
-      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-[#D8D0C4]/40 bg-white p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <div className="flex flex-col gap-3 rounded-[20px] border border-[#DDE4ED] bg-white p-4 shadow-[0_8px_30px_rgba(17,34,80,0.04)] sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex flex-wrap gap-2">
           {filterOptions.map((option) => {
             const active = filter === option.value;
@@ -428,10 +373,10 @@ export default function NotificationsPage() {
                 key={option.value}
                 type="button"
                 onClick={() => setFilter(option.value)}
-                className={`rounded-xl px-4 py-2.5 text-xs font-bold transition duration-200 ${
+                className={`rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-200 ${
                   active
-                    ? "bg-gradient-to-r from-[#112250] to-[#3B507D] text-white shadow-sm"
-                    : "border border-transparent bg-[#F7F8FA] text-[#3B507D] hover:border-[#D8D0C4]/40 hover:bg-[#112250]/5"
+                    ? "bg-[#112250] text-white shadow-md shadow-[#112250]/20"
+                    : "border border-transparent bg-[#F8FAFC] text-[#526B92] hover:bg-slate-200/50 hover:text-[#112250]"
                 }`}
               >
                 {option.label}
@@ -441,7 +386,7 @@ export default function NotificationsPage() {
         </div>
 
         {refreshing && (
-          <span className="flex items-center gap-2 text-xs font-medium text-[#3B507D]">
+          <span className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[#112250] shadow-sm ring-1 ring-slate-200">
             <Loader2 size={14} className="animate-spin" />
             Memperbarui
           </span>
@@ -449,27 +394,22 @@ export default function NotificationsPage() {
       </div>
 
       {filteredNotifications.length === 0 ? (
-        <div className="overflow-hidden rounded-2xl border border-[#D8D0C4]/40 bg-white px-6 py-16 text-center shadow-lg">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F7F8FA] text-[#9B907F]">
-            <Inbox size={30} />
+        <div className="rounded-[24px] border border-[#DDE4ED] bg-white px-6 py-20 text-center shadow-[0_8px_30px_rgba(17,34,80,0.04)]">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-[#EEF3F9] to-[#E1EAF6] text-[#526B92] ring-4 ring-white shadow-inner">
+            <Inbox size={36} />
           </div>
-
-          <h3 className="mt-5 text-lg font-bold text-[#112250]">
-            {notifications.length === 0
-              ? "Belum Ada Notifikasi"
-              : "Tidak Ada Notifikasi"}
+          <h3 className="mt-6 text-xl font-bold text-[#112250]">
+            {notifications.length === 0 ? "Belum Ada Notifikasi" : "Tidak Ada Notifikasi"}
           </h3>
-
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#9B907F]">
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-slate-500">
             {notifications.length === 0
               ? "Kamu belum memiliki pemberitahuan. Notifikasi tentang tiket, pembayaran, dan aktivitas akun akan muncul di sini."
               : "Tidak ada notifikasi yang sesuai dengan filter yang dipilih."}
           </p>
-
           {notifications.length === 0 && (
             <Link
               href="/cari-acara"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-5 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+              className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#112250] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#112250]/20 transition hover:-translate-y-0.5 hover:bg-[#1A326A]"
             >
               Cari Acara
               <ChevronRight className="h-4 w-4" />
@@ -477,7 +417,7 @@ export default function NotificationsPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {filteredNotifications.map((notification) => (
             <NotificationCard
               key={notification.id}
@@ -492,71 +432,62 @@ export default function NotificationsPage() {
   );
 }
 
-function NotificationCard({
-  notification,
-  onMarkAsRead,
-  onDelete,
-}) {
+function NotificationCard({ notification, onMarkAsRead, onDelete }) {
   const isRead = Boolean(Number(notification.is_read));
 
   return (
     <article
-      className={`group relative overflow-hidden rounded-2xl border bg-white shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl ${
+      className={`group relative overflow-hidden rounded-[20px] border bg-white shadow-[0_4px_20px_rgba(17,34,80,0.03)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(17,34,80,0.08)] ${
         isRead
-          ? "border-[#D8D0C4]/40"
-          : "border-[#3B507D]/30 ring-1 ring-[#3B507D]/10"
+          ? "border-[#DDE4ED] bg-white"
+          : "border-[#112250]/30 ring-1 ring-[#112250]/10"
       }`}
     >
       {!isRead && (
-        <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-[#112250] to-[#3B507D]" />
+        <div className="absolute left-0 top-0 h-full w-1.5 bg-gradient-to-b from-[#112250] to-[#1A326A]" />
       )}
 
       <div className="p-5 sm:p-6">
         <div className="flex items-start gap-4">
           <div
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-colors ${
               isRead
-                ? "bg-[#F7F8FA] text-[#9B907F]"
-                : "bg-[#112250]/10 text-[#112250]"
+                ? "bg-slate-100 text-slate-400"
+                : "bg-[#EEF3F9] text-[#112250] ring-1 ring-[#DDE4ED]"
             }`}
           >
-            {isRead ? (
-              <CheckCircle2 size={21} />
-            ) : (
-              <BellRing size={21} />
-            )}
+            {isRead ? <CheckCircle2 size={22} /> : <BellRing size={22} />}
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h3
                 className={`text-base font-bold leading-snug ${
-                  isRead ? "text-[#3B507D]" : "text-[#112250]"
+                  isRead ? "text-slate-600" : "text-[#112250]"
                 }`}
               >
                 {notification.title || "Notifikasi"}
               </h3>
 
               {!isRead && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-[#112250]/20 bg-[#112250]/5 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#112250]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#112250]" />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#112250]/20 bg-[#112250]/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#112250]">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#112250]" />
                   Baru
                 </span>
               )}
             </div>
 
-            <p className="mt-2 text-sm leading-6 text-[#3B507D]/80">
+            <p className={`mt-2 text-sm leading-relaxed ${isRead ? "text-slate-500" : "text-slate-600"}`}>
               {notification.message || "-"}
             </p>
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[#9B907F]">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-slate-400">
               <span className="flex items-center gap-1.5">
-                <Clock3 size={13} />
+                <Clock3 size={14} />
                 {formatRelativeTime(notification.created_at)}
               </span>
-
               <span className="flex items-center gap-1.5">
-                <Info size={13} />
+                <Info size={14} />
                 {formatDate(notification.created_at)}
               </span>
             </div>
@@ -564,14 +495,14 @@ function NotificationCard({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-[#D8D0C4]/30 bg-gradient-to-r from-[#F7F8FA] to-[#E5C27A]/10 px-5 py-3 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+      <div className="flex flex-col gap-2.5 border-t border-dashed border-slate-200 bg-[#F8FAFC] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-end sm:px-6">
         {!isRead && (
           <button
             type="button"
             onClick={() => onMarkAsRead(notification.id)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#D8D0C4]/40 bg-white px-3.5 py-2 text-xs font-bold text-[#3B507D] transition hover:bg-[#112250]/5 hover:text-[#112250]"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#DDE4ED] bg-white px-4 py-2 text-xs font-bold text-[#526B92] shadow-sm transition hover:border-[#112250] hover:text-[#112250]"
           >
-            <CheckCircle2 size={14} />
+            <CheckCircle2 size={15} />
             Tandai Dibaca
           </button>
         )}
@@ -579,9 +510,9 @@ function NotificationCard({
         <button
           type="button"
           onClick={() => onDelete(notification.id)}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3.5 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-transparent bg-transparent px-4 py-2 text-xs font-bold text-red-500 transition hover:bg-red-50 hover:text-red-600"
         >
-          <Trash2 size={14} />
+          <Trash2 size={15} />
           Hapus
         </button>
       </div>
@@ -589,31 +520,19 @@ function NotificationCard({
   );
 }
 
-function StatCard({ icon, label, value, description, className }) {
+function StatCard({ icon, label, value, description, className, accentColor }) {
   return (
-    <div className="group rounded-2xl border border-[#D8D0C4]/40 bg-white p-5 shadow-lg transition duration-300 hover:-translate-y-1 hover:shadow-xl">
+    <div className="group relative overflow-hidden rounded-[20px] border border-[#DDE4ED] bg-white p-5 shadow-[0_4px_20px_rgba(17,34,80,0.03)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(17,34,80,0.08)]">
+      <div className={`absolute inset-x-0 top-0 h-1 ${accentColor} opacity-0 transition duration-300 group-hover:opacity-100`} />
       <div className="flex items-start justify-between">
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl ${className}`}
-        >
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${className}`}>
           {icon}
         </div>
-
-        <Bell
-          size={19}
-          className="text-[#D8D0C4] transition group-hover:text-[#E5C27A]"
-        />
+        <Bell size={20} className="text-slate-200 transition group-hover:text-[#E5C27A]" />
       </div>
-
-      <p className="mt-5 text-sm font-medium text-[#9B907F]">
-        {label}
-      </p>
-
-      <p className="mt-1 text-3xl font-extrabold tracking-tight text-[#112250]">
-        {value}
-      </p>
-
-      <p className="mt-2 text-xs text-[#9B907F]">{description}</p>
+      <p className="mt-5 text-sm font-semibold text-slate-500">{label}</p>
+      <p className="mt-1 text-3xl font-black tracking-tight text-[#112250]">{value}</p>
+      <p className="mt-2 text-[11px] font-medium text-slate-400">{description}</p>
     </div>
   );
 }

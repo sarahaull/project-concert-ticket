@@ -1,122 +1,135 @@
+
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import {
-  Ticket,
-  CalendarCheck,
-  CalendarX,
-  DollarSign,
-  Calendar,
-  MapPin,
-  Clock,
-  Mail,
-  Phone,
-  History,
-  Star,
-  ChevronRight,
-  User,
-  Sparkles,
-  TrendingUp,
-  ArrowRight,
-  Gift,
-  Flame,
-  Bell,
-  Heart,
-  ChevronLeft,
-  Music,
-  Music2,
-  Pencil,
-  Check,
-  Circle,
+  Ticket, CalendarCheck, CalendarX, DollarSign, Calendar,
+  MapPin, Clock, Mail, Phone, History, Star, ChevronRight,
+  User, Sparkles, TrendingUp, ArrowRight, Bell, Heart,
+  ChevronLeft, Pencil, Check, Image as ImageIcon,
 } from 'lucide-react';
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+).replace(/\/+$/, '').replace(/\/api$/i, '');
 
-const formatRupiah = (amount) => {
-  return new Intl.NumberFormat('id-ID', {
+const formatRupiah = (amount) =>
+  new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
   }).format(Number(amount) || 0);
-};
 
 const formatDate = (date) => {
   if (!date) return '-';
 
-  try {
-    return new Date(date).toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      timeZone: 'Asia/Jakarta',
-    });
-  } catch {
-    return '-';
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return '-';
+
+  return parsed.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  });
+};
+
+const formatTime = (time) => time ? String(time).slice(0, 5) : '-';
+
+const getMediaUrl = (path) => {
+  if (!path) return '';
+
+  const value = String(path).trim();
+
+  if (!value) return '';
+
+  if (
+    value.startsWith('data:') ||
+    value.startsWith('blob:') ||
+    /^https?:\/\//i.test(value)
+  ) {
+    return value;
   }
+
+  if (value.startsWith('/')) {
+    return `${API_BASE}${value}`;
+  }
+
+  return `${API_BASE}/${value}`;
+};
+
+const getEventPoster = (event) => {
+  return getMediaUrl(
+    event?.poster ||
+    event?.event_poster ||
+    event?.image ||
+    event?.image_url ||
+    event?.poster_url
+  );
+};
+
+const getProfilePhoto = (user) => {
+  return getMediaUrl(
+    user?.photo ||
+    user?.profile_image ||
+    user?.profile_picture ||
+    user?.avatar
+  );
+};
+
+const extractList = (response, keys = []) => {
+  if (Array.isArray(response)) return response;
+
+  for (const key of keys) {
+    if (Array.isArray(response?.[key])) return response[key];
+
+    if (Array.isArray(response?.data?.[key])) {
+      return response.data[key];
+    }
+  }
+
+  if (Array.isArray(response?.data)) return response.data;
+
+  return [];
+};
+
+const isPaid = (value) => {
+  return ['paid', 'success', 'completed', 'berhasil', 'lunas']
+    .includes(String(value || '').toLowerCase());
 };
 
 const getDaysLeft = (date, time = '00:00:00') => {
   if (!date) return 0;
 
-  try {
-    const eventDate = new Date(date);
+  const eventDate = new Date(date);
 
-    if (time) {
-      const timeParts = String(time).split(':');
+  if (Number.isNaN(eventDate.getTime())) return 0;
 
-      if (timeParts.length >= 2) {
-        eventDate.setHours(
-          Number(timeParts[0]) || 0,
-          Number(timeParts[1]) || 0,
-          Number(timeParts[2]) || 0,
-          0
-        );
-      }
-    }
+  const parts = String(time).split(':');
 
-    const now = new Date();
-    const difference = eventDate.getTime() - now.getTime();
+  eventDate.setHours(
+    Number(parts[0]) || 0,
+    Number(parts[1]) || 0,
+    Number(parts[2]) || 0,
+    0
+  );
 
-    return Math.max(
-      0,
-      Math.ceil(difference / (1000 * 60 * 60 * 24))
-    );
-  } catch {
-    return 0;
-  }
+  return Math.max(
+    0,
+    Math.ceil((eventDate.getTime() - Date.now()) / 86400000)
+  );
 };
 
-const formatTime = (time) => {
-  if (!time) return '-';
-  return String(time).slice(0, 5);
-};
+const ImagePlaceholder = ({ className = '' }) => (
+  <div className={`flex items-center justify-center bg-[#F0F1F4] ${className}`}>
+    <ImageIcon className="h-9 w-9 text-[#AAB0BD]" />
+  </div>
+);
 
-const getStoredUser = () => {
-  try {
-    const storedUser = localStorage.getItem('user');
-
-    if (!storedUser) return null;
-
-    return JSON.parse(storedUser);
-  } catch (error) {
-    console.error('Gagal membaca user dari localStorage:', error);
-    return null;
-  }
-};
-
-const StatsCard = ({
-  title,
-  value,
-  icon,
-  subtitle,
-  trend,
-  trendIcon,
-  trendLabel,
-}) => {
+const StatsCard = ({ title, value, icon, subtitle, trendLabel }) => {
   const iconMap = {
     ticket: Ticket,
     active: CalendarCheck,
@@ -126,62 +139,46 @@ const StatsCard = ({
   };
 
   const Icon = iconMap[icon] || Ticket;
-  const TrendIcon = trendIcon;
 
-  const gradients = {
-    ticket: 'bg-gradient-to-br from-[#112250] to-[#3B507D]',
-    active: 'bg-gradient-to-br from-emerald-600 to-teal-400',
-    expired: 'bg-gradient-to-br from-rose-500 to-pink-400',
-    money: 'bg-gradient-to-br from-amber-500 to-orange-400',
-    heart: 'bg-gradient-to-br from-rose-400 to-pink-500',
+  const accents = {
+    ticket: 'bg-[#112250]/5 text-[#112250] bg-[#112250]',
+    active: 'bg-emerald-50 text-emerald-600 bg-emerald-500',
+    expired: 'bg-rose-50 text-rose-500 bg-rose-500',
+    money: 'bg-amber-50 text-amber-600 bg-amber-500',
+    heart: 'bg-pink-50 text-pink-500 bg-pink-500',
   };
 
-  const gradient = gradients[icon] || gradients.ticket;
+  const accent = accents[icon] || accents.ticket;
+  const [iconBg, iconColor, bar] = accent.split(' ');
 
   return (
-    <div
-      className={`
-        group relative overflow-hidden rounded-2xl ${gradient}
-        p-4 sm:p-5 lg:p-6
-        text-white shadow-lg
-        transition-all duration-500
-        hover:-translate-y-1 hover:shadow-2xl
-        min-w-0
-      `}
-    >
-      <div className="absolute -inset-1 bg-gradient-to-r from-white/20 to-transparent blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+    <div className="group relative overflow-hidden rounded-xl border border-[#E8E3D9] bg-white p-5 shadow-sm ring-1 ring-[#112250]/5 transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className={`absolute left-0 top-0 h-full w-1 ${bar}`} />
 
-      <div className="relative z-10 flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 px-2">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-white/70 sm:text-xs">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9B907F]">
             {title}
           </p>
 
-          <p className="mt-1 break-words text-xl font-extrabold tracking-tight sm:text-2xl lg:text-3xl">
+          <p className="mt-1.5 truncate text-2xl font-bold text-[#112250] lg:text-3xl">
             {value}
           </p>
 
-          {subtitle && (
-            <p className="mt-1 truncate text-[10px] text-white/60 sm:text-xs">
-              {subtitle}
-            </p>
-          )}
+          <p className="mt-1 truncate text-[11px] text-[#9B907F]">
+            {subtitle}
+          </p>
         </div>
 
-        <div className="flex-shrink-0 rounded-xl border border-white/20 bg-white/20 p-2 shadow-inner backdrop-blur-sm sm:rounded-2xl sm:p-3">
-          <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+        <div className={`rounded-xl p-2.5 ${iconBg}`}>
+          <Icon className={`h-5 w-5 ${iconColor}`} />
         </div>
       </div>
 
-      {(trend || trendIcon) && (
-        <div className="relative z-10 mt-3 flex items-center gap-1 text-[10px] font-medium text-white/80 sm:text-xs">
-          {trend && <TrendingUp className="h-3 w-3" />}
-
-          {TrendIcon && <TrendIcon className="h-3 w-3 inline-block" />}
-
-          {trendLabel && <span>{trendLabel}</span>}
-
-          {!trendIcon && trend && <span>{trend}</span>}
+      {trendLabel && (
+        <div className="mt-3 flex items-center gap-1.5 px-2 text-[11px] text-[#9B907F]">
+          <TrendingUp className="h-3 w-3" />
+          {trendLabel}
         </div>
       )}
     </div>
@@ -189,536 +186,513 @@ const StatsCard = ({
 };
 
 const TicketCard = ({ event }) => {
-  const getBarHeight = (index) => 8 + ((index * 7) % 20);
-
-  const safeEvent = {
-    id: event?.id || 0,
-    name: event?.name || event?.event_name || 'Event',
-    date: event?.date || event?.event_date || null,
-    time: event?.time || event?.event_time || '19:00',
-    venue: event?.venue || event?.venue_name || 'Venue',
-    status: event?.status || 'Aktif',
-    image: event?.image || event?.poster || '/images/default-event.jpg',
-    category: event?.category || event?.category_name || 'Umum',
-    price: event?.price || 0,
-    organizer: event?.organizer || event?.artist_name || 'TicketVerse',
-    seat: event?.seat || 'General',
-    barcode: event?.barcode || event?.ticket_code || '#TKT-000',
-    daysLeft: event?.daysLeft || 0,
-  };
+  const poster = getEventPoster(event);
 
   return (
-    <Link href={`/tickets/${safeEvent.id}`} className="group block min-w-0">
-      <div className="relative overflow-hidden rounded-2xl border border-[#D8D0C4]/30 bg-white shadow-lg transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl">
-        <div className="absolute left-0 right-0 top-0 h-2 bg-gradient-to-r from-[#112250] via-[#3B507D] to-[#E5C27A]" />
-
-        <div className="flex h-full min-w-0 flex-col pt-2 lg:flex-row">
-          <div className="relative h-48 w-full min-h-[180px] flex-shrink-0 overflow-hidden sm:h-52 lg:h-auto lg:w-40 xl:w-44">
+    <Link href={`/tickets/${event.id}`} className="group block min-w-0">
+      <div className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#E8E3D9] bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg lg:flex-row">
+        <div className="relative h-44 w-full flex-shrink-0 overflow-hidden sm:h-48 lg:h-auto lg:w-44 xl:w-48">
+          {poster ? (
             <img
-              src={safeEvent.image}
-              alt={safeEvent.name}
-              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+              src={poster}
+              alt={event.name}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               onError={(e) => {
-                e.currentTarget.src =
-                  'https://picsum.photos/seed/ticketverse-event/600/400';
+                e.currentTarget.style.display = 'none';
               }}
             />
+          ) : (
+            <ImagePlaceholder className="h-full w-full" />
+          )}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
 
-            <div className="absolute left-3 right-3 top-3 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-white/20 bg-black/60 px-2.5 py-1 text-[9px] font-semibold text-white backdrop-blur-sm sm:text-[10px]">
-                {safeEvent.category}
-              </span>
-
-              <span className="flex items-center gap-1 rounded-full bg-emerald-500/90 px-2.5 py-1 text-[9px] font-semibold text-white shadow-lg sm:text-[10px]">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
-                </span>
-
-                {safeEvent.status}
-              </span>
-            </div>
-          </div>
-
-          <div className="relative hidden w-8 flex-shrink-0 items-center justify-center bg-white lg:flex">
-            <div className="absolute bottom-0 left-1/2 top-0 border-l-2 border-dashed border-[#D8D0C4]/50" />
-
-            <div className="absolute left-1/2 top-3 h-5 w-5 -translate-x-1/2 rounded-full border-2 border-[#D8D0C4]/50 bg-[#F7F8FA]" />
-
-            <div className="absolute bottom-3 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full border-2 border-[#D8D0C4]/50 bg-[#F7F8FA]" />
-
-            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-90 bg-white px-2 text-[8px] font-bold uppercase tracking-widest text-[#9B907F]">
-              potong
+          <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+            <span className="rounded-md bg-black/50 px-2 py-1 text-[9px] font-semibold text-white">
+              {event.category || 'Event'}
             </span>
-          </div>
 
-          <div className="flex min-w-0 flex-1 flex-col justify-between p-4 sm:p-5">
-            <div className="min-w-0">
-              <h3 className="truncate text-base font-bold text-[#112250] transition group-hover:text-[#3B507D] sm:text-lg">
-                {safeEvent.name}
-              </h3>
-
-              <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-2 text-xs text-gray-600 sm:grid-cols-2">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <Calendar className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                  <span className="truncate">{formatDate(safeEvent.date)}</span>
-                </div>
-
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <Clock className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                  <span className="truncate">{formatTime(safeEvent.time)} WIB</span>
-                </div>
-
-                <div className="flex min-w-0 items-center gap-1.5 sm:col-span-2">
-                  <MapPin className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                  <span className="truncate">{safeEvent.venue}</span>
-                </div>
-
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <User className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                  <span className="truncate">{safeEvent.organizer}</span>
-                </div>
-
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <Ticket className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                  <span className="truncate">
-                    {safeEvent.seat === 'General'
-                      ? 'General Admission'
-                      : `Kursi ${safeEvent.seat}`}
-                  </span>
-                </div>
-
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <Clock className="h-4 w-4 flex-shrink-0 text-rose-400" />
-                  <span className="font-semibold text-rose-500">
-                    {safeEvent.daysLeft} Hari
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-3 border-t border-dashed border-[#D8D0C4]/40 pt-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-[#9B907F]">
-                  Harga
-                </p>
-
-                <p className="bg-gradient-to-r from-[#112250] to-[#3B507D] bg-clip-text text-base font-extrabold text-transparent sm:text-lg">
-                  {formatRupiah(safeEvent.price)}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <div className="hidden w-16 flex-shrink-0 md:block">
-                  <div className="flex h-8 items-end gap-[1px]">
-                    {Array.from({ length: 20 }).map((_, index) => (
-                      <div
-                        key={index}
-                        className="bg-[#112250]/70"
-                        style={{
-                          width: '2px',
-                          height: `${getBarHeight(index)}px`,
-                        }}
-                      />
-                    ))}
-                  </div>
-
-                  <p className="mt-0.5 text-center font-mono text-[6px] tracking-wider text-[#9B907F]">
-                    {safeEvent.barcode}
-                  </p>
-                </div>
-
-                <span className="flex-shrink-0 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-4 py-2 text-xs font-bold text-white transition-all group-hover:scale-105 group-hover:shadow-lg">
-                  Detail
-                </span>
-              </div>
-            </div>
+            <span className="rounded-md bg-emerald-500 px-2 py-1 text-[9px] font-semibold text-white">
+              Aktif
+            </span>
           </div>
         </div>
 
-        <div className="absolute left-0 top-1/2 hidden h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#D8D0C4]/50 bg-[#F7F8FA] lg:block" />
+        <div className="relative hidden w-8 flex-shrink-0 items-center justify-center lg:flex">
+          <div className="absolute bottom-0 left-1/2 top-0 border-l border-dashed border-[#E8E3D9]" />
+          <div className="absolute -left-2 top-2 h-4 w-4 rounded-full border-r border-[#E8E3D9] bg-[#F7F8FA]" />
+          <div className="absolute -left-2 bottom-2 h-4 w-4 rounded-full border-r border-[#E8E3D9] bg-[#F7F8FA]" />
+        </div>
 
-        <div className="absolute right-0 top-1/2 hidden h-6 w-6 translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#D8D0C4]/50 bg-[#F7F8FA] lg:block" />
+        <div className="flex min-w-0 flex-1 flex-col justify-between p-4 sm:p-5">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-bold text-[#112250] group-hover:text-[#3B507D]">
+              {event.name}
+            </h3>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-gray-500 sm:grid-cols-2">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-[#3B507D]" />
+                {formatDate(event.date)}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-[#3B507D]" />
+                {formatTime(event.time)} WIB
+              </div>
+
+              <div className="flex min-w-0 items-center gap-1.5 sm:col-span-2">
+                <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-[#3B507D]" />
+                <span className="truncate">{event.venue}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-[#3B507D]" />
+                <span className="truncate">{event.organizer}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Ticket className="h-3.5 w-3.5 text-[#3B507D]" />
+                {event.seat === 'General' ? 'General Admission' : `Kursi ${event.seat}`}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-dashed border-[#E8E3D9] pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[#9B907F]">
+                Harga
+              </p>
+              <p className="text-base font-bold text-[#112250]">
+                {formatRupiah(event.price)}
+              </p>
+            </div>
+
+            <span className="flex items-center gap-1 self-end rounded-lg bg-[#112250] px-3.5 py-2 text-xs font-semibold text-white group-hover:bg-[#3B507D]">
+              Detail <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          </div>
+        </div>
       </div>
     </Link>
   );
 };
 
-const RecommendationCard = ({ event, onWishlistChange }) => {
-  const [isWishlisted, setIsWishlisted] = useState(
-    Boolean(event?.isWishlisted)
-  );
+/* =========================================================
+   RECOMMENDATION CARD
+   Wishlist sekarang mengirim user_id dan event_id.
+========================================================= */
+
+const RecommendationCard = ({ event, userId, onWishlistChange }) => {
+  const [isWishlisted, setIsWishlisted] = useState(Boolean(event.isWishlisted));
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   useEffect(() => {
-    setIsWishlisted(Boolean(event?.isWishlisted));
-  }, [event?.isWishlisted]);
-
-  const defaultGradient =
-    'from-blue-500/90 via-purple-500/80 to-pink-600/70';
-
-  const defaultBg = 'bg-gradient-to-br from-blue-400 to-purple-600';
+    setIsWishlisted(Boolean(event.isWishlisted));
+  }, [event.isWishlisted]);
 
   const toggleWishlist = async (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const token = localStorage.getItem('token');
-    const user = getStoredUser();
+    if (wishlistLoading) return;
 
-    if (!token || !user?.id) return;
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      window.alert('Silakan login terlebih dahulu.');
+      return;
+    }
+
+    // Ambil ID user dari profil yang sudah di-fetch dari backend.
+    const currentUserId = userId;
+
+    // Ambil ID event dari data event asli.
+    const currentEventId =
+      event?.id ??
+      event?.event_id;
+
+    console.log('WISHLIST REQUEST:', {
+      user_id: currentUserId,
+      event_id: currentEventId,
+      event,
+    });
+
+    if (!currentUserId) {
+      window.alert('ID pengguna tidak ditemukan. Silakan login kembali.');
+      return;
+    }
+
+    if (!currentEventId) {
+      window.alert('ID event tidak ditemukan.');
+      return;
+    }
+
+    setWishlistLoading(true);
 
     try {
       if (isWishlisted) {
-        const wishlistId = event?.wishlistId;
-
-        if (!wishlistId) return;
+        if (!event.wishlistId) {
+          throw new Error('ID wishlist tidak ditemukan.');
+        }
 
         const response = await fetch(
-          `${API_BASE}/api/wishlist/${wishlistId}`,
+          `${API_BASE}/api/wishlist/${event.wishlistId}`,
           {
             method: 'DELETE',
             headers: {
+              Accept: 'application/json',
               Authorization: `Bearer ${token}`,
             },
           }
         );
 
-        if (!response.ok) {
-          throw new Error('Gagal menghapus wishlist');
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || data.success === false) {
+          throw new Error(data.message || 'Gagal menghapus wishlist.');
         }
 
         setIsWishlisted(false);
-
-        if (onWishlistChange) {
-          onWishlistChange(event.id, false);
-        }
+        onWishlistChange?.(currentEventId, false);
       } else {
         const response = await fetch(`${API_BASE}/api/wishlist`, {
           method: 'POST',
           headers: {
+            Accept: 'application/json',
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            user_id: user.id,
-            event_id: event.id,
+            user_id: currentUserId,
+            event_id: currentEventId,
           }),
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
 
-        if (!response.ok || !data.success) {
-          throw new Error(data.message || 'Gagal menambahkan wishlist');
+        if (!response.ok || data.success === false) {
+          throw new Error(data.message || 'Gagal menambahkan wishlist.');
+        }
+
+        if (data.success === false) {
+          throw new Error(data.message || 'Gagal menambahkan wishlist.');
         }
 
         setIsWishlisted(true);
 
-        if (onWishlistChange) {
-          onWishlistChange(event.id, true, data.wishlist);
-        }
+        onWishlistChange?.(
+          currentEventId,
+          true,
+          data.wishlist || data.data || data
+        );
       }
     } catch (error) {
-      console.error('Wishlist error:', error);
+      console.error('WISHLIST ERROR:', error);
+      window.alert(error.message || 'Gagal memperbarui wishlist.');
+    } finally {
+      setWishlistLoading(false);
     }
   };
 
+  const poster = getEventPoster(event);
+
   return (
-    <div className="group relative w-[260px] flex-shrink-0 snap-start overflow-hidden rounded-2xl border border-[#D8D0C4]/20 bg-white shadow-lg transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl sm:w-[300px] md:w-[320px] lg:w-[340px]">
-      <div className="relative h-44 overflow-hidden sm:h-48 md:h-52">
-        <img
-          src={
-            event?.image ||
-            event?.poster ||
-            'https://picsum.photos/seed/event/600/400'
-          }
-          alt={event?.name || event?.event_name || 'Event'}
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-          onError={(e) => {
-            e.currentTarget.src =
-              'https://picsum.photos/seed/recommendation/600/400';
-          }}
-        />
+    <div className="group relative flex w-[260px] flex-shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[#E8E3D9] bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+      <div className="relative h-40 overflow-hidden">
+        {poster ? (
+          <img
+            src={poster}
+            alt={event.name}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        ) : (
+          <ImagePlaceholder className="h-full w-full" />
+        )}
 
-        <div
-          className={`absolute inset-0 bg-gradient-to-br ${
-            event?.gradient || defaultGradient
-          } mix-blend-overlay`}
-        />
-
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
 
         <button
           type="button"
           onClick={toggleWishlist}
-          className="absolute right-3 top-3 z-10 rounded-full border border-white/30 bg-white/90 p-2 shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110"
+          disabled={wishlistLoading}
+          className="absolute right-2.5 top-2.5 z-10 rounded-full bg-white/95 p-2 shadow-sm transition hover:scale-110 disabled:opacity-50"
+          aria-label={isWishlisted ? 'Hapus dari wishlist' : 'Tambah ke wishlist'}
         >
-          <Heart
-            className={`h-5 w-5 transition-colors ${
-              isWishlisted ? 'fill-rose-500 text-rose-500' : 'text-gray-500'
-            }`}
-          />
+          {wishlistLoading ? (
+            <span className="block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-[#112250]" />
+          ) : (
+            <Heart
+              className={`h-4 w-4 ${
+                isWishlisted
+                  ? 'fill-rose-500 text-rose-500'
+                  : 'text-gray-400'
+              }`}
+            />
+          )}
         </button>
 
-        <div className="absolute left-3 right-12 top-3 flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full border border-white/20 bg-black/50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
-            {event?.category || event?.category_name || 'Event'}
-          </span>
-
-          <span className="flex items-center gap-0.5 rounded-full bg-amber-400/90 px-2.5 py-1 text-[9px] font-bold text-white shadow-lg">
-            <Star className="h-3 w-3 fill-white" />
-            {event?.rating || '4.5'}
-          </span>
-        </div>
-
-        <div className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-[#3B507D]/80 px-3 py-1 text-[9px] font-bold text-white shadow-lg backdrop-blur-sm">
-          <User className="h-3 w-3" />
-          {event?.attendees || '1k'} tertarik
-        </div>
+        <span className="absolute left-2.5 top-2.5 rounded-md bg-black/50 px-2 py-1 text-[9px] font-semibold text-white">
+          {event.category || 'Event'}
+        </span>
       </div>
 
-      <div className="p-4">
-        <h4 className="truncate text-base font-bold text-[#112250] transition group-hover:text-[#3B507D]">
-          {event?.name || event?.event_name || 'Event'}
+      <div className="relative flex flex-1 flex-col border-t border-dashed border-[#E8E3D9] p-4">
+        <h4 className="truncate text-sm font-bold text-[#112250]">
+          {event.name}
         </h4>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
-          <Calendar className="h-3.5 w-3.5 text-[#3B507D]" />
-
-          <span>
-            {event?.date || event?.event_date
-              ? formatDate(event?.date || event?.event_date)
-              : '-'}
-          </span>
-
-          <span className="text-[#9B907F]">-</span>
-
-          <Clock className="h-3.5 w-3.5 text-[#3B507D]" />
-
-          <span>{formatTime(event?.time || event?.event_time)}</span>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+          <Calendar className="h-3 w-3 text-[#3B507D]" />
+          {formatDate(event.date)}
+          <span>|</span>
+          <Clock className="h-3 w-3 text-[#3B507D]" />
+          {formatTime(event.time)}
         </div>
 
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-gray-500">
-          <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-[#3B507D]" />
-
-          <span className="truncate">
-            {event?.venue || event?.venue_name || 'Venue'}
-          </span>
+        <div className="mt-2 flex min-w-0 items-center gap-1.5 text-[10px] text-gray-500">
+          <MapPin className="h-3 w-3 flex-shrink-0 text-[#3B507D]" />
+          <span className="truncate">{event.venue}</span>
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-[#D8D0C4]/30 pt-3">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-4">
           <div className="min-w-0">
             <p className="text-[9px] uppercase tracking-wider text-[#9B907F]">
               Mulai dari
             </p>
-
-            <p className="truncate bg-gradient-to-r from-[#112250] to-[#3B507D] bg-clip-text text-sm font-extrabold text-transparent sm:text-base">
-              {formatRupiah(event?.price || 0)}
+            <p className="truncate text-sm font-bold text-[#112250]">
+              {formatRupiah(event.price)}
             </p>
           </div>
 
           <Link
-            href={`/cari-acara/${event?.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="flex flex-shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-4 py-2 text-xs font-bold text-white transition-all hover:scale-105 hover:shadow-lg sm:px-5"
+            href={`/cari-acara/${event.id}`}
+            className="flex flex-shrink-0 items-center gap-1 rounded-lg bg-[#112250] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#3B507D]"
           >
-            Pesan
-            <ArrowRight className="h-3.5 w-3.5" />
+            Pesan <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
       </div>
-
-      <div className={`h-1.5 w-full ${event?.bgColor || defaultBg}`} />
     </div>
   );
 };
 
-const PromoCard = ({ promo }) => {
-  return (
-    <div className="group relative min-w-0 overflow-hidden rounded-xl border border-[#D8D0C4]/30 bg-white shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-      <div className="relative h-32 overflow-hidden">
-        <img
-          src={promo?.image || 'https://picsum.photos/seed/promo/400/200'}
-          alt={promo?.title || 'Promo'}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-        />
+const Banner = ({ banners = [] }) => {
+  const router = useRouter();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const touchStartX = useRef(0);
 
-        <div className="absolute inset-0 bg-gradient-to-r from-[#112250]/60 to-[#3B507D]/30" />
+  const activeBanners = banners;
 
-        <div className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-rose-500/90 px-2 py-0.5 text-[8px] font-bold text-white">
-          <Flame className="h-2.5 w-2.5" />
-          {promo?.discount || 'Promo'}
-        </div>
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [banners]);
 
-        <div className="absolute bottom-2 right-2 flex items-center gap-0.5 rounded-full border border-white/20 bg-white/20 px-2 py-0.5 text-[8px] font-medium text-white backdrop-blur-sm">
-          <Clock className="h-2.5 w-2.5" />
-          <span>{promo?.valid_until || '-'}</span>
-        </div>
-      </div>
+  useEffect(() => {
+    if (activeBanners.length <= 1) return;
 
-      <div className="p-3">
-        <h4 className="truncate text-sm font-semibold text-[#112250] transition group-hover:text-[#3B507D]">
-          {promo?.title || 'Promo'}
-        </h4>
+    const timer = setInterval(() => {
+      setActiveIndex((current) => (current + 1) % activeBanners.length);
+    }, 5000);
 
-        <p className="mt-0.5 truncate text-[10px] text-gray-500">
-          {promo?.description || ''}
-        </p>
+    return () => clearInterval(timer);
+  }, [activeBanners.length]);
 
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#D8D0C4]/30 pt-2">
-          <span className="truncate rounded border border-[#D8D0C4]/30 bg-[#E5C27A]/20 px-2 py-0.5 font-mono text-xs text-[#112250]">
-            {promo?.code || 'PROMO'}
-          </span>
+  const currentBanner = activeBanners[activeIndex];
 
-          <button
-            type="button"
-            className="flex-shrink-0 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 px-3 py-1 text-[10px] font-medium text-white transition-all hover:scale-105 hover:shadow-md"
-          >
-            Klaim
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+  const navigateTo = (path) => {
+    if (!path) return;
 
-const Banner = ({ imageUrl }) => {
-  const defaultImage =
-    'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=1400&q=80';
+    if (/^https?:\/\//i.test(path)) {
+      window.location.href = path;
+      return;
+    }
 
-  const bgImage = imageUrl || defaultImage;
+    router.push(path.startsWith('/') ? path : `/${path}`);
+  };
 
-  const sparkles = Array.from({ length: 12 }).map((_, index) => ({
-    top: (index * 37 + 13) % 100,
-    left: (index * 73 + 7) % 100,
-    delay: ((index * 11 + 5) % 30) / 10,
-    duration: 2 + ((index * 19 + 3) % 30) / 10,
-  }));
+  const changeSlide = (direction) => {
+    if (!activeBanners.length) return;
 
-  return (
-    <div className="relative mb-8 min-w-0 overflow-hidden rounded-2xl sm:mb-10 lg:mb-12">
-      <div className="absolute -bottom-6 left-1/2 h-20 w-[90%] -translate-x-1/2 animate-glow-pulse rounded-full bg-gradient-to-r from-transparent via-blue-500/30 to-transparent blur-2xl" />
+    setActiveIndex((current) =>
+      (current + direction + activeBanners.length) % activeBanners.length
+    );
+  };
 
-      <div className="relative h-64 overflow-hidden rounded-2xl shadow-2xl sm:h-72 md:h-80 lg:h-96">
-        <img
-          src={bgImage}
-          alt="Concert Banner"
-          className="absolute inset-0 h-full w-full object-cover object-center"
-        />
+  if (!currentBanner) {
+    return (
+      <div className="mb-6 flex min-h-[220px] items-center justify-center rounded-2xl bg-[#112250] px-6 text-center sm:mb-8 sm:min-h-[280px]">
+        <div>
+          <Sparkles className="mx-auto h-8 w-8 text-[#E5C27A]" />
 
-        <div className="absolute inset-0 bg-gradient-to-tr from-[#112250]/80 via-[#3B507D]/60 to-[#E5C27A]/20" />
-
-        <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent mix-blend-overlay" />
-
-        <div className="absolute inset-0 overflow-hidden">
-          {sparkles.map((sparkle, index) => (
-            <div
-              key={index}
-              className="absolute h-1.5 w-1.5 animate-sparkle rounded-full bg-white/60"
-              style={{
-                top: `${sparkle.top}%`,
-                left: `${sparkle.left}%`,
-                animationDelay: `${sparkle.delay}s`,
-                animationDuration: `${sparkle.duration}s`,
-              }}
-            />
-          ))}
-
-          <div className="absolute -left-20 -top-20 h-64 w-64 animate-float rounded-full bg-white/10 blur-3xl" />
-
-          <div className="absolute -bottom-32 -right-20 h-80 w-80 animate-float-delay rounded-full bg-amber-400/10 blur-3xl" />
-
-          <div className="absolute left-1/2 top-1/3 h-40 w-40 animate-float-slow rounded-full bg-pink-400/10 blur-2xl" />
-        </div>
-
-        <div className="relative z-10 flex h-full max-w-2xl flex-col justify-center px-5 sm:px-8 md:px-12">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-amber-400/30 bg-amber-400/20 px-3 py-1 text-[10px] font-semibold text-amber-200 backdrop-blur-sm sm:text-xs">
-              Konser Terbaru
-            </span>
-
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-medium text-white/80 backdrop-blur-sm sm:text-xs">
-              Tiket Terbatas
-            </span>
-          </div>
-
-          <h2 className="text-2xl font-extrabold leading-tight text-white drop-shadow-lg sm:text-3xl md:text-4xl lg:text-5xl">
-            Temukan konser{' '}
-            <span className="bg-gradient-to-r from-yellow-300 via-amber-200 to-pink-400 bg-clip-text text-transparent">
-              favoritmu
-            </span>
-            <br className="hidden sm:block" /> sekarang!
+          <h2 className="mt-3 text-2xl font-bold text-white">
+            Selamat Datang di TicketVerse
           </h2>
 
-          <p className="mt-3 max-w-lg text-xs leading-relaxed text-white/90 drop-shadow sm:text-sm md:text-base">
-            Dapatkan tiket untuk konser terbaik dan nikmati pengalaman musik yang tak terlupakan.
+          <p className="mt-2 text-sm text-white/70">
+            Temukan dan nikmati event favoritmu.
           </p>
 
-          <div className="mt-5 flex flex-wrap gap-3 sm:mt-6 sm:gap-4">
-            <Link
-              href="/events"
-              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-400 to-pink-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg transition-all hover:scale-105 hover:shadow-amber-400/30 sm:px-8 sm:py-3 sm:text-sm"
-            >
-              Jelajahi Sekarang
-              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Link>
+          <Link
+            href="/events"
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-[#112250]"
+          >
+            Jelajahi Event <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-            <Link
-              href="/tickets"
-              className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-xs text-white backdrop-blur-md transition-all hover:scale-105 hover:bg-white/20 sm:px-8 sm:py-3 sm:text-sm"
-            >
-              Lihat Tiket
-            </Link>
+  return (
+    <div className="relative mb-6 overflow-hidden rounded-2xl sm:mb-8">
+      <div
+        className="relative h-64 overflow-hidden rounded-2xl shadow-lg sm:h-72 md:h-80 lg:h-96"
+        onTouchStart={(e) => {
+          touchStartX.current = e.changedTouches[0].screenX;
+        }}
+        onTouchEnd={(e) => {
+          const difference =
+            touchStartX.current - e.changedTouches[0].screenX;
+
+          if (Math.abs(difference) > 50) {
+            changeSlide(difference > 0 ? 1 : -1);
+          }
+        }}
+      >
+        {activeBanners.map((banner, index) => (
+          <div
+            key={banner.id}
+            className="absolute inset-0"
+            style={{
+              transform: `translateX(${
+                index === activeIndex
+                  ? '0%'
+                  : index < activeIndex
+                    ? '-100%'
+                    : '100%'
+              })`,
+              transition: 'transform 0.7s cubic-bezier(0.25, 1, 0.5, 1)',
+            }}
+          >
+            {banner.image && (
+              <img
+                src={banner.image}
+                alt={banner.title}
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            )}
           </div>
+        ))}
+
+        <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-r from-[#112250]/90 via-[#112250]/60 to-transparent" />
+
+        <div
+          key={currentBanner.id}
+          className="relative z-20 flex h-full max-w-2xl flex-col justify-center px-5 sm:px-8 md:px-12"
+        >
+          <span className="mb-3 w-fit rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-xs text-white">
+            {currentBanner.subtitle}
+          </span>
+
+          <h2 className="text-2xl font-bold leading-tight text-white sm:text-3xl md:text-4xl lg:text-5xl">
+            {currentBanner.title}
+          </h2>
+
+          <p className="mt-3 max-w-lg text-xs leading-relaxed text-white/80 sm:text-sm md:text-base">
+            {currentBanner.description}
+          </p>
+
+          {currentBanner.button_text && (
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => navigateTo(currentBanner.button_link)}
+                className="flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-xs font-bold text-[#112250] hover:bg-[#E5C27A]"
+              >
+                {currentBanner.button_text}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+
+              {currentBanner.secondary_button_text && (
+                <button
+                  type="button"
+                  onClick={() => navigateTo(currentBanner.secondary_button_link)}
+                  className="rounded-lg border border-white/30 bg-white/10 px-5 py-2.5 text-xs font-semibold text-white hover:bg-white/20"
+                >
+                  {currentBanner.secondary_button_text}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="absolute bottom-8 right-8 hidden text-6xl text-white/20 sm:block">
-          <Music className="h-12 w-12" />
-        </div>
+        {activeBanners.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => changeSlide(-1)}
+              aria-label="Banner sebelumnya"
+              className="absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full bg-black/30 p-2 text-white sm:block"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
 
-        <div className="absolute right-20 top-6 hidden text-5xl text-white/10 md:block">
-          <Music2 className="h-10 w-10" />
-        </div>
+            <button
+              type="button"
+              onClick={() => changeSlide(1)}
+              aria-label="Banner selanjutnya"
+              className="absolute right-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full bg-black/30 p-2 text-white sm:block"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+
+            <div className="absolute bottom-4 left-1/2 z-30 flex -translate-x-1/2 gap-1.5">
+              {activeBanners.map((banner, index) => (
+                <button
+                  key={banner.id}
+                  type="button"
+                  onClick={() => setActiveIndex(index)}
+                  aria-label={`Pilih banner ${index + 1}`}
+                  className={`h-1.5 rounded-full transition-all ${
+                    index === activeIndex
+                      ? 'w-8 bg-white'
+                      : 'w-1.5 bg-white/50'
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 };
 
 const NotificationItem = ({ notif }) => {
-  const bgColor =
-    {
-      info: 'border-[#3B507D]/20 bg-[#3B507D]/10',
-      success: 'border-emerald-200 bg-emerald-50',
-      event: 'border-amber-200 bg-amber-50',
-    }[notif?.type] || 'border-gray-200 bg-gray-50';
-
-  const iconColor =
-    {
-      info: 'text-[#3B507D]',
-      success: 'text-emerald-600',
-      event: 'text-amber-600',
-    }[notif?.type] || 'text-gray-600';
-
   return (
-    <div
-      className={`flex min-w-0 items-start gap-3 rounded-xl border p-3 transition hover:shadow-sm ${bgColor}`}
-    >
-      <div className={`flex-shrink-0 rounded-full bg-white/80 p-1.5 ${iconColor}`}>
-        <Bell className="h-4 w-4" />
+    <div className="flex min-w-0 items-start gap-3 rounded-xl border border-[#3B507D]/15 bg-[#3B507D]/5 p-3">
+      <div className="rounded-lg bg-white p-1.5 text-[#3B507D]">
+        <Bell className="h-3.5 w-3.5" />
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-[#112250]">
-          {notif?.title}
+        <p className="truncate text-xs font-semibold text-[#112250]">
+          {notif.title || 'Notifikasi'}
         </p>
 
-        <p className="break-words text-xs text-gray-500">
-          {notif?.description || notif?.message}
+        <p className="break-words text-[11px] leading-relaxed text-gray-500">
+          {notif.message || notif.description || ''}
         </p>
 
         <p className="mt-1 text-[10px] text-[#9B907F]">
-          {notif?.time || formatDate(notif?.created_at)}
+          {formatDate(notif.created_at)}
         </p>
       </div>
     </div>
@@ -727,7 +701,6 @@ const NotificationItem = ({ notif }) => {
 
 export default function DashboardPage() {
   const router = useRouter();
-
   const scrollContainerRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
@@ -739,10 +712,11 @@ export default function DashboardPage() {
   const [payments, setPayments] = useState([]);
   const [wishlist, setWishlist] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [banners, setBanners] = useState([]);
 
   const [error, setError] = useState('');
 
-  const fetchWithAuth = async (url, options = {}) => {
+  const fetchWithAuth = useCallback(async (url, options = {}) => {
     const token = localStorage.getItem('token');
 
     if (!token) {
@@ -754,9 +728,11 @@ export default function DashboardPage() {
       const response = await fetch(`${API_BASE}${url}`, {
         ...options,
         headers: {
+          Accept: 'application/json',
           ...(options.headers || {}),
           Authorization: `Bearer ${token}`,
         },
+        cache: 'no-store',
       });
 
       if (response.status === 401) {
@@ -766,18 +742,110 @@ export default function DashboardPage() {
         return null;
       }
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP ${response.status}`);
+      }
+
       return data;
-    } catch (fetchError) {
-      console.error(`Fetch error ${url}:`, fetchError);
+    } catch (err) {
+      console.error(`API error ${url}:`, err);
       return null;
     }
-  };
+  }, [router]);
+
+  const fetchBanners = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/banners/home`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+
+      const list = extractList(data, ['banners'])
+        .filter((banner) => {
+          const status =
+            banner.is_active ??
+            banner.isActive ??
+            banner.active ??
+            banner.status;
+
+          if (status === undefined || status === null) return true;
+
+          return [
+            true, 1, '1', 'true', 'active', 'aktif', 'published',
+          ].includes(
+            typeof status === 'string'
+              ? status.toLowerCase()
+              : status
+          );
+        })
+        .sort(
+          (a, b) =>
+            Number(a.sort_order ?? a.urutan ?? 0) -
+            Number(b.sort_order ?? b.urutan ?? 0)
+        )
+        .map((banner, index) => ({
+          id: banner.id ?? index,
+          title: banner.title || banner.judul || '',
+          subtitle: banner.subtitle || banner.subjudul || '',
+          description: banner.description || banner.deskripsi || '',
+          image: getMediaUrl(
+            banner.image ||
+            banner.image_url ||
+            banner.banner_image ||
+            banner.gambar ||
+            banner.image_path
+          ),
+          button_text:
+            banner.button_text ||
+            banner.buttonText ||
+            banner.teks_tombol ||
+            '',
+          button_link:
+            banner.button_link ||
+            banner.buttonLink ||
+            banner.link_tombol ||
+            '/events',
+          secondary_button_text:
+            banner.secondary_button_text ||
+            banner.secondaryButtonText ||
+            '',
+          secondary_button_link:
+            banner.secondary_button_link ||
+            banner.secondaryButtonLink ||
+            '/tickets',
+        }));
+
+      setBanners(list);
+    } catch (err) {
+      console.error('Gagal mengambil banner:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBanners();
+
+    const interval = setInterval(fetchBanners, 15000);
+    const onFocus = () => fetchBanners();
+
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [fetchBanners]);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadData = async () => {
+    const loadDashboard = async () => {
       const token = localStorage.getItem('token');
 
       if (!token) {
@@ -785,146 +853,124 @@ export default function DashboardPage() {
         return;
       }
 
-      const storedUser = getStoredUser();
-
-      if (!storedUser) {
-        localStorage.removeItem('token');
-        router.replace('/login');
-        return;
-      }
-
-      if (!mounted) return;
-
-      setUser(storedUser);
       setLoading(true);
       setError('');
 
       try {
         const [
+          profileRes,
           eventsRes,
           ordersRes,
           ticketsRes,
           paymentsRes,
-          wishlistRes,
-          notificationsRes,
         ] = await Promise.all([
+          fetchWithAuth('/api/users/profile'),
           fetchWithAuth('/api/events'),
           fetchWithAuth('/api/orders'),
           fetchWithAuth('/api/tickets'),
           fetchWithAuth('/api/payments'),
-          fetchWithAuth(`/api/wishlist/user/${storedUser.id}`),
-          fetchWithAuth(`/api/notifications/user/${storedUser.id}`),
         ]);
 
         if (!mounted) return;
 
-        if (eventsRes?.success) {
-          setEvents(eventsRes.events || []);
-        } else {
-          setEvents([]);
-        }
+        const profile = profileRes?.user || profileRes?.data?.user;
 
-        const allOrders = ordersRes?.orders || [];
-        const userOrders = allOrders.filter(
-          (order) => Number(order.user_id) === Number(storedUser.id)
-        );
-        setOrders(userOrders);
-
-        const allTickets = ticketsRes?.tickets || [];
-        const userOrderIds = new Set(
-          userOrders.map((order) => Number(order.id))
-        );
-        const userTickets = allTickets.filter((ticket) =>
-          userOrderIds.has(Number(ticket.order_id))
-        );
-        setTickets(userTickets);
-
-        const allPayments = paymentsRes?.payments || [];
-        const userPayments = allPayments.filter((payment) =>
-          userOrderIds.has(Number(payment.order_id))
-        );
-        setPayments(userPayments);
-
-        if (wishlistRes?.success) {
-          setWishlist(wishlistRes.wishlist || []);
-        } else {
-          setWishlist([]);
-        }
-
-        if (notificationsRes?.success) {
-          setNotifications(
-            (notificationsRes.notifications || []).map((notif) => ({
-              ...notif,
-              description: notif.message,
-              type: notif.is_read ? 'info' : 'success',
-              time: notif.created_at
-                ? formatDate(notif.created_at)
-                : 'Baru saja',
-            }))
+        if (!profileRes?.success || !profile) {
+          throw new Error(
+            profileRes?.message || 'Gagal mengambil profil pengguna.'
           );
-        } else {
-          setNotifications([]);
         }
-      } catch (loadError) {
-        console.error('Gagal memuat dashboard:', loadError);
+
+        setUser(profile);
+        localStorage.setItem('user', JSON.stringify(profile));
+
+        const eventList = extractList(eventsRes, ['events']);
+        const orderList = extractList(ordersRes, ['orders']);
+        const ticketList = extractList(ticketsRes, ['tickets']);
+        const paymentList = extractList(paymentsRes, ['payments']);
+
+        setEvents(eventList);
+        setOrders(orderList);
+        setTickets(ticketList);
+        setPayments(paymentList);
+
+        const [wishlistRes, notificationsRes] = await Promise.all([
+          fetchWithAuth(`/api/wishlist/user/${profile.id}`),
+          fetchWithAuth(`/api/notifications/user/${profile.id}`),
+        ]);
+
+        if (!mounted) return;
+
+        setWishlist(
+          wishlistRes?.success
+            ? extractList(wishlistRes, ['wishlist'])
+            : []
+        );
+
+        setNotifications(
+          notificationsRes?.success
+            ? extractList(notificationsRes, ['notifications'])
+            : []
+        );
+
+        if (
+          !eventsRes?.success ||
+          !ordersRes ||
+          !ticketsRes ||
+          !paymentsRes
+        ) {
+          setError('Sebagian data dashboard gagal dimuat. Silakan coba kembali.');
+        }
+      } catch (err) {
+        console.error('Dashboard error:', err);
 
         if (mounted) {
-          setError('Sebagian data dashboard gagal dimuat.');
+          setError(err.message || 'Gagal memuat dashboard.');
         }
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     };
 
-    loadData();
+    loadDashboard();
 
     return () => {
       mounted = false;
     };
-  }, [router]);
-
-  const userOrderIds = useMemo(() => {
-    return new Set(orders.map((order) => Number(order.id)));
-  }, [orders]);
+  }, [fetchWithAuth, router]);
 
   const activeTickets = useMemo(() => {
-    const now = new Date();
-
     return tickets
       .filter((ticket) => {
-        if (
-          String(ticket.payment_status || '').toLowerCase() !== 'paid'
-        ) {
-          return false;
-        }
+        if (!isPaid(ticket.payment_status)) return false;
 
-        if (!ticket.event_date) {
-          return true;
-        }
+        if (!ticket.event_date) return true;
 
         const eventDate = new Date(ticket.event_date);
-        return eventDate >= now;
+
+        return !Number.isNaN(eventDate.getTime()) &&
+          eventDate.getTime() >= Date.now();
       })
       .map((ticket) => ({
         ...ticket,
         id: ticket.id,
-        name: ticket.event_name,
-        date: ticket.event_date,
-        time: ticket.event_time,
-        venue: ticket.venue_name || ticket.venue,
-        category: ticket.category_name,
+        name: ticket.event_name || ticket.name || 'Event',
+        date: ticket.event_date || ticket.date,
+        time: ticket.event_time || ticket.time,
+        venue: ticket.venue_name || ticket.venue || '-',
+        category: ticket.category_name || ticket.category || 'Event',
         price: Number(ticket.price) || 0,
-        organizer: ticket.artist_name || ticket.organizer || 'TicketVerse',
-        status: 'Aktif',
-        image:
-          ticket.poster ||
-          ticket.event_poster ||
-          '/images/default-event.jpg',
+        organizer:
+          ticket.artist_name ||
+          ticket.organizer ||
+          'TicketVerse',
+        image: getEventPoster(ticket),
         seat: ticket.seat || 'General',
-        barcode: ticket.ticket_code || `#TKT-${ticket.id}`,
-        daysLeft: getDaysLeft(ticket.event_date, ticket.event_time),
+        barcode: ticket.ticket_code || `TKT-${ticket.id}`,
+        daysLeft: getDaysLeft(
+          ticket.event_date,
+          ticket.event_time
+        ),
       }));
   }, [tickets]);
 
@@ -937,21 +983,27 @@ export default function DashboardPage() {
 
     return events
       .filter((event) => {
-        if (!event?.event_date) return true;
-        return new Date(event.event_date).getTime() >= Date.now();
+        if (!event.event_date) return true;
+
+        const eventDate = new Date(event.event_date);
+
+        return !Number.isNaN(eventDate.getTime()) &&
+          eventDate.getTime() >= Date.now();
       })
       .slice(0, 10)
-      .map((event, index) => {
-        const wishlistItem = wishlistMap.get(Number(event.id));
+      .map((event) => {
+        const eventId = event.id ?? event.event_id;
+        const wishlistItem = wishlistMap.get(Number(eventId));
 
         return {
           ...event,
-          id: event.id,
+          id: eventId,
           name: event.event_name || event.name || 'Event',
-          category: event.category_name || event.category || 'Event',
-          venue: event.venue_name || event.venue || 'Venue',
-          artist_name:
-            event.artist_name || event.artist || 'TicketVerse',
+          category:
+            event.category_name ||
+            event.category ||
+            'Event',
+          venue: event.venue_name || event.venue || '-',
           date: event.event_date || event.date,
           time: event.event_time || event.time,
           price:
@@ -959,19 +1011,9 @@ export default function DashboardPage() {
             Number(event.price) ||
             Number(event.starting_price) ||
             0,
-          image:
-            event.poster || event.image || '/images/default-event.jpg',
+          image: getEventPoster(event),
           isWishlisted: Boolean(wishlistItem),
-          wishlistId: wishlistItem?.id || null,
-          rating: event.rating || event.average_rating || '4.5',
-          attendees:
-            event.attendees || event.total_interested || '1k',
-          gradient: [
-            'from-blue-500/90 via-purple-500/80 to-pink-600/70',
-            'from-indigo-500/90 via-blue-500/80 to-cyan-500/70',
-            'from-purple-500/90 via-fuchsia-500/80 to-rose-500/70',
-            'from-cyan-500/90 via-blue-500/80 to-indigo-600/70',
-          ][index % 4],
+          wishlistId: wishlistItem?.id || wishlistItem?.wishlist_id || null,
         };
       });
   }, [events, wishlist]);
@@ -979,22 +1021,21 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const totalTickets = tickets.length;
     const activeCount = activeTickets.length;
-    const expiredCount = Math.max(0, totalTickets - activeCount);
 
     const totalSpent = payments
-      .filter(
-        (payment) =>
-          String(payment.payment_status || '').toLowerCase() === 'success'
+      .filter((payment) =>
+        isPaid(payment.payment_status || payment.status)
       )
       .reduce(
-        (total, payment) => total + (Number(payment.amount) || 0),
+        (total, payment) =>
+          total + (Number(payment.amount) || 0),
         0
       );
 
     return {
       total: totalTickets,
       active: activeCount,
-      expired: expiredCount,
+      expired: Math.max(0, totalTickets - activeCount),
       totalSpent,
     };
   }, [tickets, activeTickets, payments]);
@@ -1006,44 +1047,61 @@ export default function DashboardPage() {
           (ticket) => Number(ticket.order_id) === Number(order.id)
         );
 
-        const firstTicket = relatedTickets[0];
-
         const relatedPayment = payments.find(
           (payment) => Number(payment.order_id) === Number(order.id)
         );
 
+        const firstTicket = relatedTickets[0];
+
+        const status = String(
+          order.payment_status || order.status || ''
+        ).toLowerCase();
+
         return {
           id: order.id,
-          order_id: order.id,
-          order_code: order.order_code || `ORDER-${order.id}`,
-          event_name: firstTicket?.event_name || 'Pesanan Tiket',
-          event_date: firstTicket?.event_date || null,
-          quantity: relatedTickets.length || 0,
+          event_name:
+            firstTicket?.event_name ||
+            order.event_name ||
+            'Pesanan Tiket',
+          event_date:
+            firstTicket?.event_date ||
+            order.event_date ||
+            null,
+          quantity:
+            relatedTickets.length ||
+            Number(order.quantity) ||
+            0,
           total:
             Number(order.total_price) ||
             Number(relatedPayment?.amount) ||
             0,
-          status:
-            String(order.payment_status || '').toLowerCase() === 'paid'
-              ? 'confirmed'
-              : String(order.payment_status || '').toLowerCase() ===
-                  'cancelled'
-                ? 'cancelled'
-                : 'pending',
+          status: isPaid(status)
+            ? 'confirmed'
+            : ['cancelled', 'canceled', 'dibatalkan'].includes(status)
+              ? 'cancelled'
+              : 'pending',
         };
       })
-      .sort((a, b) => b.id - a.id);
+      .sort((a, b) => Number(b.id) - Number(a.id));
   }, [orders, tickets, payments]);
 
   const handleWishlistChange = (eventId, isAdded, wishlistItem) => {
     setWishlist((current) => {
       if (isAdded) {
+        const newWishlistId =
+          wishlistItem?.id ??
+          wishlistItem?.wishlist_id ??
+          wishlistItem?.wishlist?.id ??
+          null;
+
         return [
-          ...current,
+          ...current.filter(
+            (item) => Number(item.event_id) !== Number(eventId)
+          ),
           {
             ...(wishlistItem || {}),
+            id: newWishlistId,
             event_id: eventId,
-            id: wishlistItem?.id,
           },
         ];
       }
@@ -1055,29 +1113,24 @@ export default function DashboardPage() {
   };
 
   const scrollLeft = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({
-        left: -330,
-        behavior: 'smooth',
-      });
-    }
+    scrollContainerRef.current?.scrollBy({
+      left: -300,
+      behavior: 'smooth',
+    });
   };
 
   const scrollRight = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({
-        left: 330,
-        behavior: 'smooth',
-      });
-    }
+    scrollContainerRef.current?.scrollBy({
+      left: 300,
+      behavior: 'smooth',
+    });
   };
 
   if (loading) {
     return (
       <div className="flex min-h-[70vh] items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-[#3B507D]/20 border-t-[#3B507D]" />
-
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-[3px] border-[#3B507D]/15 border-t-[#3B507D]" />
           <p className="mt-4 text-sm text-[#9B907F]">
             Memuat dashboard...
           </p>
@@ -1091,12 +1144,12 @@ export default function DashboardPage() {
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
           <p className="text-sm text-gray-500">
-            Silakan login terlebih dahulu.
+            Profil tidak dapat dimuat. Silakan login kembali.
           </p>
 
           <Link
             href="/login"
-            className="mt-3 inline-block text-sm font-semibold text-[#3B507D] hover:text-[#112250]"
+            className="mt-3 inline-block text-sm font-semibold text-[#3B507D]"
           >
             Kembali ke Login
           </Link>
@@ -1105,9 +1158,11 @@ export default function DashboardPage() {
     );
   }
 
+  const profilePhoto = getProfilePhoto(user);
+
   return (
     <div className="w-full min-w-0">
-      <Banner imageUrl="/images/bn2.png" />
+      <Banner banners={banners} />
 
       {error && (
         <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
@@ -1117,47 +1172,44 @@ export default function DashboardPage() {
 
       <div className="mb-6 flex min-w-0 flex-col gap-4 sm:mb-8 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <h2 className="flex flex-wrap items-center gap-2 text-xl font-bold text-[#112250] sm:text-2xl lg:text-3xl">
+          <h2 className="flex flex-wrap items-center gap-2.5 text-xl font-bold text-[#112250] sm:text-2xl lg:text-3xl">
             <span className="max-w-full truncate">
-              Halo, {user.fullname || user.name || 'Member'}
+              Halo, {user.fullname || user.name || user.username || 'Member'}
             </span>
 
-            <span className="rounded-full border border-[#D8D0C4]/30 bg-gradient-to-r from-[#E5C27A]/40 to-[#F7F8FA] px-3 py-1 text-[10px] font-semibold text-[#112250] shadow-sm sm:text-xs">
-              {user.role === 'customer'
-                ? 'Member'
-                : user.role === 'event_organizer'
-                  ? 'Organizer'
-                  : user.role === 'super_admin'
-                    ? 'Super Admin'
-                    : 'Member'}
+            <span className="rounded-md border border-[#E5C27A]/40 bg-[#E5C27A]/15 px-2.5 py-1 text-[10px] font-semibold text-[#112250]">
+              {user.role === 'event_organizer'
+                ? 'Organizer'
+                : user.role === 'super_admin'
+                  ? 'Super Admin'
+                  : 'Member'}
             </span>
           </h2>
 
-          <p className="mt-1 text-xs text-[#3B507D]/70 sm:text-sm">
+          <p className="mt-1 text-xs text-[#9B907F] sm:text-sm">
             Siap untuk menemukan konser impianmu selanjutnya?
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2 rounded-xl border border-[#D8D0C4]/30 bg-[#E5C27A]/20 px-3 py-2 text-xs text-[#112250] shadow-sm sm:px-4 sm:text-sm">
-            <Star className="h-4 w-4 flex-shrink-0 fill-amber-400 text-amber-400" />
-            <span>Member Premium</span>
+          <div className="flex items-center gap-2 rounded-lg border border-[#E5C27A]/40 bg-[#E5C27A]/10 px-3 py-2 text-xs font-medium text-[#112250]">
+            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+            Member TicketVerse
           </div>
 
-          <div className="flex items-center gap-1 rounded-full border border-[#D8D0C4]/30 bg-[#F7F8FA] px-3 py-1.5 text-[10px] text-[#9B907F] sm:text-xs">
+          <div className="flex items-center gap-1.5 rounded-full border border-[#E8E3D9] bg-white px-3 py-2 text-xs text-[#9B907F]">
             <Sparkles className="h-3 w-3 text-amber-400" />
-            <span>Pro</span>
+            Dashboard
           </div>
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:mb-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:mb-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
         <StatsCard
           title="Total Tiket"
           value={stats.total}
           icon="ticket"
           subtitle="Total semua tiket"
-          trendIcon={Ticket}
           trendLabel={`${stats.total} tiket`}
         />
 
@@ -1166,8 +1218,7 @@ export default function DashboardPage() {
           value={stats.active}
           icon="active"
           subtitle="Konser mendatang"
-          trendIcon={Circle}
-          trendLabel="Aktif"
+          trendLabel="Tiket aktif"
         />
 
         <StatsCard
@@ -1175,7 +1226,6 @@ export default function DashboardPage() {
           value={formatRupiah(stats.totalSpent)}
           icon="money"
           subtitle="Total pembayaran berhasil"
-          trendIcon={DollarSign}
           trendLabel="Pembayaran"
         />
 
@@ -1184,34 +1234,28 @@ export default function DashboardPage() {
           value={wishlist.length}
           icon="heart"
           subtitle="Acara favorit"
-          trendIcon={Heart}
-          trendLabel={
-            wishlist.length > 0
-              ? `${wishlist.length} acara`
-              : 'Belum ada'
-          }
+          trendLabel={`${wishlist.length} acara`}
         />
       </div>
 
       <div className="mb-6 min-w-0 sm:mb-8">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="flex items-center gap-2 text-lg font-bold text-[#112250] sm:text-xl">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-[#112250]">
               <Ticket className="h-5 w-5 text-[#3B507D]" />
               Tiket Saya
             </h3>
 
-            <p className="text-xs text-[#9B907F]">
-              Akan Datang - Tiket terkonfirmasi
+            <p className="mt-0.5 text-xs text-[#9B907F]">
+              Tiket konser yang sudah dikonfirmasi
             </p>
           </div>
 
           <Link
             href="/tickets"
-            className="flex items-center gap-1 self-start text-xs font-medium text-[#3B507D] hover:text-[#112250] sm:self-auto sm:text-sm"
+            className="flex items-center gap-1 self-start text-xs font-medium text-[#3B507D] hover:text-[#112250]"
           >
-            Lihat semua
-            <ChevronRight className="h-4 w-4" />
+            Lihat semua <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
@@ -1221,10 +1265,10 @@ export default function DashboardPage() {
           ))}
 
           {activeTickets.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-[#D8D0C4]/50 bg-white/60 py-10 text-center xl:col-span-2">
-              <Ticket className="mx-auto h-10 w-10 text-[#D8D0C4]" />
+            <div className="rounded-2xl border border-dashed border-[#E8E3D9] bg-white py-12 text-center xl:col-span-2">
+              <Ticket className="mx-auto h-8 w-8 text-[#D8D0C4]" />
 
-              <p className="mt-3 text-sm font-medium text-[#112250]">
+              <p className="mt-3 text-sm font-semibold text-[#112250]">
                 Belum ada tiket aktif
               </p>
 
@@ -1234,42 +1278,40 @@ export default function DashboardPage() {
 
               <Link
                 href="/events"
-                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-4 py-2 text-xs font-semibold text-white transition hover:scale-105"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#112250] px-4 py-2 text-xs font-semibold text-white hover:bg-[#3B507D]"
               >
-                Jelajahi Event
-                <ArrowRight className="h-4 w-4" />
+                Jelajahi Event <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
           )}
         </div>
       </div>
 
-      <div className="mb-6 grid min-w-0 grid-cols-1 gap-4 sm:mb-8 sm:gap-6 xl:grid-cols-3">
+      <div className="mb-6 grid min-w-0 grid-cols-1 gap-4 sm:mb-8 xl:grid-cols-3">
         <div className="min-w-0 xl:col-span-1">
-          <div className="rounded-2xl border border-[#D8D0C4]/30 bg-white/80 p-4 shadow-lg backdrop-blur-sm sm:p-5">
+          <div className="rounded-2xl border border-[#E8E3D9] bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-2">
-              <h3 className="flex items-center gap-2 text-base font-bold text-[#112250] sm:text-lg">
-                <Bell className="h-5 w-5 flex-shrink-0 text-[#3B507D]" />
+              <h3 className="flex items-center gap-2 text-base font-bold text-[#112250]">
+                <Bell className="h-4.5 w-4.5 text-[#3B507D]" />
                 Notifikasi
               </h3>
 
               <Link
                 href="/notifications"
-                className="whitespace-nowrap text-[10px] text-[#3B507D] sm:text-xs"
+                className="whitespace-nowrap text-[10px] font-medium text-[#3B507D]"
               >
                 Lihat Semua
               </Link>
             </div>
 
-            <div className="max-h-[300px] space-y-3 overflow-y-auto">
+            <div className="max-h-[300px] space-y-2.5 overflow-y-auto">
               {notifications.slice(0, 5).map((notif) => (
                 <NotificationItem key={notif.id} notif={notif} />
               ))}
 
               {notifications.length === 0 && (
                 <div className="py-8 text-center">
-                  <Bell className="mx-auto h-8 w-8 text-[#D8D0C4]" />
-
+                  <Bell className="mx-auto h-7 w-7 text-[#D8D0C4]" />
                   <p className="mt-2 text-xs text-gray-500">
                     Belum ada notifikasi.
                   </p>
@@ -1280,48 +1322,49 @@ export default function DashboardPage() {
         </div>
 
         <div className="min-w-0 xl:col-span-2">
-          <div className="min-w-0 rounded-2xl border border-[#D8D0C4]/30 bg-white/80 p-4 shadow-lg backdrop-blur-sm sm:p-5">
+          <div className="min-w-0 rounded-2xl border border-[#E8E3D9] bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-2">
-              <h3 className="flex min-w-0 items-center gap-2 text-base font-bold text-[#112250] sm:text-lg">
-                <Sparkles className="h-5 w-5 flex-shrink-0 fill-amber-400 text-amber-400" />
+              <h3 className="flex min-w-0 items-center gap-2 text-base font-bold text-[#112250]">
+                <Sparkles className="h-4.5 w-4.5 flex-shrink-0 text-amber-500" />
                 <span className="truncate">Rekomendasi Untukmu</span>
               </h3>
 
-              <div className="flex flex-shrink-0 items-center gap-2">
+              <div className="flex flex-shrink-0 items-center gap-1.5">
                 <button
                   type="button"
                   onClick={scrollLeft}
-                  className="rounded-full bg-[#112250]/10 p-1.5 transition hover:bg-[#112250]/20"
                   aria-label="Geser kiri"
+                  className="rounded-full bg-[#112250]/5 p-1.5 text-[#112250] hover:bg-[#112250]/10"
                 >
-                  <ChevronLeft className="h-5 w-5" />
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
 
                 <button
                   type="button"
                   onClick={scrollRight}
-                  className="rounded-full bg-[#112250]/10 p-1.5 transition hover:bg-[#112250]/20"
                   aria-label="Geser kanan"
+                  className="rounded-full bg-[#112250]/5 p-1.5 text-[#112250] hover:bg-[#112250]/10"
                 >
-                  <ChevronRight className="h-5 w-5" />
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
             <div
               ref={scrollContainerRef}
-              className="hide-scrollbar flex min-w-0 snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-4 sm:gap-5"
+              className="hide-scrollbar flex min-w-0 snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-2"
             >
               {recommendations.map((event) => (
                 <RecommendationCard
                   key={event.id}
                   event={event}
+                  userId={user.id}
                   onWishlistChange={handleWishlistChange}
                 />
               ))}
 
               {recommendations.length === 0 && (
-                <div className="w-full min-w-full py-8 text-center text-sm text-gray-500">
+                <div className="w-full py-8 text-center text-sm text-gray-500">
                   Belum ada event tersedia.
                 </div>
               )}
@@ -1331,213 +1374,224 @@ export default function DashboardPage() {
       </div>
 
       <div className="mb-6 min-w-0 sm:mb-8">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="flex items-center gap-2 text-lg font-bold text-[#112250] sm:text-xl">
-            <Gift className="h-5 w-5 text-rose-500" />
-            Dapatkan Diskon Spesial!
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-lg font-bold text-[#112250]">
+            <History className="h-5 w-5 text-[#3B507D]" />
+            Riwayat Pemesanan
           </h3>
 
           <Link
-            href="/promos"
-            className="flex items-center gap-1 self-start text-xs text-[#3B507D] sm:self-auto sm:text-sm"
+            href="/history"
+            className="whitespace-nowrap text-xs font-medium text-[#3B507D]"
           >
             Lihat semua
-            <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
 
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
-          <PromoCard
-            promo={{
-              id: 1,
-              title: 'Promo Tiket Konser',
-              description: 'Nikmati pengalaman konser lebih hemat.',
-              discount: 'Promo',
-              code: 'TICKETVERSE',
-              valid_until: 'Segera',
-              image:
-                'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&q=80',
-            }}
-          />
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-[#E8E3D9] bg-white p-4 shadow-sm sm:p-6">
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[600px] divide-y divide-[#E8E3D9]">
+              <thead>
+                <tr>
+                  {['Event', 'Tanggal', 'Tiket', 'Total', 'Status'].map((heading) => (
+                    <th
+                      key={heading}
+                      className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-[#9B907F]"
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
 
-          <PromoCard
-            promo={{
-              id: 2,
-              title: 'Special Member',
-              description: 'Promo khusus untuk member TicketVerse.',
-              discount: 'Member',
-              code: 'MEMBER',
-              valid_until: 'Terbatas',
-              image:
-                'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=600&q=80',
-            }}
-          />
+              <tbody>
+                {bookings.slice(0, 5).map((booking) => (
+                  <tr key={booking.id} className="transition hover:bg-[#F7F8FA]">
+                    <td className="max-w-[180px] truncate px-3 py-3 text-sm font-medium text-[#112250]">
+                      {booking.event_name}
+                    </td>
 
-          <PromoCard
-            promo={{
-              id: 3,
-              title: 'Concert Deals',
-              description: 'Dapatkan harga terbaik untuk event pilihan.',
-              discount: 'Deals',
-              code: 'CONCERT',
-              valid_until: 'Terbatas',
-              image:
-                'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?w=600&q=80',
-            }}
-          />
+                    <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-500">
+                      {formatDate(booking.event_date)}
+                    </td>
+
+                    <td className="px-3 py-3 text-xs text-gray-500">
+                      {booking.quantity}
+                    </td>
+
+                    <td className="whitespace-nowrap px-3 py-3 text-xs font-semibold text-[#112250]">
+                      {formatRupiah(booking.total)}
+                    </td>
+
+                    <td className="px-3 py-3 text-xs">
+                      <span
+                        className={`whitespace-nowrap rounded-md px-2 py-1 text-[10px] font-semibold ${
+                          booking.status === 'confirmed'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : booking.status === 'cancelled'
+                              ? 'bg-rose-50 text-rose-700'
+                              : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {booking.status === 'confirmed'
+                          ? 'Dikonfirmasi'
+                          : booking.status === 'cancelled'
+                            ? 'Dibatalkan'
+                            : 'Pending'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+
+                {bookings.length === 0 && (
+                  <tr>
+                    <td colSpan="5" className="py-12 text-center">
+                      <History className="mx-auto h-7 w-7 text-[#D8D0C4]" />
+                      <p className="mt-2 text-sm text-gray-500">
+                        Belum ada riwayat pemesanan.
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
         <div className="min-w-0 xl:col-span-2">
-          <div className="min-w-0 rounded-2xl border border-[#D8D0C4]/30 bg-white/80 p-4 shadow-lg backdrop-blur-sm sm:p-6">
-            <div className="mb-4 flex items-center justify-between gap-2">
-              <h3 className="flex items-center gap-2 text-base font-bold text-[#112250] sm:text-lg">
-                <History className="h-5 w-5 text-[#3B507D]" />
-                Riwayat Pemesanan
-              </h3>
+          <div className="rounded-2xl border border-[#E8E3D9] bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-[#112250]">
+                  Informasi Akun
+                </h3>
 
-              <Link
-                href="/history"
-                className="whitespace-nowrap text-xs text-[#3B507D] sm:text-sm"
-              >
-                Lihat semua
-              </Link>
+                <p className="mt-1 text-xs text-[#9B907F]">
+                  Data profil yang tersimpan di akunmu
+                </p>
+              </div>
+
+              <User className="h-6 w-6 text-[#3B507D]" />
             </div>
 
-            <div className="max-w-full overflow-x-auto">
-              <table className="w-full min-w-[650px] divide-y divide-[#D8D0C4]/30">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-[#9B907F]">
-                      Event
-                    </th>
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex min-w-0 items-center gap-3 rounded-lg bg-[#F7F8FA] p-3">
+                <Mail className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-[#9B907F]">Email</p>
+                  <p className="truncate text-xs font-medium text-[#112250]">
+                    {user.email || 'Belum diisi'}
+                  </p>
+                </div>
+              </div>
 
-                    <th className="px-4 py-2 text-left text-xs font-medium text-[#9B907F]">
-                      Tanggal
-                    </th>
+              <div className="flex min-w-0 items-center gap-3 rounded-lg bg-[#F7F8FA] p-3">
+                <Phone className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-[#9B907F]">Nomor HP</p>
+                  <p className="truncate text-xs font-medium text-[#112250]">
+                    {user.phone || 'Belum diisi'}
+                  </p>
+                </div>
+              </div>
 
-                    <th className="px-4 py-2 text-left text-xs font-medium text-[#9B907F]">
-                      Tiket
-                    </th>
+              <div className="flex min-w-0 items-center gap-3 rounded-lg bg-[#F7F8FA] p-3">
+                <User className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-[#9B907F]">Jenis Kelamin</p>
+                  <p className="truncate text-xs font-medium text-[#112250]">
+                    {user.gender || 'Belum diisi'}
+                  </p>
+                </div>
+              </div>
 
-                    <th className="px-4 py-2 text-left text-xs font-medium text-[#9B907F]">
-                      Total
-                    </th>
-
-                    <th className="px-4 py-2 text-left text-xs font-medium text-[#9B907F]">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {bookings.slice(0, 5).map((booking) => (
-                    <tr key={booking.id}>
-                      <td className="max-w-[200px] truncate px-4 py-3 text-sm font-medium text-[#112250]">
-                        {booking.event_name}
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                        {booking.event_date
-                          ? formatDate(booking.event_date)
-                          : '-'}
-                      </td>
-
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {booking.quantity}
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-[#112250]">
-                        {formatRupiah(booking.total)}
-                      </td>
-
-                      <td className="px-4 py-3 text-sm">
-                        <span
-                          className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
-                            booking.status === 'confirmed'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : booking.status === 'cancelled'
-                                ? 'bg-rose-100 text-rose-700'
-                                : 'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          {booking.status === 'confirmed'
-                            ? 'Dikonfirmasi'
-                            : booking.status === 'cancelled'
-                              ? 'Dibatalkan'
-                              : 'Pending'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {bookings.length === 0 && (
-                    <tr>
-                      <td colSpan="5" className="py-10 text-center">
-                        <History className="mx-auto h-8 w-8 text-[#D8D0C4]" />
-
-                        <p className="mt-2 text-sm text-gray-500">
-                          Belum ada riwayat pemesanan.
-                        </p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+              <div className="flex min-w-0 items-center gap-3 rounded-lg bg-[#F7F8FA] p-3">
+                <Calendar className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-[#9B907F]">Tanggal Bergabung</p>
+                  <p className="truncate text-xs font-medium text-[#112250]">
+                    {formatDate(user.created_at)}
+                  </p>
+                </div>
+              </div>
             </div>
+
+            <Link
+              href="/profile"
+              className="mt-5 inline-flex items-center gap-2 rounded-lg bg-[#112250] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#3B507D]"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit Profil
+            </Link>
           </div>
         </div>
 
         <div className="min-w-0 xl:col-span-1">
-          <div className="rounded-2xl border border-[#D8D0C4]/30 bg-white/80 p-5 text-center shadow-lg backdrop-blur-sm sm:p-6 xl:sticky xl:top-24">
+          <div className="rounded-2xl border border-[#E8E3D9] bg-white p-5 text-center shadow-sm sm:p-6 xl:sticky xl:top-24">
             <div className="relative inline-block">
-              <div className="h-20 w-20 overflow-hidden rounded-full shadow-lg ring-4 ring-[#E5C27A]/50 sm:h-24 sm:w-24">
-                <img
-                  src={user.photo || 'https://i.pravatar.cc/150'}
-                  alt={user.fullname || 'Profile'}
-                  className="h-full w-full object-cover"
-                />
+              <div className="h-20 w-20 overflow-hidden rounded-full bg-[#F0F1F4] ring-4 ring-[#E5C27A]/30 sm:h-24 sm:w-24">
+                {profilePhoto ? (
+                  <img
+                    src={profilePhoto}
+                    alt={user.fullname || 'Profile'}
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <User className="h-10 w-10 text-[#AAB0BD]" />
+                  </div>
+                )}
               </div>
 
-              <div className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-emerald-400">
-                <Check className="h-4 w-4 text-white" />
+              <div className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-emerald-500">
+                <Check className="h-3 w-3 text-white" />
               </div>
             </div>
 
-            <h3 className="mt-4 truncate text-lg font-bold text-[#112250] sm:text-xl">
-              {user.fullname || user.name || 'Member'}
+            <h3 className="mt-4 truncate text-lg font-bold text-[#112250]">
+              {user.fullname || user.name || user.username || 'Member'}
             </h3>
 
-            <p className="text-xs text-[#9B907F] sm:text-sm">
+            <p className="text-xs text-[#9B907F]">
               Member sejak{' '}
               {user.created_at
                 ? new Date(user.created_at).getFullYear()
                 : '-'}
             </p>
 
-            <div className="mt-4 space-y-2 border-t border-[#D8D0C4]/30 pt-4">
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-[#E5C27A]/20 p-2 text-left text-sm text-gray-600">
+            <div className="mt-4 space-y-2 border-t border-[#E8E3D9] pt-4">
+              <div className="flex min-w-0 items-center gap-3 rounded-lg bg-[#F7F8FA] p-2.5 text-left">
                 <Mail className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                <span className="truncate">{user.email || 'Belum diisi'}</span>
+                <span className="truncate text-xs text-gray-600">
+                  {user.email || 'Belum diisi'}
+                </span>
               </div>
 
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-[#E5C27A]/20 p-2 text-left text-sm text-gray-600">
+              <div className="flex min-w-0 items-center gap-3 rounded-lg bg-[#F7F8FA] p-2.5 text-left">
                 <Phone className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                <span className="truncate">{user.phone || 'Belum diisi'}</span>
+                <span className="truncate text-xs text-gray-600">
+                  {user.phone || 'Belum diisi'}
+                </span>
               </div>
 
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-[#E5C27A]/20 p-2 text-left text-sm text-gray-600">
+              <div className="flex min-w-0 items-center gap-3 rounded-lg bg-[#F7F8FA] p-2.5 text-left">
                 <User className="h-4 w-4 flex-shrink-0 text-[#3B507D]" />
-                <span className="truncate">{user.gender || 'Belum diisi'}</span>
+                <span className="truncate text-xs text-gray-600">
+                  {user.gender || 'Belum diisi'}
+                </span>
               </div>
             </div>
 
             <Link
               href="/profile"
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] py-2.5 text-center text-sm font-medium text-white transition-all hover:-translate-y-0.5 hover:shadow-lg"
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#112250] py-2.5 text-sm font-semibold text-white transition hover:bg-[#3B507D]"
             >
-              <Pencil className="h-4 w-4" />
+              <Pencil className="h-3.5 w-3.5" />
               Edit Profil
             </Link>
           </div>
@@ -1552,69 +1606,6 @@ export default function DashboardPage() {
         .hide-scrollbar {
           -ms-overflow-style: none;
           scrollbar-width: none;
-        }
-
-        @keyframes float {
-          0%,
-          100% {
-            transform: translateY(0);
-          }
-
-          50% {
-            transform: translateY(-16px);
-          }
-        }
-
-        .animate-float {
-          animation: float 4s ease-in-out infinite;
-        }
-
-        .animate-float-delay {
-          animation: float 5s ease-in-out infinite;
-          animation-delay: 0.8s;
-        }
-
-        .animate-float-slow {
-          animation: float 6s ease-in-out infinite;
-          animation-delay: 1.5s;
-        }
-
-        @keyframes sparkle {
-          0%,
-          100% {
-            opacity: 0;
-            transform: scale(0.5);
-          }
-
-          50% {
-            opacity: 1;
-            transform: scale(1.2);
-          }
-        }
-
-        .animate-sparkle {
-          animation: sparkle 2.5s ease-in-out infinite;
-        }
-
-        @keyframes glow-pulse {
-          0%,
-          100% {
-            opacity: 0.4;
-          }
-
-          50% {
-            opacity: 1;
-          }
-        }
-
-        .animate-glow-pulse {
-          animation: glow-pulse 3s ease-in-out infinite;
-        }
-
-        @media (max-width: 640px) {
-          .animate-swing {
-            animation: none;
-          }
         }
       `}</style>
     </div>

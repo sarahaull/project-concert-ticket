@@ -2,240 +2,533 @@
 const db = require("../config/db");
 
 // ============================================================
-// VALIDASI ORGANIZER
+// HELPER
 // ============================================================
 
 const getOrganizerId = (req) => {
-  const user = req.user;
+  return req.user?.id || req.user?.userId || req.user?.user_id;
+};
 
-  if (!user?.id) {
-    return null;
-  }
+const sendServerError = (res, error, message) => {
+  console.error(message, error);
 
-  const role = String(user.role || "").toLowerCase();
-
-  if (!["organizer", "event_organizer"].includes(role)) {
-    return null;
-  }
-
-  return user.id;
+  return res.status(500).json({
+    success: false,
+    message,
+  });
 };
 
 // ============================================================
-// PROFIL ORGANIZER
+// FIND ORGANIZER
+// ============================================================
+
+const findOrganizer = async (organizerId) => {
+  const [rows] = await db.query(
+    `
+    SELECT
+      id,
+      fullname,
+      username,
+      email,
+      phone,
+      gender,
+      birth_date,
+      photo,
+      role,
+      created_at,
+      updated_at
+    FROM users
+    WHERE id = ?
+      AND role = 'event_organizer'
+    LIMIT 1
+    `,
+    [organizerId]
+  );
+
+  return rows[0] || null;
+};
+
+// ============================================================
+// GET PROFILE
+// GET /api/organizer/profile
 // ============================================================
 
 const getProfile = async (req, res) => {
   try {
-    const userId = getOrganizerId(req);
+    const organizerId = getOrganizerId(req);
 
-    if (!userId) {
-      return res.status(403).json({
+    if (!organizerId) {
+      return res.status(401).json({
         success: false,
-        message: "Akun bukan event organizer.",
+        message: "User belum terautentikasi.",
       });
     }
 
-    const [rows] = await db.query(
-      `SELECT
-        id,
-        fullname,
-        username,
-        email,
-        phone,
-        address,
-        avatar,
-        created_at,
-        organization_name,
-        verified
-      FROM users
-      WHERE id = ?
-      AND role IN ('organizer', 'event_organizer')
-      LIMIT 1`,
-      [userId]
-    );
+    const organizer = await findOrganizer(organizerId);
 
-    if (!rows.length) {
+    if (!organizer) {
       return res.status(404).json({
         success: false,
-        message: "Organizer tidak ditemukan.",
+        message: "Data event organizer tidak ditemukan.",
       });
     }
 
     return res.status(200).json({
       success: true,
-      organizer: rows[0],
+      message: "Berhasil mengambil profil organizer.",
+      data: {
+        ...organizer,
+        avatar: organizer.photo,
+      },
     });
   } catch (error) {
-    console.error("GET ORGANIZER PROFILE ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal mengambil profil organizer.",
-    });
+    return sendServerError(
+      res,
+      error,
+      "Gagal mengambil profil organizer."
+    );
   }
 };
 
 // ============================================================
-// STATISTIK EVENT
+// UPDATE PROFILE
+// PUT /api/organizer/profile
+// ============================================================
+
+const updateProfile = async (req, res) => {
+  try {
+    const organizerId = getOrganizerId(req);
+
+    if (!organizerId) {
+      return res.status(401).json({
+        success: false,
+        message: "User belum terautentikasi.",
+      });
+    }
+
+    const organizer = await findOrganizer(organizerId);
+
+    if (!organizer) {
+      return res.status(404).json({
+        success: false,
+        message: "Data event organizer tidak ditemukan.",
+      });
+    }
+
+    const {
+      fullname,
+      phone,
+      gender,
+      birth_date,
+      photo,
+      avatar,
+    } = req.body;
+
+    const updatedFullname =
+      fullname !== undefined
+        ? String(fullname).trim()
+        : organizer.fullname;
+
+    const updatedPhone =
+      phone !== undefined
+        ? String(phone).trim()
+        : organizer.phone;
+
+    const updatedGender =
+      gender !== undefined
+        ? gender
+        : organizer.gender;
+
+    const updatedBirthDate =
+      birth_date !== undefined
+        ? birth_date || null
+        : organizer.birth_date;
+
+    const updatedPhoto =
+      photo !== undefined
+        ? photo
+        : avatar !== undefined
+          ? avatar
+          : organizer.photo;
+
+    if (!updatedFullname) {
+      return res.status(400).json({
+        success: false,
+        message: "Nama lengkap wajib diisi.",
+      });
+    }
+
+    if (
+      updatedGender &&
+      !["Laki-laki", "Perempuan"].includes(updatedGender)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Jenis kelamin tidak valid.",
+      });
+    }
+
+    await db.query(
+      `
+      UPDATE users
+      SET
+        fullname = ?,
+        phone = ?,
+        gender = ?,
+        birth_date = ?,
+        photo = ?
+      WHERE id = ?
+        AND role = 'event_organizer'
+      `,
+      [
+        updatedFullname,
+        updatedPhone || null,
+        updatedGender || null,
+        updatedBirthDate,
+        updatedPhoto || null,
+        organizerId,
+      ]
+    );
+
+    const updatedOrganizer = await findOrganizer(organizerId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Profil organizer berhasil diperbarui.",
+      data: {
+        ...updatedOrganizer,
+        avatar: updatedOrganizer.photo,
+      },
+    });
+  } catch (error) {
+    return sendServerError(
+      res,
+      error,
+      "Gagal memperbarui profil organizer."
+    );
+  }
+};
+
+// ============================================================
+// GET EVENT STATS
+// GET /api/organizer/stats
 // ============================================================
 
 const getEventStats = async (req, res) => {
   try {
-    const userId = getOrganizerId(req);
+    const organizerId = getOrganizerId(req);
 
-    if (!userId) {
-      return res.status(403).json({
+    if (!organizerId) {
+      return res.status(401).json({
         success: false,
-        message: "Akun bukan event organizer.",
+        message: "User belum terautentikasi.",
       });
     }
 
-    const [stats] = await db.query(
-      `SELECT
-        COUNT(*) AS totalEvents,
-        SUM(
+    const [columns] = await db.query(
+      "SHOW COLUMNS FROM events LIKE 'organizer_id'"
+    );
+
+    if (columns.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Kolom organizer_id belum tersedia pada tabel events.",
+      });
+    }
+
+    const [eventStats] = await db.query(
+      `
+      SELECT
+        COUNT(DISTINCT e.id) AS total_events,
+        COUNT(DISTINCT CASE
+          WHEN e.event_date >= CURDATE()
+          THEN e.id
+        END) AS upcoming_events,
+        COUNT(DISTINCT CASE
+          WHEN e.event_date < CURDATE()
+          THEN e.id
+        END) AS past_events
+      FROM events e
+      WHERE e.organizer_id = ?
+      `,
+      [organizerId]
+    );
+
+    const [ticketStats] = await db.query(
+      `
+      SELECT
+        COALESCE(SUM(od.quantity), 0) AS total_tickets,
+        COALESCE(SUM(
           CASE
-            WHEN event_date >= CURDATE() THEN 1
+            WHEN o.payment_status = 'Paid'
+            THEN od.quantity
             ELSE 0
           END
-        ) AS upcoming,
-        SUM(
+        ), 0) AS sold_tickets,
+        COALESCE(SUM(
           CASE
-            WHEN event_date < CURDATE() THEN 1
+            WHEN o.payment_status = 'Paid'
+            THEN od.subtotal
             ELSE 0
           END
-        ) AS past
-      FROM events
-      WHERE organizer_id = ?`,
-      [userId]
+        ), 0) AS total_revenue
+      FROM events e
+      INNER JOIN ticket_categories tc
+        ON tc.event_id = e.id
+      INNER JOIN order_details od
+        ON od.ticket_category_id = tc.id
+      INNER JOIN orders o
+        ON o.id = od.order_id
+      WHERE e.organizer_id = ?
+      `,
+      [organizerId]
     );
 
     return res.status(200).json({
       success: true,
-      stats: {
-        totalEvents: Number(stats[0].totalEvents || 0),
-        upcoming: Number(stats[0].upcoming || 0),
-        past: Number(stats[0].past || 0),
-        totalRevenue: 0,
+      message: "Berhasil mengambil statistik organizer.",
+      data: {
+        total_events: Number(eventStats[0]?.total_events || 0),
+        upcoming_events: Number(
+          eventStats[0]?.upcoming_events || 0
+        ),
+        past_events: Number(eventStats[0]?.past_events || 0),
+        total_tickets: Number(
+          ticketStats[0]?.total_tickets || 0
+        ),
+        sold_tickets: Number(
+          ticketStats[0]?.sold_tickets || 0
+        ),
+        total_revenue: Number(
+          ticketStats[0]?.total_revenue || 0
+        ),
       },
     });
   } catch (error) {
-    console.error("GET EVENT STATS ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal mengambil statistik event.",
-    });
+    return sendServerError(
+      res,
+      error,
+      "Gagal mengambil statistik organizer."
+    );
   }
 };
 
 // ============================================================
-// DAFTAR EVENT MILIK ORGANIZER
+// GET MY EVENTS
+// GET /api/organizer/events
+// ============================================================
+
+
+// ============================================================
+// GET MY EVENTS
+// GET /api/organizer/events
 // ============================================================
 
 const getMyEvents = async (req, res) => {
   try {
-    const userId = getOrganizerId(req);
+    const organizerId = getOrganizerId(req);
 
-    if (!userId) {
-      return res.status(403).json({
+    if (!organizerId) {
+      return res.status(401).json({
         success: false,
-        message: "Akun bukan event organizer.",
+        message: "User belum terautentikasi.",
       });
     }
 
-    const [rows] = await db.query(
-      `SELECT
+    const [events] = await db.query(
+      `
+      SELECT
         e.id,
         e.organizer_id,
-        e.category_id,
-        e.artist_id,
-        e.venue_id,
         e.event_name,
         e.description,
         e.poster,
-        e.seat_map_image,
         e.event_date,
         e.event_time,
         e.ticket_sale_start,
         e.ticket_sale_end,
         e.status,
         e.created_at,
+
         c.category_name,
         a.artist_name,
         v.venue_name,
-        v.city
+        v.city,
+
+        COALESCE(ticket.total_quota, 0) AS total_quota,
+        COALESCE(ticket.remaining_ticket, 0) AS remaining_ticket,
+        COALESCE(sales.sold_tickets, 0) AS sold_tickets
+
       FROM events e
-      LEFT JOIN categories c ON e.category_id = c.id
-      LEFT JOIN artists a ON e.artist_id = a.id
-      LEFT JOIN venues v ON e.venue_id = v.id
+
+      LEFT JOIN categories c
+        ON c.id = e.category_id
+
+      LEFT JOIN artists a
+        ON a.id = e.artist_id
+
+      LEFT JOIN venues v
+        ON v.id = e.venue_id
+
+      LEFT JOIN (
+        SELECT
+          event_id,
+          SUM(quota) AS total_quota,
+          SUM(remaining_ticket) AS remaining_ticket
+        FROM ticket_categories
+        GROUP BY event_id
+      ) ticket
+        ON ticket.event_id = e.id
+
+      LEFT JOIN (
+        SELECT
+          tc.event_id,
+          SUM(od.quantity) AS sold_tickets
+        FROM ticket_categories tc
+
+        INNER JOIN order_details od
+          ON od.ticket_category_id = tc.id
+
+        INNER JOIN orders o
+          ON o.id = od.order_id
+          AND o.payment_status = 'Paid'
+
+        GROUP BY tc.event_id
+      ) sales
+        ON sales.event_id = e.id
+
       WHERE e.organizer_id = ?
-      ORDER BY e.created_at DESC`,
-      [userId]
+
+      ORDER BY e.created_at DESC
+      `,
+      [organizerId]
     );
 
     return res.status(200).json({
       success: true,
-      total: rows.length,
-      events: rows,
+      message: "Berhasil mengambil event organizer.",
+      data: events,
     });
-  } catch (error) {
-    console.error("GET MY EVENTS ERROR:", error);
 
-    return res.status(500).json({
-      success: false,
-      message: "Gagal mengambil event organizer.",
-    });
+  } catch (error) {
+    return sendServerError(
+      res,
+      error,
+      "Gagal mengambil daftar event organizer."
+    );
   }
 };
 
+
 // ============================================================
-// DAFTAR PEMESANAN EVENT ORGANIZER
+// GET EVENT BOOKINGS
+// GET /api/organizer/bookings
 // ============================================================
 
 const getEventBookings = async (req, res) => {
   try {
-    const userId = getOrganizerId(req);
+    const organizerId = getOrganizerId(req);
 
-    if (!userId) {
-      return res.status(403).json({
+    if (!organizerId) {
+      return res.status(401).json({
         success: false,
-        message: "Akun bukan event organizer.",
+        message: "User belum terautentikasi.",
       });
     }
 
-    const [rows] = await db.query(
-      `SELECT
-        b.*,
+    const [columns] = await db.query(
+      "SHOW COLUMNS FROM events LIKE 'organizer_id'"
+    );
+
+    if (columns.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Kolom organizer_id belum tersedia pada tabel events.",
+      });
+    }
+
+    const [bookings] = await db.query(
+      `
+      SELECT
+        o.id AS order_id,
+        o.order_code,
+        o.payment_status,
+        o.order_date,
+        o.total_price,
+
+        u.id AS customer_id,
+        u.fullname AS customer_name,
+        u.email AS customer_email,
+        u.phone AS customer_phone,
+
+        e.id AS event_id,
         e.event_name,
-        u.fullname AS customer_name
-      FROM bookings b
-      INNER JOIN events e ON b.event_id = e.id
-      INNER JOIN users u ON b.user_id = u.id
+        e.event_date,
+
+        tc.category_name AS ticket_category,
+        SUM(od.quantity) AS quantity,
+        SUM(od.subtotal) AS subtotal
+
+      FROM orders o
+
+      INNER JOIN users u
+        ON u.id = o.user_id
+
+      INNER JOIN order_details od
+        ON od.order_id = o.id
+
+      INNER JOIN ticket_categories tc
+        ON tc.id = od.ticket_category_id
+
+      INNER JOIN events e
+        ON e.id = tc.event_id
+
       WHERE e.organizer_id = ?
-      ORDER BY b.created_at DESC
-      LIMIT 20`,
-      [userId]
+
+      GROUP BY
+        o.id,
+        o.order_code,
+        o.payment_status,
+        o.order_date,
+        o.total_price,
+        u.id,
+        u.fullname,
+        u.email,
+        u.phone,
+        e.id,
+        e.event_name,
+        e.event_date,
+        tc.id,
+        tc.category_name
+
+      ORDER BY o.order_date DESC
+      `,
+      [organizerId]
     );
 
     return res.status(200).json({
       success: true,
-      total: rows.length,
-      bookings: rows,
+      message: "Berhasil mengambil data pemesanan event.",
+      data: bookings,
     });
   } catch (error) {
-    console.error("GET EVENT BOOKINGS ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal mengambil pemesanan event. Periksa struktur tabel bookings.",
-    });
+    return sendServerError(
+      res,
+      error,
+      "Gagal mengambil data pemesanan event."
+    );
   }
 };
 
+// ============================================================
+// EXPORT
+// ============================================================
+
 module.exports = {
   getProfile,
+  updateProfile,
   getEventStats,
   getMyEvents,
   getEventBookings,

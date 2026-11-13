@@ -1,4 +1,3 @@
-
 const express = require("express");
 const router = express.Router();
 
@@ -7,26 +6,34 @@ const uploadEventPoster = require("../middleware/uploadEventPoster");
 
 const {
   uploadPoster,
+  uploadSeatMap,
 } = require("../controllers/uploadController");
 
-router.post(
-  "/event-poster",
+const handleUpload = (fieldName, controller) => [
   verifyToken,
   (req, res, next) => {
-    uploadEventPoster.single("poster")(req, res, (error) => {
+    uploadEventPoster.single(fieldName)(req, res, (error) => {
       if (error) {
-        console.error("MULTER ERROR:", error);
-
         return res.status(400).json({
           success: false,
-          message: error.message || "Gagal upload poster.",
+          message: error.message || "Gagal upload gambar.",
         });
       }
 
       next();
     });
   },
-  uploadPoster
+  controller,
+];
+
+router.post(
+  "/event-poster",
+  ...handleUpload("poster", uploadPoster)
+);
+
+router.post(
+  "/seat-map",
+  ...handleUpload("seat_map", uploadSeatMap)
 );
 
 module.exports = router;

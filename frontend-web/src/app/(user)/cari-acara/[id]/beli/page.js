@@ -25,6 +25,7 @@ import {
   Tag,
   Users,
   Info,
+  Sparkles,
 } from "lucide-react";
 
 const API_URL = (
@@ -97,7 +98,7 @@ const getSeatStatus = (seat) =>
 const isSeatAvailable = (seat) =>
   ["available", "tersedia", ""].includes(getSeatStatus(seat));
 
-const getSeatLabel = (seat) => `${seat.row_label}-${seat.seat_number}`;
+const getSeatLabel = (seat) => `${seat.row_label || ""}-${seat.seat_number}`;
 
 const extractCategories = (data) => {
   if (Array.isArray(data)) return data;
@@ -116,11 +117,11 @@ function SectionHeader({ icon: Icon, title, subtitle, action }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#112250]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#112250] ring-1 ring-[#DDE4ED]">
           <Icon size={18} />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-slate-900 sm:text-base">
+          <h2 className="text-base font-bold text-slate-900 sm:text-lg">
             {title}
           </h2>
           {subtitle && (
@@ -539,12 +540,22 @@ export default function BeliTiketPage() {
     event?.location ??
     event?.address ??
     "Lokasi belum ditentukan";
+  const eventCity = event?.city || "";
   const eventPoster =
     event?.poster ??
     event?.poster_url ??
     event?.image_url ??
     event?.image ??
     null;
+
+  const posterUrl = eventPoster
+    ? eventPoster.startsWith("http")
+      ? eventPoster
+      : `${API_URL}${eventPoster.startsWith("/") ? "" : "/"}${eventPoster}`
+    : null;
+
+  const mapQuery = encodeURIComponent(`${eventVenue} ${eventCity}`.trim());
+  const mapEmbedUrl = `https://maps.google.com/maps?q=${mapQuery}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
 
   const canContinue =
     !!selectedTicket &&
@@ -603,8 +614,8 @@ export default function BeliTiketPage() {
   }
 
   return (
-    <div className="w-full min-w-0 space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="w-full min-w-0 space-y-6 pb-12">
+      <section className="rounded-2xl border border-[#DDE4ED] bg-white p-5 shadow-[0_4px_20px_rgba(17,34,80,0.03)] sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -656,36 +667,45 @@ export default function BeliTiketPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-6">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            {eventPoster && (
-              <div className="relative h-44 overflow-hidden bg-slate-100 sm:h-56">
-                <img
-                  src={eventPoster}
-                  alt={eventTitle}
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                <div className="absolute bottom-3 left-4">
-                  <span className="rounded-full border border-white/20 bg-white/15 px-3 py-1 text-[10px] font-bold text-white backdrop-blur-md">
-                    Event Terpilih
-                  </span>
-                </div>
-              </div>
-            )}
+          
+          <section className="overflow-hidden rounded-[24px] border border-[#DDE4ED] bg-white shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
             <div className="p-5 sm:p-6">
-              <h2 className="text-lg font-bold text-slate-900">{eventTitle}</h2>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="rounded-full bg-[#EEF3F9] px-2.5 py-1 text-[10px] font-bold text-[#112250]">
+                  Event Terpilih
+                </span>
+              </div>
+              <h2 className="text-2xl font-bold leading-tight text-slate-900 sm:text-3xl">
+                {eventTitle}
+              </h2>
               {event.description && (
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-3 text-sm leading-relaxed text-slate-500">
                   {event.description}
                 </p>
               )}
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+
+              <div className="relative mt-6 aspect-[21/9] w-full overflow-hidden rounded-2xl bg-gradient-to-br from-[#0D1F42] to-[#112250] shadow-inner ring-1 ring-slate-900/10">
+                {posterUrl ? (
+                  <img
+                    src={posterUrl}
+                    alt={eventTitle}
+                    className="h-full w-full object-cover object-center transition duration-700 hover:scale-105"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center text-white/40">
+                    <Ticket size={48} opacity={0.5} />
+                    <span className="mt-2 text-xs">Poster tidak tersedia</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-[#FBFCFE] p-4 transition hover:bg-white hover:shadow-sm">
                   <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#112250]" />
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -696,35 +716,51 @@ export default function BeliTiketPage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                
+                <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-[#FBFCFE] p-4 transition hover:bg-white hover:shadow-sm">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#112250]" />
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       Lokasi
                     </p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                    <p className="mt-1 text-sm font-semibold text-slate-800 line-clamp-2">
                       {eventVenue}
                     </p>
                   </div>
                 </div>
+
                 {eventTime && (
-                  <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 sm:col-span-2">
+                  <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-[#FBFCFE] p-4 sm:col-span-2 transition hover:bg-white hover:shadow-sm">
                     <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[#112250]" />
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         Waktu
                       </p>
                       <p className="mt-1 text-sm font-semibold text-slate-800">
-                        {eventTime}
+                        {eventTime} WIB
                       </p>
                     </div>
                   </div>
                 )}
               </div>
+
+              <div className="mt-4 relative h-48 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm sm:h-56">
+                <iframe
+                  title="Peta Lokasi Acara"
+                  width="100%"
+                  height="100%"
+                  frameBorder="0"
+                  scrolling="no"
+                  marginHeight="0"
+                  marginWidth="0"
+                  src={mapEmbedUrl}
+                  className="absolute inset-0 grayscale opacity-90 transition duration-500 hover:grayscale-0 hover:opacity-100"
+                />
+              </div>
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-5 shadow-[0_8px_30px_rgba(17,34,80,0.05)] sm:p-6">
             <SectionHeader
               icon={Tag}
               title="Pilih Kategori Tiket"
@@ -757,13 +793,13 @@ export default function BeliTiketPage() {
                       onClick={() => handleSelectTicket(ticket)}
                       className={`flex w-full items-center justify-between gap-4 rounded-xl border p-4 text-left transition ${
                         selected
-                          ? "border-[#112250] bg-blue-50/60 ring-1 ring-[#112250]"
+                          ? "border-[#112250] bg-[#F8FAFC] ring-1 ring-[#112250] shadow-sm"
                           : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
                       } ${soldOut ? "cursor-not-allowed opacity-50" : ""}`}
                     >
                       <div className="flex min-w-0 items-start gap-3">
                         <div
-                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
                             selected
                               ? "border-[#112250] bg-[#112250] text-white"
                               : "border-slate-300 bg-white"
@@ -806,14 +842,14 @@ export default function BeliTiketPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-5 shadow-[0_8px_30px_rgba(17,34,80,0.05)] sm:p-6">
             <SectionHeader
               icon={Users}
               title="Jumlah Tiket"
               subtitle={`Maksimal ${MAX_QUANTITY} tiket dalam satu pesanan.`}
             />
 
-            <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-slate-100 bg-[#FBFCFE] p-4">
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-slate-900">
                   {selectedTicket
@@ -830,7 +866,7 @@ export default function BeliTiketPage() {
                   aria-label="Kurangi jumlah"
                   disabled={!selectedTicket || quantity <= 1 || creatingOrder}
                   onClick={() => handleQuantityChange(quantity - 1)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 disabled:opacity-40"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-40"
                 >
                   <Minus size={16} />
                 </button>
@@ -846,7 +882,7 @@ export default function BeliTiketPage() {
                     creatingOrder
                   }
                   onClick={() => handleQuantityChange(quantity + 1)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100 disabled:opacity-40"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-40"
                 >
                   <Plus size={16} />
                 </button>
@@ -855,7 +891,7 @@ export default function BeliTiketPage() {
           </section>
 
           {requiresSeatSelection && (
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <section className="overflow-hidden rounded-[24px] border border-[#DDE4ED] bg-white shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
               <div className="p-5 sm:p-6">
                 <SectionHeader
                   icon={Armchair}
@@ -878,25 +914,18 @@ export default function BeliTiketPage() {
                 />
 
                 <div className="mt-5 flex flex-wrap gap-3">
-                  <div className="flex items-center gap-2 text-xs text-slate-600">
-                    <span className="h-3.5 w-3.5 rounded bg-emerald-100 ring-1 ring-emerald-300" />
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                    <span className="h-3 w-3 rounded-full border-2 border-emerald-500 bg-emerald-100 shadow-sm" />
                     Tersedia
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-600">
-                    <span className="h-3.5 w-3.5 rounded bg-[#112250]" />
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                    <span className="h-3 w-3 rounded-full border-2 border-[#112250] bg-[#112250] shadow-sm" />
                     Pilihanmu
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-600">
-                    <span className="h-3.5 w-3.5 rounded bg-slate-300" />
-                    Tidak tersedia
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                    <span className="h-3 w-3 rounded-full border-2 border-slate-300 bg-slate-200 shadow-sm" />
+                    Terisi
                   </div>
-                </div>
-
-                <div className="mt-5 rounded-xl border border-blue-100 bg-gradient-to-b from-blue-50 to-white p-3 text-center">
-                  <div className="mx-auto mb-1.5 h-1 w-3/4 rounded-full bg-[#112250]" />
-                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">
-                    Panggung
-                  </p>
                 </div>
 
                 {categorySections.length === 0 ? (
@@ -911,16 +940,19 @@ export default function BeliTiketPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="mt-6 space-y-6">
+                  <div className="mt-6 space-y-8">
                     {categorySections.map((section) => {
                       const seats = section.seats || [];
                       
-                      // ==========================================
-                      // PERBAIKAN: KALKULASI BATAS MAKSIMAL KURSI
-                      // ==========================================
+                      // Ambil semua posisi Y unik untuk menentukan baris (Row A, B, C...)
+                      const uniqueY = [...new Set(seats.map(s => Number(s.position_y) || 0))].sort((a, b) => a - b);
+                      const getRowLabel = (y) => {
+                        const idx = uniqueY.indexOf(Number(y));
+                        return idx >= 0 ? String.fromCharCode(65 + idx) : "";
+                      };
+
                       let maxX = 10;
                       let maxY = 10;
-                      
                       seats.forEach(seat => {
                         const x = Number(seat.position_x) || 0;
                         const y = Number(seat.position_y) || 0;
@@ -928,94 +960,109 @@ export default function BeliTiketPage() {
                         if (y > maxY) maxY = y;
                       });
 
-                      // Beri jarak (padding) ekstra 10% di kanan dan bawah
-                      // agar kursi tidak nempel ke pinggir
-                      const paddedMaxX = maxX + (maxX * 0.15);
+                      const paddedMaxX = maxX + (maxX * 0.25); // Padding kiri-kanan untuk label baris
                       const paddedMaxY = maxY + (maxY * 0.15);
 
                       return (
                         <div
                           key={section.id}
-                          className="rounded-xl border border-slate-200 p-4"
+                          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
                         >
-                          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-[#F8FAFC] px-4 py-3">
                             <div>
                               <h3 className="text-sm font-bold text-slate-900">
                                 {section.section_name}
                               </h3>
-                              <p className="mt-0.5 text-xs text-slate-500">
+                              <p className="mt-0.5 text-[11px] text-slate-500">
                                 Section {section.section_code}
                               </p>
                             </div>
-                            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-[#112250]">
+                            <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold text-[#112250] ring-1 ring-slate-200 shadow-sm">
                               {seats.filter(isSeatAvailable).length} tersedia
                             </span>
                           </div>
 
                           {seats.length === 0 ? (
-                            <p className="py-5 text-center text-xs text-slate-400">
+                            <p className="py-8 text-center text-xs text-slate-400 italic">
                               Belum ada kursi pada section ini.
                             </p>
                           ) : (
-                            <div className="overflow-x-auto pb-2">
-                              {/* 
-                                Container sekarang menggunakan position relative,
-                                dan ukurannya menyesuaikan proporsi X dan Y dari database.
-                                min-w digunakan agar di HP tetap bisa di-scroll 
-                              */}
-                              <div
-                                className="relative mx-auto min-w-[400px] rounded-xl bg-slate-50 p-8"
-                                style={{
-                                  aspectRatio: `${paddedMaxX} / ${paddedMaxY}`,
-                                }}
-                              >
-                                {seats.map((seat) => {
-                                  const seatId = Number(seat.id);
-                                  const selected =
-                                    selectedSeatIds.includes(seatId);
-                                  const available = isSeatAvailable(seat);
-                                  const disabled =
-                                    !available ||
-                                    (!selected &&
-                                      selectedSeatIds.length >= quantity);
-                                      
-                                  // Konversi posisi ke persentase (0-100%)
-                                  const leftPos = (Number(seat.position_x) || 0) / paddedMaxX * 100;
-                                  const topPos = (Number(seat.position_y) || 0) / paddedMaxY * 100;
-                                      
-                                  return (
-                                    <button
-                                      key={seat.id}
-                                      type="button"
-                                      aria-label={`Kursi ${getSeatLabel(seat)}`}
-                                      aria-pressed={selected}
-                                      title={`${getSeatLabel(seat)} - ${
-                                        selected
-                                          ? "Pilihanmu"
-                                          : available
-                                            ? "Tersedia"
-                                            : "Tidak tersedia"
-                                      }`}
-                                      disabled={disabled && !selected}
-                                      onClick={() => handleToggleSeat(seat)}
-                                      style={{
-                                        position: "absolute",
-                                        left: `${leftPos}%`,
-                                        top: `${topPos}%`,
-                                        transform: "translate(-50%, -50%)",
-                                      }}
-                                      className={`flex h-8 min-w-8 items-center justify-center rounded-md px-1 text-[10px] font-extrabold shadow-sm transition sm:h-9 sm:min-w-9 sm:text-[11px] ${
-                                        selected
-                                          ? "z-10 scale-110 bg-[#112250] text-white ring-2 ring-blue-200"
-                                          : available
-                                            ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 hover:bg-emerald-200 hover:scale-105"
-                                            : "cursor-not-allowed bg-slate-300 text-slate-500"
-                                      }`}
-                                    >
-                                      {seat.seat_number}
-                                    </button>
-                                  );
-                                })}
+                            <div className="overflow-x-auto p-4 sm:p-6">
+                              <div className="min-w-[500px]">
+                                {/* STAGE MELENGKUNG */}
+                                <div className="relative mx-auto mb-10 w-3/4 max-w-md">
+                                  <div className="flex h-8 w-full items-center justify-center rounded-b-[50%] bg-gradient-to-b from-[#112250] to-[#0D1F42] shadow-[0_15px_30px_-5px_rgba(17,34,80,0.4)]">
+                                  </div>
+                                  <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold tracking-[0.4em] text-[#112250]/60 uppercase">
+                                    Panggung
+                                  </div>
+                                </div>
+
+                                {/* AREA KURSI DENGAN DOT PATTERN */}
+                                <div
+                                  className="relative mx-auto rounded-xl bg-slate-50/50 p-6 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px]"
+                                  style={{
+                                    aspectRatio: `${paddedMaxX} / ${paddedMaxY}`,
+                                  }}
+                                >
+                                  {seats.map((seat) => {
+                                    const seatId = Number(seat.id);
+                                    const selected = selectedSeatIds.includes(seatId);
+                                    const available = isSeatAvailable(seat);
+                                    const disabled = !available || (!selected && selectedSeatIds.length >= quantity);
+                                        
+                                    const leftPos = ((Number(seat.position_x) || 0) / paddedMaxX * 100) + 10; // Geser sedikit untuk label
+                                    const topPos = ((Number(seat.position_y) || 0) / paddedMaxY * 100);
+                                    const rowLabel = getRowLabel(seat.position_y);
+
+                                    // Tampilkan label baris hanya pada ujung kiri baris tersebut
+                                    const isFirstInRow = seats.find(s => 
+                                      Number(s.position_y) === Number(seat.position_y) && 
+                                      Number(s.position_x) === Math.min(...seats.filter(s2 => Number(s2.position_y) === Number(seat.position_y)).map(s2 => Number(s2.position_x)))
+                                    )?.id === seat.id;
+
+                                    return (
+                                      <div key={seat.id}>
+                                        {isFirstInRow && (
+                                          <span 
+                                            className="absolute text-[11px] font-bold text-slate-400 -translate-y-1/2"
+                                            style={{ 
+                                              left: `${leftPos - 12}%`, 
+                                              top: `${topPos}%` 
+                                            }}
+                                          >
+                                            {rowLabel}
+                                          </span>
+                                        )}
+                                        <button
+                                          type="button"
+                                          aria-label={`Kursi ${rowLabel}-${seat.seat_number}`}
+                                          aria-pressed={selected}
+                                          title={`${rowLabel}-${seat.seat_number} - ${
+                                            selected ? "Pilihanmu" : available ? "Tersedia" : "Sudah dipesan"
+                                          }`}
+                                          disabled={disabled && !selected}
+                                          onClick={() => handleToggleSeat(seat)}
+                                          style={{
+                                            position: "absolute",
+                                            left: `${leftPos}%`,
+                                            top: `${topPos}%`,
+                                            transform: "translate(-50%, -50%)",
+                                          }}
+                                          className={`flex h-8 min-w-8 items-center justify-center rounded-t-lg rounded-b-sm border-2 px-1 text-[10px] font-extrabold shadow-sm transition-all duration-200 sm:h-9 sm:min-w-9 sm:text-[11px] ${
+                                            selected
+                                              ? "z-10 scale-110 border-[#112250] bg-[#112250] text-white ring-2 ring-[#112250]/30 shadow-md"
+                                              : available
+                                                ? "border-emerald-400 bg-emerald-50 text-emerald-800 hover:-translate-y-1 hover:border-emerald-500 hover:bg-emerald-100 hover:shadow-md"
+                                                : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-70"
+                                          }`}
+                                        >
+                                          {seat.seat_number}
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             </div>
                           )}
@@ -1025,52 +1072,53 @@ export default function BeliTiketPage() {
                   </div>
                 )}
 
-                <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-bold text-[#112250]">
+                <div className="mt-6 rounded-2xl border border-[#DDE4ED] bg-[#F8FAFC] p-5 shadow-inner">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                    <div className="flex items-center gap-2">
+                      <Armchair size={18} className="text-[#112250]" />
+                      <p className="text-sm font-bold text-[#112250]">
                         Kursi Dipilih
-                      </p>
-                      <p className="mt-0.5 text-sm font-semibold text-slate-800">
-                        {selectedSeatIds.length} dari {quantity} kursi
                       </p>
                     </div>
                     <span
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                      className={`rounded-lg px-3 py-1 text-xs font-bold shadow-sm ${
                         seatSelectionValid
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-amber-100 text-amber-700"
+                          ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                          : "bg-amber-100 text-amber-700 border border-amber-200"
                       }`}
                     >
-                      {seatSelectionValid ? "Lengkap" : "Belum lengkap"}
+                      {selectedSeatIds.length} / {quantity} Kursi
                     </span>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     {selectedSeats.length > 0 ? (
                       selectedSeats.map((seat) => (
                         <span
                           key={seat.id}
-                          className="rounded-md border border-blue-200 bg-white px-2 py-1 text-[11px] font-bold text-[#112250]"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#DDE4ED] bg-white px-2.5 py-1.5 text-xs font-bold text-[#112250] shadow-sm"
                         >
-                          {seat.section_code} / {getSeatLabel(seat)}
+                          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#112250] text-[8px] text-white">
+                            {seat.section_code}
+                          </span>
+                          {seat.row_label}-{seat.seat_number}
                         </span>
                       ))
                     ) : (
-                      <p className="text-xs text-slate-400">
-                        Belum ada kursi yang dipilih.
+                      <p className="text-xs text-slate-500 italic">
+                        Belum ada kursi yang dipilih. Silakan klik kursi berwarna hijau pada denah di atas.
                       </p>
                     )}
                   </div>
-                  <p className="mt-3 text-[11px] leading-5 text-slate-500">
-                    Kursi dikunci oleh backend selama 10 menit setelah pesanan
-                    berhasil dibuat.
+                  <p className="mt-4 text-[11px] leading-5 text-slate-500 flex items-start gap-1.5">
+                    <ShieldCheck size={14} className="shrink-0 text-slate-400" />
+                    Kursi akan dikunci oleh sistem selama 10 menit setelah pesanan berhasil dibuat.
                   </p>
                 </div>
               </div>
             </section>
           )}
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-5 shadow-[0_8px_30px_rgba(17,34,80,0.05)] sm:p-6">
             <SectionHeader
               icon={CreditCard}
               title="Preferensi Pembayaran"
@@ -1088,12 +1136,12 @@ export default function BeliTiketPage() {
                     onClick={() => setPreferredPaymentMethod(method.value)}
                     className={`flex items-center gap-3 rounded-xl border p-3.5 text-left transition ${
                       active
-                        ? "border-[#112250] bg-blue-50 ring-1 ring-[#112250]"
+                        ? "border-[#112250] bg-[#F8FAFC] ring-1 ring-[#112250]"
                         : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
                     <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
                         active
                           ? "bg-[#112250] text-white"
                           : "bg-slate-100 text-slate-500"
@@ -1114,7 +1162,7 @@ export default function BeliTiketPage() {
             </p>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-5 shadow-[0_8px_30px_rgba(17,34,80,0.05)] sm:p-6">
             <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
@@ -1136,43 +1184,47 @@ export default function BeliTiketPage() {
         </div>
 
         <aside className="h-fit lg:sticky lg:top-24">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 bg-slate-50/70 p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#112250] text-white">
-                  <ShoppingBag size={17} />
+          <section className="relative overflow-hidden rounded-[28px] border border-[#DDE4ED] bg-white shadow-[0_24px_80px_-15px_rgba(17,34,80,0.15)]">
+            <div className="absolute top-0 right-0 h-40 w-40 translate-x-1/3 -translate-y-1/3 rounded-full bg-gradient-to-br from-[#EEF3F9] to-transparent blur-2xl" />
+            
+            <div className="relative border-b border-slate-100 bg-white/80 p-6 backdrop-blur-md">
+              <div className="flex items-center gap-4">
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#112250] to-[#1A326A] text-white shadow-lg shadow-[#112250]/30">
+                  <ShoppingBag size={22} />
+                  <Sparkles size={12} className="absolute -top-1 -right-1 text-amber-400" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900">
+                  <h2 className="text-lg font-black tracking-tight text-[#112250]">
                     Ringkasan Pesanan
                   </h2>
-                  <p className="mt-0.5 text-[11px] text-slate-500">
-                    Periksa sebelum melanjutkan.
+                  <p className="mt-0.5 text-xs font-medium text-slate-500">
+                    Konfirmasi detail sebelum lanjut.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="p-5">
-              <div className="border-b border-slate-100 pb-4">
-                <p className="text-sm font-bold leading-6 text-slate-900">
+            <div className="relative p-6">
+              <div className="border-b border-dashed border-slate-200 pb-5">
+                <p className="text-base font-bold leading-snug text-slate-900">
                   {eventTitle}
                 </p>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[#EEF3F9] px-2.5 py-1 text-xs font-bold text-[#112250]">
+                  <Ticket size={12} />
                   {selectedTicket
                     ? getCategoryName(selectedTicket)
                     : "Kategori belum dipilih"}
-                </p>
+                </div>
                 {requiresSeatSelection && (
-                  <p className="mt-2 text-xs font-semibold text-[#112250]">
-                    {selectedSeatIds.length} kursi dipilih
+                  <p className="mt-2.5 text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                    <AlertCircle size={13} /> {selectedSeatIds.length} kursi dipilih
                   </p>
                 )}
               </div>
 
               {requiresSeatSelection && (
-                <div className="mt-4 border-b border-slate-100 pb-4">
-                  <p className="mb-2 text-xs font-bold text-slate-600">
+                <div className="mt-4 border-b border-dashed border-slate-200 pb-5">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                     Detail Kursi
                   </p>
                   {selectedSeats.length > 0 ? (
@@ -1180,21 +1232,21 @@ export default function BeliTiketPage() {
                       {selectedSeats.map((seat) => (
                         <span
                           key={seat.id}
-                          className="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-bold text-[#112250]"
+                          className="rounded-lg border border-[#DDE4ED] bg-[#F8FAFC] px-2.5 py-1.5 text-[11px] font-bold text-[#112250] shadow-sm"
                         >
-                          {seat.section_code} - {getSeatLabel(seat)}
+                          {seat.section_code} - {seat.row_label}-{seat.seat_number}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-400 italic">
                       Belum memilih kursi.
                     </p>
                   )}
                 </div>
               )}
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-5 space-y-3.5">
                 <div className="flex justify-between gap-3 text-sm">
                   <span className="text-slate-500">Harga tiket</span>
                   <span className="font-semibold text-slate-900">
@@ -1221,34 +1273,34 @@ export default function BeliTiketPage() {
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                <span className="text-sm font-bold text-slate-900">
+              <div className="mt-5 flex flex-col items-center justify-between gap-1 rounded-2xl bg-gradient-to-r from-[#0D1F42] to-[#112250] p-4 text-white shadow-inner sm:flex-row">
+                <span className="text-xs font-semibold text-blue-200 uppercase tracking-widest">
                   Total Pembayaran
                 </span>
-                <span className="text-lg font-black text-[#112250]">
+                <span className="text-2xl font-black text-white">
                   {formatRupiah(total)}
                 </span>
               </div>
 
-              <div className="mt-4 rounded-xl bg-slate-50 p-3">
+              <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
                 <div className="flex items-start gap-2">
                   <ShieldCheck
-                    size={15}
+                    size={16}
                     className="mt-0.5 shrink-0 text-emerald-600"
                   />
-                  <p className="text-[11px] font-medium leading-5 text-slate-500">
+                  <p className="text-[11px] font-medium leading-5 text-emerald-800">
                     Pembayaran via Midtrans. Validasi stok & reservasi kursi
-                    dilakukan backend.
+                    dilakukan backend secara aman.
                   </p>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-2.5">
+              <div className="mt-6 space-y-3">
                 <button
                   type="button"
                   onClick={handleContinue}
                   disabled={!canContinue}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#112250] px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#1A326A] disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-[#112250] px-5 py-4 text-sm font-bold text-white shadow-[0_8px_20px_rgba(17,34,80,0.25)] transition hover:bg-[#1A326A] hover:shadow-[0_12px_28px_rgba(17,34,80,0.35)] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                 >
                   {creatingOrder ? (
                     <>
@@ -1257,31 +1309,35 @@ export default function BeliTiketPage() {
                     </>
                   ) : (
                     <>
-                      Lanjut ke Pembayaran
-                      <ChevronRight size={16} />
+                      <span className="relative z-10 flex items-center gap-2">
+                        Lanjut ke Pembayaran
+                        <ChevronRight size={16} className="transition group-hover:translate-x-0.5" />
+                      </span>
+                      <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                     </>
                   )}
                 </button>
 
                 {!canContinue && disabledReason && (
-                  <p className="text-center text-[11px] font-medium text-amber-600">
+                  <div className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-50 p-2.5 border border-amber-100 text-center text-[11px] font-medium text-amber-700">
+                    <AlertCircle size={13} />
                     {disabledReason}
-                  </p>
+                  </div>
                 )}
 
                 <button
                   type="button"
                   disabled={creatingOrder}
                   onClick={() => router.back()}
-                  className="w-full rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
                 >
                   Batal
                 </button>
               </div>
 
-              <p className="mt-3 text-center text-[10px] leading-5 text-slate-400">
+              <p className="mt-4 text-center text-[10px] leading-5 text-slate-400">
                 Dengan melanjutkan, pesanan dibuat dan stok tiket diperbarui
-                oleh backend.
+                oleh sistem TicketVerse.
               </p>
             </div>
           </section>

@@ -1,4 +1,28 @@
+
+const crypto = require("crypto");
 const db = require("../config/db");
+
+// ============================================================
+// HELPER
+// ============================================================
+
+const getUserId = (req) => Number(req.user?.id);
+
+const sendServerError = (res, error, message) => {
+  console.error(message, error);
+
+  return res.status(500).json({
+    success: false,
+    message,
+  });
+};
+
+const getQrFingerprint = (qrCode) => {
+  return crypto
+    .createHash("sha256")
+    .update(qrCode)
+    .digest("hex");
+};
 
 // ============================================================
 // GET SEMUA TIKET MILIK USER
@@ -6,7 +30,7 @@ const db = require("../config/db");
 
 const getAllTickets = async (req, res) => {
   try {
-    const userId = req.user?.id;
+    const userId = getUserId(req);
 
     if (!userId) {
       return res.status(401).json({
@@ -25,9 +49,11 @@ const getAllTickets = async (req, res) => {
         t.check_in,
         t.created_at,
         t.seat_id,
+
         es.section_id,
         es.row_label AS seat_row,
         es.seat_number,
+
         sec.section_code,
         sec.section_name,
 
@@ -44,7 +70,7 @@ const getAllTickets = async (req, res) => {
 
         e.id AS event_id,
         e.event_name,
-        e.poster AS poster,
+        e.poster,
         e.event_date,
         e.event_time,
 
@@ -67,8 +93,11 @@ const getAllTickets = async (req, res) => {
       JOIN events e
         ON tc.event_id = e.id
 
-      LEFT JOIN event_seats es ON es.id = t.seat_id
-      LEFT JOIN event_sections sec ON sec.id = es.section_id
+      LEFT JOIN event_seats es
+        ON es.id = t.seat_id
+
+      LEFT JOIN event_sections sec
+        ON sec.id = es.section_id
 
       LEFT JOIN artists a
         ON e.artist_id = a.id
@@ -83,19 +112,17 @@ const getAllTickets = async (req, res) => {
       [userId]
     );
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       total: rows.length,
       tickets: rows,
     });
   } catch (error) {
-    console.error("GET TICKETS ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal mengambil data tiket.",
-      error: error.message,
-    });
+    return sendServerError(
+      res,
+      error,
+      "Gagal mengambil data tiket."
+    );
   }
 };
 
@@ -103,16 +130,22 @@ const getAllTickets = async (req, res) => {
 // GET TIKET BERDASARKAN ID
 // ============================================================
 
-
 const getTicketById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const userId = req.user?.id;
+    const userId = getUserId(req);
+    const ticketId = Number(req.params.id);
 
     if (!userId) {
       return res.status(401).json({
         success: false,
         message: "Silakan login terlebih dahulu.",
+      });
+    }
+
+    if (!Number.isInteger(ticketId) || ticketId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ID tiket tidak valid.",
       });
     }
 
@@ -167,11 +200,14 @@ const getTicketById = async (req, res) => {
         v.city,
 
         -- DATA KURSI
-        es.id AS section_id,
-        es.section_name,
-        es.seat_mode,
-        s.row_label,
-        s.seat_number
+        es.id AS seat_id,
+        es.row_label,
+        es.seat_number,
+
+        sec.id AS section_id,
+        sec.section_code,
+        sec.section_name,
+        sec.seat_mode
 
       FROM tickets t
 
@@ -196,18 +232,18 @@ const getTicketById = async (req, res) => {
       LEFT JOIN venues v
         ON e.venue_id = v.id
 
-      LEFT JOIN event_seats s
-        ON t.seat_id = s.id
+      LEFT JOIN event_seats es
+        ON t.seat_id = es.id
 
-      LEFT JOIN event_sections es
-        ON s.section_id = es.id
+      LEFT JOIN event_sections sec
+        ON es.section_id = sec.id
 
       WHERE t.id = ?
         AND o.user_id = ?
 
       LIMIT 1
       `,
-      [id, userId]
+      [ticketId, userId]
     );
 
     if (!rows.length) {
@@ -223,283 +259,11 @@ const getTicketById = async (req, res) => {
       ticket: rows[0],
     });
   } catch (error) {
-    console.error("GET TICKET BY ID ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal mengambil detail tiket.",
-      error: error.message,
-    });
-  }
-};
-
-
-// ============================================================
-// CREATE TICKET MANUAL
-// ============================================================
-
-const createTicket = async (req, res) => {
-  try {
-    const {
-      order_detail_id,
-      qr_code,
-      ticket_code,
-      check_in,
-    } = req.body;
-
-    if (!order_detail_id || !qr_code || !ticket_code) {
-      return res.status(400).json({
-        success: false,
-        message: "order_detail_id, qr_code, dan ticket_code wajib diisi.",
-      });
-    }
-
-    const [orderDetails] = await db.query(
-      `
-      SELECT
-        od.id,
-        od.quantity,
-        od.ticket_category_id,
-        o.payment_status
-      FROM order_details od
-      JOIN orders o ON od.order_id = o.id
-      WHERE od.id = ?
-      `,
-      [order_detail_id]
+    return sendServerError(
+      res,
+      error,
+      "Gagal mengambil detail tiket."
     );
-
-    if (!orderDetails.length) {
-      return res.status(404).json({
-        success: false,
-        message: "Order detail tidak ditemukan.",
-      });
-    }
-
-    const orderDetail = orderDetails[0];
-
-    const [numberedSections] = await db.query(
-      `SELECT id FROM event_sections
-       WHERE ticket_category_id = ? AND seat_mode = 'NUMBERED'
-       LIMIT 1`,
-      [orderDetail.ticket_category_id]
-    );
-    if (numberedSections.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Tiket kategori bernomor diterbitkan otomatis berdasarkan kursi pesanan."
-      });
-    }
-
-    if (orderDetail.payment_status !== "Paid") {
-      return res.status(400).json({
-        success: false,
-        message: "Tiket hanya dapat dibuat setelah pembayaran berhasil.",
-      });
-    }
-
-    const [existingTicket] = await db.query(
-      `
-      SELECT id
-      FROM tickets
-      WHERE ticket_code = ? OR qr_code = ?
-      LIMIT 1
-      `,
-      [ticket_code, qr_code]
-    );
-
-    if (existingTicket.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Kode tiket atau QR Code sudah digunakan.",
-      });
-    }
-
-    const [ticketCount] = await db.query(
-      `
-      SELECT COUNT(*) AS total
-      FROM tickets
-      WHERE order_detail_id = ?
-      `,
-      [order_detail_id]
-    );
-
-    if (Number(ticketCount[0].total) >= Number(orderDetail.quantity)) {
-      return res.status(400).json({
-        success: false,
-        message: "Jumlah tiket sudah mencapai quantity pesanan.",
-      });
-    }
-
-    const finalCheckIn =
-      check_in === "Sudah" ? "Sudah" : "Belum";
-
-    const [result] = await db.query(
-      `
-      INSERT INTO tickets
-      (order_detail_id, qr_code, ticket_code, check_in)
-      VALUES (?, ?, ?, ?)
-      `,
-      [
-        order_detail_id,
-        qr_code,
-        ticket_code,
-        finalCheckIn,
-      ]
-    );
-
-    const [newTicket] = await db.query(
-      `
-      SELECT *
-      FROM tickets
-      WHERE id = ?
-      `,
-      [result.insertId]
-    );
-
-    return res.status(201).json({
-      success: true,
-      message: "Tiket berhasil dibuat.",
-      ticket: newTicket[0],
-    });
-  } catch (error) {
-    console.error("CREATE TICKET ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal membuat tiket.",
-      error: error.message,
-    });
-  }
-};
-
-// ============================================================
-// UPDATE TICKET
-// ============================================================
-
-const updateTicket = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const {
-      qr_code,
-      ticket_code,
-      check_in,
-    } = req.body;
-
-    const [tickets] = await db.query(
-      `SELECT id FROM tickets WHERE id = ?`,
-      [id]
-    );
-
-    if (!tickets.length) {
-      return res.status(404).json({
-        success: false,
-        message: "Tiket tidak ditemukan.",
-      });
-    }
-
-    if (!qr_code || !ticket_code) {
-      return res.status(400).json({
-        success: false,
-        message: "qr_code dan ticket_code wajib diisi.",
-      });
-    }
-
-    if (!["Belum", "Sudah"].includes(check_in)) {
-      return res.status(400).json({
-        success: false,
-        message: "check_in harus Belum atau Sudah.",
-      });
-    }
-
-    const [existingTicket] = await db.query(
-      `
-      SELECT id
-      FROM tickets
-      WHERE (ticket_code = ? OR qr_code = ?)
-        AND id != ?
-      LIMIT 1
-      `,
-      [ticket_code, qr_code, id]
-    );
-
-    if (existingTicket.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Kode tiket atau QR Code sudah digunakan.",
-      });
-    }
-
-    await db.query(
-      `
-      UPDATE tickets
-      SET
-        qr_code = ?,
-        ticket_code = ?,
-        check_in = ?
-      WHERE id = ?
-      `,
-      [qr_code, ticket_code, check_in, id]
-    );
-
-    const [updatedTicket] = await db.query(
-      `SELECT * FROM tickets WHERE id = ?`,
-      [id]
-    );
-
-    return res.json({
-      success: true,
-      message: "Tiket berhasil diperbarui.",
-      ticket: updatedTicket[0],
-    });
-  } catch (error) {
-    console.error("UPDATE TICKET ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal memperbarui tiket.",
-      error: error.message,
-    });
-  }
-};
-
-// ============================================================
-// DELETE TICKET
-// ============================================================
-
-const deleteTicket = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const [tickets] = await db.query(
-      `SELECT id FROM tickets WHERE id = ?`,
-      [id]
-    );
-
-    if (!tickets.length) {
-      return res.status(404).json({
-        success: false,
-        message: "Tiket tidak ditemukan.",
-      });
-    }
-
-    await db.query(
-      `DELETE FROM tickets WHERE id = ?`,
-      [id]
-    );
-
-    return res.json({
-      success: true,
-      message: "Tiket berhasil dihapus.",
-    });
-  } catch (error) {
-    console.error("DELETE TICKET ERROR:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Gagal menghapus tiket.",
-      error: error.message,
-    });
   }
 };
 
@@ -508,38 +272,65 @@ const deleteTicket = async (req, res) => {
 // ============================================================
 
 const checkInTicket = async (req, res) => {
+  const userId = getUserId(req);
+  const role = req.user?.role;
+
+  // ----------------------------------------------------------
+  // VALIDASI ROLE
+  // ----------------------------------------------------------
+
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      message: "Silakan login terlebih dahulu.",
+    });
+  }
+
+  if (!["event_organizer", "super_admin"].includes(role)) {
+    return res.status(403).json({
+      success: false,
+      message: "Anda tidak memiliki akses untuk melakukan check-in.",
+    });
+  }
+
+  // ----------------------------------------------------------
+  // VALIDASI QR CODE
+  // ----------------------------------------------------------
+
+  const qrCode = String(req.body?.qr_code || "").trim();
+
+  if (!qrCode || qrCode.length !== 64) {
+    return res.status(400).json({
+      success: false,
+      message: "QR Code tidak valid.",
+    });
+  }
+
+  const fingerprint = getQrFingerprint(qrCode);
+
+  let connection;
+
   try {
-    const { qr_code, ticket_code } = req.body;
+    connection = await db.getConnection();
 
-    const identifier = qr_code || ticket_code;
+    await connection.beginTransaction();
 
-    if (!identifier) {
-      return res.status(400).json({
-        success: false,
-        message: "QR Code atau ticket code wajib diisi.",
-      });
-    }
+    // --------------------------------------------------------
+    // CARI TIKET DAN KUNCI ROW
+    // --------------------------------------------------------
 
-    const [tickets] = await db.query(
+    const [tickets] = await connection.query(
       `
       SELECT
         t.id,
         t.order_detail_id,
-        t.qr_code,
         t.ticket_code,
         t.check_in,
         t.created_at,
         t.seat_id,
-        es.section_id,
-        es.row_label AS seat_row,
-        es.seat_number,
-        sec.section_code,
-        sec.section_name,
 
         od.order_id,
         od.ticket_category_id,
-        od.quantity,
-        od.subtotal,
 
         o.order_code,
         o.user_id,
@@ -553,29 +344,69 @@ const checkInTicket = async (req, res) => {
 
         e.id AS event_id,
         e.event_name,
-        e.poster AS poster,
+        e.poster,
         e.event_date,
-        e.event_time
+        e.event_time,
+        e.organizer_id,
+
+        es.row_label AS seat_row,
+        es.seat_number,
+
+        sec.section_code,
+        sec.section_name
 
       FROM tickets t
 
-      JOIN order_details od ON t.order_detail_id = od.id
-      JOIN orders o ON od.order_id = o.id
-      JOIN users u ON o.user_id = u.id
-      JOIN ticket_categories tc ON od.ticket_category_id = tc.id
-      JOIN events e ON tc.event_id = e.id
-      LEFT JOIN event_seats es ON es.id = t.seat_id
-      LEFT JOIN event_sections sec ON sec.id = es.section_id
+      INNER JOIN order_details od
+        ON t.order_detail_id = od.id
+
+      INNER JOIN orders o
+        ON od.order_id = o.id
+
+      INNER JOIN users u
+        ON o.user_id = u.id
+
+      INNER JOIN ticket_categories tc
+        ON od.ticket_category_id = tc.id
+
+      INNER JOIN events e
+        ON tc.event_id = e.id
+
+      LEFT JOIN event_seats es
+        ON es.id = t.seat_id
+
+      LEFT JOIN event_sections sec
+        ON sec.id = es.section_id
 
       WHERE t.qr_code = ?
-         OR t.ticket_code = ?
 
       LIMIT 1
+      FOR UPDATE
       `,
-      [identifier, identifier]
+      [qrCode]
     );
 
+    // --------------------------------------------------------
+    // QR TIDAK DITEMUKAN
+    // --------------------------------------------------------
+
     if (!tickets.length) {
+      await connection.query(
+        `
+        INSERT INTO ticket_checkins (
+          ticket_id,
+          event_id,
+          scanned_by,
+          qr_fingerprint,
+          result
+        )
+        VALUES (NULL, NULL, ?, ?, 'INVALID')
+        `,
+        [userId, fingerprint]
+      );
+
+      await connection.commit();
+
       return res.status(404).json({
         success: false,
         message: "Tiket tidak ditemukan atau QR Code tidak valid.",
@@ -584,23 +415,110 @@ const checkInTicket = async (req, res) => {
 
     const ticket = tickets[0];
 
+    // --------------------------------------------------------
+    // VALIDASI KEPEMILIKAN EVENT
+    // --------------------------------------------------------
+
+    if (
+      role === "event_organizer" &&
+      Number(ticket.organizer_id) !== userId
+    ) {
+      await connection.query(
+        `
+        INSERT INTO ticket_checkins (
+          ticket_id,
+          event_id,
+          scanned_by,
+          qr_fingerprint,
+          result
+        )
+        VALUES (?, ?, ?, ?, 'FORBIDDEN')
+        `,
+        [
+          ticket.id,
+          ticket.event_id,
+          userId,
+          fingerprint,
+        ]
+      );
+
+      await connection.commit();
+
+      return res.status(403).json({
+        success: false,
+        message: "Anda tidak memiliki akses ke event ini.",
+      });
+    }
+
+    // --------------------------------------------------------
+    // VALIDASI PEMBAYARAN
+    // --------------------------------------------------------
+
     if (ticket.payment_status !== "Paid") {
+      await connection.query(
+        `
+        INSERT INTO ticket_checkins (
+          ticket_id,
+          event_id,
+          scanned_by,
+          qr_fingerprint,
+          result
+        )
+        VALUES (?, ?, ?, ?, 'UNPAID')
+        `,
+        [
+          ticket.id,
+          ticket.event_id,
+          userId,
+          fingerprint,
+        ]
+      );
+
+      await connection.commit();
+
       return res.status(400).json({
         success: false,
         message: "Pembayaran tiket belum berhasil.",
-        ticket,
       });
     }
+
+    // --------------------------------------------------------
+    // VALIDASI CHECK-IN GANDA
+    // --------------------------------------------------------
 
     if (ticket.check_in === "Sudah") {
-      return res.status(400).json({
+      await connection.query(
+        `
+        INSERT INTO ticket_checkins (
+          ticket_id,
+          event_id,
+          scanned_by,
+          qr_fingerprint,
+          result
+        )
+        VALUES (?, ?, ?, ?, 'ALREADY_USED')
+        `,
+        [
+          ticket.id,
+          ticket.event_id,
+          userId,
+          fingerprint,
+        ]
+      );
+
+      await connection.commit();
+
+      return res.status(409).json({
         success: false,
         message: "Tiket ini sudah digunakan untuk check-in.",
-        ticket,
       });
     }
 
-    const [updateResult] = await db.query(
+    // --------------------------------------------------------
+    // UPDATE CHECK-IN
+    // --------------------------------------------------------
+
+    const [updateResult] = await connection.query(
       `
       UPDATE tickets
       SET check_in = 'Sudah'
@@ -610,73 +528,125 @@ const checkInTicket = async (req, res) => {
       [ticket.id]
     );
 
-    if (updateResult.affectedRows === 0) {
-      return res.status(400).json({
+    if (updateResult.affectedRows !== 1) {
+      await connection.rollback();
+
+      return res.status(409).json({
         success: false,
         message: "Tiket sudah digunakan untuk check-in.",
       });
     }
 
-    const [updatedTickets] = await db.query(
+    // --------------------------------------------------------
+    // SIMPAN RIWAYAT CHECK-IN
+    // --------------------------------------------------------
+
+    await connection.query(
       `
-      SELECT
-        t.id,
-        t.order_detail_id,
-        t.qr_code,
-        t.ticket_code,
-        t.check_in,
-        t.created_at,
-        t.seat_id,
-        es.section_id,
-        es.row_label AS seat_row,
-        es.seat_number,
-        sec.section_code,
-        sec.section_name,
-
-        o.order_code,
-        o.payment_status,
-
-        u.fullname,
-        u.email,
-
-        tc.category_name,
-        tc.price,
-
-        e.id AS event_id,
-        e.event_name,
-        e.poster AS poster,
-        e.event_date,
-        e.event_time
-
-      FROM tickets t
-
-      JOIN order_details od ON t.order_detail_id = od.id
-      JOIN orders o ON od.order_id = o.id
-      JOIN users u ON o.user_id = u.id
-      JOIN ticket_categories tc ON od.ticket_category_id = tc.id
-      JOIN events e ON tc.event_id = e.id
-      LEFT JOIN event_seats es ON es.id = t.seat_id
-      LEFT JOIN event_sections sec ON sec.id = es.section_id
-
-      WHERE t.id = ?
+      INSERT INTO ticket_checkins (
+        ticket_id,
+        event_id,
+        scanned_by,
+        qr_fingerprint,
+        result
+      )
+      VALUES (?, ?, ?, ?, 'SUCCESS')
       `,
-      [ticket.id]
+      [
+        ticket.id,
+        ticket.event_id,
+        userId,
+        fingerprint,
+      ]
     );
 
-    return res.json({
+    await connection.commit();
+
+    // --------------------------------------------------------
+    // RESPONSE
+    // --------------------------------------------------------
+
+    return res.status(200).json({
       success: true,
       message: "Check-in berhasil.",
-      ticket: updatedTickets[0],
+      ticket: {
+        id: ticket.id,
+        ticket_code: ticket.ticket_code,
+        check_in: "Sudah",
+
+        customer_name: ticket.fullname,
+        customer_email: ticket.email,
+
+        category_name: ticket.category_name,
+        price: ticket.price,
+
+        event_id: ticket.event_id,
+        event_name: ticket.event_name,
+        poster: ticket.poster,
+        event_date: ticket.event_date,
+        event_time: ticket.event_time,
+
+        seat_row: ticket.seat_row,
+        seat_number: ticket.seat_number,
+        section_code: ticket.section_code,
+        section_name: ticket.section_name,
+      },
     });
   } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        console.error("CHECK-IN ROLLBACK ERROR:", rollbackError);
+      }
+    }
+
     console.error("CHECK-IN TICKET ERROR:", error);
 
     return res.status(500).json({
       success: false,
       message: "Gagal melakukan check-in tiket.",
-      error: error.message,
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
+};
+
+// ============================================================
+// CREATE TICKET MANUAL - DINONAKTIFKAN
+// Tiket dibuat otomatis melalui Midtrans setelah pembayaran.
+// ============================================================
+
+const createTicket = async (req, res) => {
+  return res.status(403).json({
+    success: false,
+    message: "Tiket diterbitkan otomatis setelah pembayaran berhasil.",
+  });
+};
+
+// ============================================================
+// UPDATE TICKET - DINONAKTIFKAN
+// Status check-in hanya boleh diubah melalui proses scan.
+// ============================================================
+
+const updateTicket = async (req, res) => {
+  return res.status(403).json({
+    success: false,
+    message: "Tiket tidak dapat diubah secara manual.",
+  });
+};
+
+// ============================================================
+// DELETE TICKET - DINONAKTIFKAN
+// ============================================================
+
+const deleteTicket = async (req, res) => {
+  return res.status(403).json({
+    success: false,
+    message: "Tiket tidak dapat dihapus melalui endpoint ini.",
+  });
 };
 
 // ============================================================

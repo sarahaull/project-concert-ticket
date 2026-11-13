@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -25,23 +24,14 @@ import {
   Wallet,
   Tag,
   Image as ImageIcon,
+  Sparkles,
+  TrendingUp,
 } from "lucide-react";
-
-/* =========================================================
-   API CONFIG
-========================================================= */
 
 const RAW_API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 const API_URL = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/i, "");
-
-const FALLBACK_POSTER =
-  "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1600&q=90";
-
-/* =========================================================
-   API HELPERS
-========================================================= */
 
 function getAssetUrl(path) {
   if (!path) return null;
@@ -112,10 +102,6 @@ function extractArray(response, keys = []) {
   return [];
 }
 
-/* =========================================================
-   FORMAT HELPERS
-========================================================= */
-
 function formatCurrency(value) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -127,8 +113,6 @@ function formatCurrency(value) {
 function formatDate(value) {
   if (!value) return "-";
 
-  // Menghindari pergeseran tanggal akibat timezone
-  // ketika backend mengirim YYYY-MM-DD.
   const raw = String(value);
   const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
@@ -227,13 +211,9 @@ function getSaleStatus(event) {
   };
 }
 
-/* =========================================================
-   SMALL COMPONENTS
-========================================================= */
-
 function InfoItem({ icon, label, value }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-xl border border-[#EEF1F5] bg-[#FBFCFE] p-4">
+    <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-[#EEF1F5] bg-[#FBFCFE] p-4 transition duration-300 hover:border-[#DDE4ED] hover:bg-white hover:shadow-sm">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#526B92]">
         {icon}
       </div>
@@ -253,7 +233,7 @@ function InfoItem({ icon, label, value }) {
 
 function FeatureItem({ title, description }) {
   return (
-    <div className="flex gap-3 rounded-xl border border-[#EEF1F5] bg-[#FBFCFE] p-4">
+    <div className="flex gap-3 rounded-2xl border border-[#EEF1F5] bg-[#FBFCFE] p-4 transition duration-300 hover:border-[#DDE4ED] hover:bg-white hover:shadow-sm">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#EEF3F9] text-[#526B92]">
         <CheckCircle2 size={16} />
       </div>
@@ -288,10 +268,6 @@ function SummaryRow({ icon, label, value }) {
   );
 }
 
-/* =========================================================
-   TICKET CATEGORY CARD
-========================================================= */
-
 function TicketCategoryCard({ ticket }) {
   const quota = Number(ticket.quota || 0);
   const remaining = getTicketRemaining(ticket);
@@ -301,53 +277,77 @@ function TicketCategoryCard({ ticket }) {
     quota > 0 ? Math.min(100, (sold / quota) * 100) : 0;
 
   const soldOut = quota > 0 && remaining <= 0;
+  const almostSoldOut = quota > 0 && remaining > 0 && (remaining / quota) < 0.2;
 
   return (
-    <div className="rounded-xl border border-[#E5EAF1] bg-white p-4 transition hover:border-[#A9BAD2] hover:shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="group relative overflow-hidden rounded-[20px] border border-[#E5EAF1] bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-[#112250]/30 hover:shadow-[0_20px_40px_-15px_rgba(17,34,80,0.15)]">
+      
+      {/* Ornamen Latar Belakang */}
+      <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-[#EEF3F9] to-transparent blur-2xl transition duration-500 group-hover:scale-150 group-hover:bg-[#DCE7F7]/60" />
+
+      <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-bold text-[#112250]">
+            <h3 className="text-base font-extrabold text-[#112250]">
               {ticket.category_name || "Kategori Tiket"}
             </h3>
 
-            {soldOut && (
-              <span className="rounded-full bg-red-50 px-2 py-1 text-[9px] font-bold text-red-600">
+            {soldOut ? (
+              <span className="rounded-full border border-red-100 bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-600">
                 HABIS
+              </span>
+            ) : almostSoldOut ? (
+              <span className="animate-pulse rounded-full border border-amber-100 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-600">
+                HAMPIR HABIS
+              </span>
+            ) : (
+              <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-600">
+                TERSEDIA
               </span>
             )}
           </div>
 
-          <p className="mt-2 text-lg font-bold text-[#526B92]">
-            {formatCurrency(ticket.price)}
-          </p>
+          {/* HARGA GLOWING */}
+          <div className="mt-3 flex items-baseline gap-1.5">
+            <p className="text-[32px] font-black leading-none tracking-tight text-[#112250] [text-shadow:0_0_20px_rgba(17,34,80,0.4)] transition-all duration-300 group-hover:[text-shadow:0_0_30px_rgba(17,34,80,0.6)]">
+              {formatCurrency(ticket.price)}
+            </p>
+            <span className="text-[11px] font-semibold text-[#98A3B2]">/ tiket</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-[#8793A3]">
-          <Ticket size={14} />
-          <span>ID #{ticket.id}</span>
+        <div className="flex shrink-0 items-center gap-2 self-start rounded-xl border border-[#E5EAF1] bg-[#F8FAFC] px-3.5 py-2 text-xs font-bold text-[#526B92] shadow-sm transition-colors group-hover:border-[#112250]/20 group-hover:bg-white">
+          <Ticket size={14} className="text-[#112250]" />
+          <span>#{ticket.id}</span>
         </div>
       </div>
 
-      <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between text-[11px]">
-          <span className="text-[#8793A3]">Ketersediaan tiket</span>
-          <span className="font-semibold text-[#52627A]">
-            {remaining.toLocaleString("id-ID")} /{" "}
-            {quota.toLocaleString("id-ID")}
+      {/* PROGRESS BAR & STATISTIK */}
+      <div className="relative mt-6 rounded-xl border border-[#F1F4F9] bg-[#FBFCFE] p-4 transition-colors group-hover:bg-[#F8FAFC]">
+        <div className="mb-3 flex items-center justify-between text-[11px]">
+          <span className="font-semibold text-[#8793A3]">Ketersediaan Tiket</span>
+          <span className="font-bold text-[#112250]">
+            {remaining.toLocaleString("id-ID")} <span className="font-medium text-[#98A3B2]">/ {quota.toLocaleString("id-ID")}</span>
           </span>
         </div>
 
-        <div className="h-2 overflow-hidden rounded-full bg-[#E8ECF2]">
+        <div className="h-2.5 overflow-hidden rounded-full bg-[#E8ECF2] shadow-inner">
           <div
-            className="h-full rounded-full bg-[#526B92] transition-all"
+            className={`h-full rounded-full transition-all duration-1000 ease-out ${
+              soldOut
+                ? "bg-red-400"
+                : "bg-gradient-to-r from-[#526B92] via-[#112250] to-[#1A326A] group-hover:shadow-[0_0_12px_rgba(17,34,80,0.6)]"
+            }`}
             style={{ width: `${percentage}%` }}
           />
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-[10px] text-[#98A3B2]">
-          <span>Terjual {sold.toLocaleString("id-ID")}</span>
-          <span>
+        <div className="mt-3 flex items-center justify-between text-[10px]">
+          <span className="flex items-center gap-1.5 font-medium text-[#98A3B2]">
+            <CheckCircle2 size={12} className="text-emerald-500" />
+            Terjual {sold.toLocaleString("id-ID")}
+          </span>
+          <span className={`font-bold ${soldOut ? "text-red-500" : "text-[#112250]"}`}>
             {soldOut ? "Kuota habis" : `${remaining.toLocaleString("id-ID")} tersedia`}
           </span>
         </div>
@@ -355,10 +355,6 @@ function TicketCategoryCard({ ticket }) {
     </div>
   );
 }
-
-/* =========================================================
-   PAGE
-========================================================= */
 
 export default function EventDetailPage() {
   const params = useParams();
@@ -376,10 +372,6 @@ export default function EventDetailPage() {
   const [liked, setLiked] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
 
-  /* =======================================================
-     FETCH EVENT
-  ======================================================= */
-
   const fetchEventDetail = useCallback(
     async (isRefresh = false) => {
       if (!eventId) return;
@@ -394,7 +386,6 @@ export default function EventDetailPage() {
       setTicketError("");
 
       try {
-        // Endpoint detail event.
         const eventResponse = await apiRequest(
           `/api/events/${encodeURIComponent(eventId)}`
         );
@@ -411,8 +402,6 @@ export default function EventDetailPage() {
 
         setEvent(eventData);
 
-        // Endpoint kategori tiket khusus event.
-        // Tidak mengambil seluruh kategori tiket.
         try {
           const ticketResponse = await apiRequest(
             `/api/ticket-categories/event/${encodeURIComponent(eventId)}`
@@ -450,13 +439,7 @@ export default function EventDetailPage() {
 
   useEffect(() => {
     fetchEventDetail();
-
-    // Tidak ada request yang dijalankan jika ID belum tersedia.
   }, [fetchEventDetail]);
-
-  /* =======================================================
-     TICKET STATISTICS
-  ======================================================= */
 
   const ticketStats = useMemo(() => {
     const validTickets = ticketCategories.filter(
@@ -493,10 +476,6 @@ export default function EventDetailPage() {
     };
   }, [ticketCategories]);
 
-  /* =======================================================
-     DERIVED DATA
-  ======================================================= */
-
   const percentage =
     ticketStats.quota > 0
       ? Math.min(
@@ -515,11 +494,6 @@ export default function EventDetailPage() {
     () => getSaleStatus(event),
     [event]
   );
-
-  const canBuy =
-    ticketStats.totalCategories > 0 &&
-    ticketStats.remaining > 0 &&
-    saleStatus.available;
 
   const formattedDate = useMemo(
     () => formatDate(event?.event_date),
@@ -546,10 +520,6 @@ export default function EventDetailPage() {
     .filter(Boolean)
     .join(", ");
 
-  /* =======================================================
-     SHARE EVENT
-  ======================================================= */
-
   const handleShare = async () => {
     const shareData = {
       title: event?.event_name || "TicketVerse Event",
@@ -575,10 +545,6 @@ export default function EventDetailPage() {
     }
   };
 
-  /* =======================================================
-     LOADING
-  ======================================================= */
-
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#F6F8FB] px-5">
@@ -599,10 +565,6 @@ export default function EventDetailPage() {
       </main>
     );
   }
-
-  /* =======================================================
-     ERROR / 404
-  ======================================================= */
 
   if (error || !event) {
     return (
@@ -648,44 +610,35 @@ export default function EventDetailPage() {
     );
   }
 
-  /* =======================================================
-     PAGE
-  ======================================================= */
-
   return (
-    <main className="min-h-screen bg-[#F6F8FB] text-[#112250]">
-      {/* ===================================================
-          HERO
-      =================================================== */}
+    <main className="min-h-screen bg-[#F6F8FB] text-[#112250] pb-16">
+      
+      <section className="relative w-full overflow-hidden bg-[#0D1F42]">
+        <div className="absolute inset-0 z-0">
+          {posterUrl ? (
+            <img
+              src={posterUrl}
+              alt="background"
+              className="h-full w-full scale-[1.8] object-cover object-center blur-2xl opacity-60"
+            />
+          ) : (
+            <div className="h-full w-full bg-[#112250]" />
+          )}
+        </div>
 
-      <section className="relative h-[440px] overflow-hidden bg-[#0D1F42]">
-        {posterUrl ? (
-          <img
-            src={posterUrl}
-            alt={`Poster ${event.event_name || "event"}`}
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-white/40">
-            <ImageIcon size={64} strokeWidth={1.2} />
-          </div>
-        )}
+        <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_0%,#07162F_100%)] opacity-90" />
+        <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#07162F] via-[#07162F]/70 to-transparent" />
+        
+        <div className="absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/5 to-transparent bg-[length:24px_24px] bg-repeat opacity-30" />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07162F] via-[#07162F]/65 to-[#07162F]/20" />
-        <div className="absolute inset-0 bg-[#07162F]/10" />
-
-        <div className="relative mx-auto flex h-full w-full max-w-[1440px] flex-col justify-between px-5 py-7 sm:px-8 lg:px-12 xl:px-16">
-          {/* TOP BAR */}
-
+        <div className="relative z-20 mx-auto flex w-full max-w-[1200px] flex-col justify-between px-5 py-8 sm:px-8 lg:px-12">
+          
           <div className="flex items-center justify-between gap-3">
             <Link
               href="/cari-acara"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-white hover:text-[#112250]"
+              className="group inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-white hover:text-[#112250]"
             >
-              <ArrowLeft size={15} />
+              <ArrowLeft size={15} className="transition group-hover:-translate-x-0.5" />
               Kembali ke Event
             </Link>
 
@@ -693,7 +646,7 @@ export default function EventDetailPage() {
               <button
                 type="button"
                 onClick={handleShare}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/20 text-white backdrop-blur-md transition hover:bg-white hover:text-[#112250]"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white backdrop-blur-md transition hover:bg-white hover:text-[#112250]"
                 aria-label="Bagikan event"
               >
                 <Share2 size={17} />
@@ -702,101 +655,111 @@ export default function EventDetailPage() {
               <button
                 type="button"
                 onClick={() => setLiked((value) => !value)}
-                className={`flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-black/20 backdrop-blur-md transition ${
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10 backdrop-blur-md transition ${
                   liked
-                    ? "text-red-400"
+                    ? "text-red-400 hover:bg-white hover:text-red-500"
                     : "text-white hover:bg-white hover:text-[#112250]"
                 }`}
                 aria-label="Simpan event"
               >
-                <Heart
-                  size={17}
-                  fill={liked ? "currentColor" : "none"}
-                />
+                <Heart size={17} fill={liked ? "currentColor" : "none"} />
               </button>
             </div>
           </div>
 
           {shareMessage && (
-            <div className="absolute right-5 top-20 rounded-lg bg-white px-4 py-2 text-xs font-semibold text-[#112250] shadow-lg">
+            <div className="absolute right-5 top-20 z-50 animate-fade-in rounded-lg bg-white px-4 py-2 text-xs font-semibold text-[#112250] shadow-xl">
               {shareMessage}
             </div>
           )}
 
-          {/* HERO CONTENT */}
-
-          <div className="max-w-4xl">
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#112250] shadow-sm">
-                {event.category_name || "Event"}
-              </span>
-
-              {isSoldOut && (
-                <span className="rounded-full border border-white/15 bg-red-500/80 px-3 py-1.5 text-[10px] font-semibold text-white backdrop-blur">
-                  Tiket Habis
+          <div className="mt-12 flex flex-col-reverse items-start gap-10 md:flex-row md:items-end md:justify-between lg:mt-16">
+            
+            <div className="w-full max-w-3xl flex-1">
+              <div className="mb-4 flex flex-wrap items-center gap-2.5">
+                <span className="rounded-full bg-white px-3.5 py-1.5 text-[10px] font-bold text-[#112250] shadow-sm">
+                  {event.category_name || "Event"}
                 </span>
-              )}
 
-              {!saleStatus.available && (
-                <span className="rounded-full border border-white/15 bg-amber-500/90 px-3 py-1.5 text-[10px] font-semibold text-white backdrop-blur">
-                  {saleStatus.label}
-                </span>
-              )}
+                {isSoldOut && (
+                  <span className="rounded-full border border-red-500/30 bg-red-500/90 px-3.5 py-1.5 text-[10px] font-bold text-white shadow-sm backdrop-blur">
+                    TIKET HABIS
+                  </span>
+                )}
+
+                {!saleStatus.available && !isSoldOut && (
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/90 px-3.5 py-1.5 text-[10px] font-bold text-white shadow-sm backdrop-blur">
+                    {saleStatus.label.toUpperCase()}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">
+                {organizerName}
+              </p>
+
+              <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl lg:leading-[1.15]">
+                {event.event_name || "Event TicketVerse"}
+              </h1>
+
+              <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-blue-100/90">
+                <div className="flex items-center gap-2">
+                  <CalendarDays size={16} className="text-blue-300" />
+                  {formattedDate}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Clock3 size={16} className="text-blue-300" />
+                  {formattedTime}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <MapPin size={16} className="text-blue-300" />
+                  {event.city || event.venue_name || "-"}
+                </div>
+              </div>
             </div>
 
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">
-              {organizerName}
-            </p>
-
-            <h1 className="mt-2 max-w-4xl text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              {event.event_name || "Event TicketVerse"}
-            </h1>
-
-            <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-blue-100/85">
-              <div className="flex items-center gap-2">
-                <CalendarDays size={15} />
-                {formattedDate}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Clock3 size={15} />
-                {formattedTime}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <MapPin size={15} />
-                {event.city || event.venue_name || "-"}
+            <div className="w-full shrink-0 sm:w-[260px] md:w-[300px]">
+              <div className="group relative aspect-[3/4] w-full overflow-hidden rounded-2xl border border-white/20 bg-[#112250]/50 shadow-[0_20px_50px_rgba(0,0,0,0.4)] backdrop-blur-sm">
+                {posterUrl ? (
+                  <img
+                    src={posterUrl}
+                    alt={`Poster ${event.event_name || "event"}`}
+                    className="h-full w-full object-contain object-center transition duration-700 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center text-white/40">
+                    <ImageIcon size={48} strokeWidth={1.2} />
+                    <span className="mt-3 text-xs font-medium">Poster tidak tersedia</span>
+                  </div>
+                )}
               </div>
             </div>
+
           </div>
         </div>
       </section>
 
-      {/* ===================================================
-          MAIN CONTENT
-      =================================================== */}
-
-      <div className="mx-auto w-full max-w-[1200px] px-5 py-8 sm:px-8 lg:px-12">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_370px]">
-          {/* LEFT */}
-
-          <div className="space-y-6">
-            {/* EVENT INFORMATION */}
-
-            <section className="rounded-[22px] border border-[#DDE4ED] bg-white p-6 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
-              <div className="flex items-center justify-between gap-4">
+      <div className="mx-auto w-full max-w-[1200px] px-5 py-8 sm:px-8 lg:px-12 mt-2">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
+          
+          <div className="space-y-8">
+            
+            <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
+              <div className="flex items-center justify-between gap-4 border-b border-[#EEF1F5] pb-5">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8A96A8]">
                     Event
                   </p>
 
-                  <h2 className="mt-1 text-lg font-bold text-[#112250]">
+                  <h2 className="mt-1 text-xl font-bold text-[#112250]">
                     Informasi Event
                   </h2>
                 </div>
 
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#526B92]">
-                  <Info size={20} />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EEF3F9] text-[#526B92] ring-1 ring-[#DDE4ED]">
+                  <Info size={22} />
                 </div>
               </div>
 
@@ -827,77 +790,73 @@ export default function EventDetailPage() {
               </div>
             </section>
 
-            {/* DESCRIPTION */}
+            <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles size={16} className="text-[#526B92]" />
+                <h2 className="text-xl font-bold text-[#112250]">
+                  Tentang Event
+                </h2>
+              </div>
 
-            <section className="rounded-[22px] border border-[#DDE4ED] bg-white p-6 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8A96A8]">
-                Deskripsi
-              </p>
-
-              <h2 className="mt-1 text-lg font-bold text-[#112250]">
-                Tentang Event
-              </h2>
-
-              <p className="mt-4 whitespace-pre-line text-sm leading-7 text-[#68778C]">
-                {event.description ||
-                  "Belum ada deskripsi untuk event ini."}
-              </p>
+              <div className="prose prose-sm max-w-none text-[#68778C]">
+                <p className="whitespace-pre-line text-sm leading-8">
+                  {event.description ||
+                    "Belum ada deskripsi untuk event ini."}
+                </p>
+              </div>
             </section>
-
-            {/* TICKET CATEGORIES */}
 
             <section
               id="kategori-tiket"
-              className="rounded-[22px] border border-[#DDE4ED] bg-white p-6 shadow-[0_8px_30px_rgba(17,34,80,0.05)]"
+              className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]"
             >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-[#EEF1F5] pb-5">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8A96A8]">
                     Pilihan Tiket
                   </p>
 
-                  <h2 className="mt-1 text-lg font-bold text-[#112250]">
+                  <h2 className="mt-1 text-xl font-bold text-[#112250]">
                     Kategori Tiket
                   </h2>
 
-                  <p className="mt-1 text-xs text-[#8A96A8]">
+                  <p className="mt-1.5 text-sm text-[#8A96A8]">
                     Pilih kategori tiket sesuai kebutuhanmu.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-semibold text-[#526B92]">
+                <div className="flex items-center gap-2 rounded-xl bg-[#EEF3F9] px-4 py-2.5 text-xs font-bold text-[#112250]">
                   <Ticket size={16} />
-                  {ticketStats.totalCategories} kategori
+                  {ticketStats.totalCategories} Kategori
                 </div>
               </div>
 
               {ticketError && (
-                <div className="mt-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-800">
-                  <AlertCircle size={17} className="mt-0.5 shrink-0" />
+                <div className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-800">
+                  <AlertCircle size={20} className="mt-0.5 shrink-0" />
                   <div>
                     <p className="font-bold">
                       Kategori tiket belum berhasil dimuat
                     </p>
-                    <p className="mt-1">{ticketError}</p>
+                    <p className="mt-1 text-amber-700">{ticketError}</p>
                     <button
                       type="button"
                       onClick={() => fetchEventDetail(true)}
-                      className="mt-2 font-bold underline"
+                      className="mt-3 inline-flex items-center gap-1.5 font-bold text-amber-900 hover:underline"
                     >
-                      Muat ulang data
+                      <RefreshCw size={14} /> Muat ulang data
                     </button>
                   </div>
                 </div>
               )}
 
               {!ticketError && ticketCategories.length === 0 ? (
-                <div className="mt-5 rounded-xl border border-dashed border-[#DDE4ED] bg-[#FBFCFE] px-5 py-10 text-center">
-                  <Ticket
-                    size={32}
-                    className="mx-auto text-[#B7C2D0]"
-                  />
+                <div className="mt-6 rounded-2xl border border-dashed border-[#DDE4ED] bg-[#FBFCFE] px-5 py-12 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#EEF3F9]">
+                    <Ticket size={28} className="text-[#B7C2D0]" />
+                  </div>
 
-                  <p className="mt-3 text-sm font-bold text-[#52627A]">
+                  <p className="mt-4 text-sm font-bold text-[#52627A]">
                     Tiket belum tersedia
                   </p>
 
@@ -906,7 +865,7 @@ export default function EventDetailPage() {
                   </p>
                 </div>
               ) : (
-                <div className="mt-5 space-y-3">
+                <div className="mt-6 space-y-4">
                   {ticketCategories.map((ticket) => (
                     <TicketCategoryCard
                       key={ticket.id}
@@ -917,18 +876,15 @@ export default function EventDetailPage() {
               )}
             </section>
 
-            {/* HIGHLIGHTS */}
+            <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
+              <div className="flex items-center gap-2 mb-6">
+                <TrendingUp size={16} className="text-[#526B92]" />
+                <h2 className="text-xl font-bold text-[#112250]">
+                  Pengalaman yang kamu dapatkan
+                </h2>
+              </div>
 
-            <section className="rounded-[22px] border border-[#DDE4ED] bg-white p-6 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8A96A8]">
-                Kenapa hadir?
-              </p>
-
-              <h2 className="mt-1 text-lg font-bold text-[#112250]">
-                Pengalaman yang kamu dapatkan
-              </h2>
-
-              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FeatureItem
                   title="Tiket resmi"
                   description="Pesan tiket melalui platform TicketVerse."
@@ -951,20 +907,18 @@ export default function EventDetailPage() {
               </div>
             </section>
 
-            {/* ORGANIZER */}
-
-            <section className="rounded-[22px] border border-[#DDE4ED] bg-white p-6 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
+            <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
               <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8A96A8]">
                 Organizer
               </p>
 
-              <div className="mt-4 flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#526B92]">
-                  <Building2 size={21} />
+              <div className="mt-5 flex items-center gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#EEF3F9] text-[#526B92] ring-1 ring-[#DDE4ED]">
+                  <Building2 size={24} />
                 </div>
 
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-[#112250]">
+                  <p className="text-base font-bold text-[#112250]">
                     {organizerName}
                   </p>
 
@@ -976,57 +930,52 @@ export default function EventDetailPage() {
             </section>
           </div>
 
-          {/* RIGHT / TICKET */}
-
           <aside>
-            <div className="sticky top-6 rounded-[22px] border border-[#DDE4ED] bg-white p-6 shadow-[0_15px_45px_rgba(17,34,80,0.08)]">
-              {/* PRICE */}
-
+            <div className="sticky top-8 rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_20px_60px_rgba(17,34,80,0.08)]">
+              
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-[#98A3B2]">
                     Harga tiket
                   </p>
 
-                  <p className="mt-1 text-2xl font-bold tracking-tight text-[#112250]">
+                  <p className="mt-1.5 text-[28px] font-bold leading-none tracking-tight text-[#112250]">
                     {ticketStats.totalCategories > 0
                       ? formatCurrency(ticketStats.price)
                       : "Belum tersedia"}
                   </p>
 
-                  <p className="mt-1 text-[11px] text-[#98A3B2]">
+                  <p className="mt-2 text-[11px] text-[#98A3B2]">
                     Harga kategori termurah
                   </p>
                 </div>
 
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#526B92]">
-                  <Wallet size={20} />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#EEF3F9] text-[#526B92] ring-1 ring-[#DDE4ED]">
+                  <Wallet size={22} />
                 </div>
               </div>
 
-              <div className="my-6 border-t border-[#EEF1F5]" />
-
-              {/* AVAILABILITY */}
+              <div className="my-7 border-t border-[#EEF1F5]" />
 
               <div>
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between text-xs mb-2">
                   <span className="text-[#8793A3]">
                     Ketersediaan tiket
                   </span>
 
-                  <span className="font-semibold text-[#52627A]">
+                  <span className="font-bold text-[#112250]">
                     {percentage}%
                   </span>
                 </div>
 
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E8ECF2]">
+                <div className="h-2.5 overflow-hidden rounded-full bg-[#E8ECF2]">
                   <div
-                    className="h-full rounded-full bg-[#526B92] transition-all"
+                    className="h-full rounded-full bg-gradient-to-r from-[#526B92] to-[#112250] transition-all duration-700"
                     style={{ width: `${percentage}%` }}
                   />
                 </div>
 
-                <div className="mt-2 flex items-center justify-between text-[11px]">
+                <div className="mt-2.5 flex items-center justify-between text-[11px]">
                   <span className="text-[#98A3B2]">
                     {ticketStats.sold.toLocaleString("id-ID")} terjual
                   </span>
@@ -1037,22 +986,20 @@ export default function EventDetailPage() {
                 </div>
               </div>
 
-              {/* SALE STATUS */}
-
               <div
-                className={`mt-5 rounded-xl p-3 ${
+                className={`mt-6 rounded-2xl border p-4 ${
                   saleStatus.available
-                    ? "bg-emerald-50"
-                    : "bg-amber-50"
+                    ? "bg-emerald-50/50 border-emerald-100"
+                    : "bg-amber-50/50 border-amber-100"
                 }`}
               >
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-3">
                   <Info
-                    size={15}
+                    size={16}
                     className={`mt-0.5 shrink-0 ${
                       saleStatus.available
-                        ? "text-emerald-700"
-                        : "text-amber-700"
+                        ? "text-emerald-600"
+                        : "text-amber-600"
                     }`}
                   />
 
@@ -1068,10 +1015,10 @@ export default function EventDetailPage() {
                     </p>
 
                     <p
-                      className={`mt-1 text-[10px] leading-5 ${
+                      className={`mt-1 text-[11px] leading-5 ${
                         saleStatus.available
-                          ? "text-emerald-700"
-                          : "text-amber-700"
+                          ? "text-emerald-600"
+                          : "text-amber-600"
                       }`}
                     >
                       {saleStatus.description}
@@ -1080,33 +1027,31 @@ export default function EventDetailPage() {
                 </div>
               </div>
 
-              {/* BUY BUTTON */}
-
               {isSoldOut ? (
                 <button
                   type="button"
                   disabled
-                  className="mt-6 flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#E8ECF2] text-sm font-semibold text-[#98A3B2]"
+                  className="mt-6 flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#E8ECF2] text-sm font-bold text-[#98A3B2]"
                 >
-                  <Ticket size={17} />
+                  <Ticket size={18} />
                   Tiket Habis
                 </button>
               ) : ticketStats.totalCategories === 0 ? (
                 <button
                   type="button"
                   disabled
-                  className="mt-6 flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#E8ECF2] text-sm font-semibold text-[#98A3B2]"
+                  className="mt-6 flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#E8ECF2] text-sm font-bold text-[#98A3B2]"
                 >
-                  <Ticket size={17} />
+                  <Ticket size={18} />
                   Tiket Belum Tersedia
                 </button>
               ) : !saleStatus.available ? (
                 <button
                   type="button"
                   disabled
-                  className="mt-6 flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#E8ECF2] text-sm font-semibold text-[#98A3B2]"
+                  className="mt-6 flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#E8ECF2] text-sm font-bold text-[#98A3B2]"
                 >
-                  <Clock3 size={17} />
+                  <Clock3 size={18} />
                   {saleStatus.type === "upcoming"
                     ? "Penjualan Belum Dibuka"
                     : "Penjualan Ditutup"}
@@ -1114,36 +1059,33 @@ export default function EventDetailPage() {
               ) : (
                 <Link
                   href={`/cari-acara/${event.id}/beli`}
-                  className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#112250] text-sm font-semibold text-white shadow-[0_8px_20px_rgba(17,34,80,0.16)] transition hover:bg-[#1A326A] hover:shadow-[0_12px_28px_rgba(17,34,80,0.22)]"
+                  className="group relative mt-6 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-[#112250] text-sm font-bold text-white shadow-[0_8px_20px_rgba(17,34,80,0.2)] transition hover:bg-[#1A326A] hover:shadow-[0_12px_28px_rgba(17,34,80,0.3)]"
                 >
-                  <Ticket size={17} />
-                  Beli Tiket
-                  <ChevronRight size={16} />
+                  <span className="relative z-10 flex items-center gap-2">
+                    <Ticket size={18} />
+                    Beli Tiket
+                    <ChevronRight size={16} className="transition group-hover:translate-x-0.5" />
+                  </span>
+                  <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                 </Link>
               )}
 
-              {/* CATEGORY SHORTCUT */}
-
               <a
                 href="#kategori-tiket"
-                className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#DDE4ED] text-xs font-semibold text-[#52627A] transition hover:bg-[#F6F8FB]"
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#DDE4ED] text-xs font-bold text-[#52627A] transition hover:bg-[#F6F8FB] hover:text-[#112250]"
               >
-                <Tag size={14} />
+                <Tag size={15} />
                 Lihat kategori tiket
               </a>
 
-              {/* SECURE */}
-
-              <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-[#8A96A8]">
-                <ShieldCheck size={14} />
-                Transaksi melalui TicketVerse
+              <div className="mt-5 flex items-center justify-center gap-2 text-[10px] font-medium text-[#8A96A8]">
+                <ShieldCheck size={14} className="text-emerald-500" />
+                Transaksi aman melalui TicketVerse
               </div>
 
-              <div className="my-5 border-t border-[#EEF1F5]" />
+              <div className="my-6 border-t border-[#EEF1F5]" />
 
-              {/* EVENT SUMMARY */}
-
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <SummaryRow
                   icon={<CalendarDays size={15} />}
                   label="Tanggal"
@@ -1169,13 +1111,11 @@ export default function EventDetailPage() {
                 />
               </div>
 
-              {/* REFRESH */}
-
               <button
                 type="button"
                 onClick={() => fetchEventDetail(true)}
                 disabled={refreshing}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-[#DDE4ED] py-2.5 text-xs font-semibold text-[#52627A] transition hover:bg-[#F6F8FB] disabled:opacity-60"
+                className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl border border-[#DDE4ED] bg-[#FBFCFE] py-3 text-xs font-bold text-[#52627A] transition hover:bg-[#F6F8FB] hover:text-[#112250] disabled:opacity-60"
               >
                 <RefreshCw
                   size={14}
@@ -1187,11 +1127,9 @@ export default function EventDetailPage() {
           </aside>
         </div>
 
-        {/* FOOTER */}
-
-        <div className="mt-10 flex flex-col justify-between gap-2 border-t border-[#DDE4ED] py-5 text-[11px] text-[#98A3B2] sm:flex-row">
-          <p>TicketVerse · Event Experience Platform</p>
-          <p>Event #{event.id}</p>
+        <div className="mt-12 flex flex-col justify-between gap-2 border-t border-[#DDE4ED] py-6 text-[11px] text-[#98A3B2] sm:flex-row">
+          <p>© 2024 TicketVerse · Event Experience Platform</p>
+          <p>Event ID #{event.id}</p>
         </div>
       </div>
     </main>

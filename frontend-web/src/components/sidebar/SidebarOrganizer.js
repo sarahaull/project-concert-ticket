@@ -64,7 +64,7 @@ const MENU_SECTIONS = [
         icon: ShoppingCart,
         children: [
           { label: "Data Pengunjung", href: "/organizer/peserta", icon: Users },
-          { label: "Check-in Pengunjung", href: "/organizer/peserta/check-in", icon: ScanLine },
+          { label: "Check-in Pengunjung", href: "/organizer/check-in", icon: ScanLine },
         ],
       },
     ],
@@ -81,7 +81,7 @@ const MENU_SECTIONS = [
     title: "Lainnya",
     items: [
       { label: "Laporan Penjualan", href: "/organizer/laporan", icon: BarChart3 },
-      { label: "Profil Organizer", href: "/organizer/profil", icon: UserCircle },
+      { label: "Profil Organizer", href: "/organizer/profile", icon: UserCircle },
       { label: "Pengaturan", href: "/organizer/pengaturan", icon: Settings },
     ],
   },

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -21,25 +20,19 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-/* =========================================================
-   API CONFIGURATION
-========================================================= */
-
 const RAW_API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 const API_ROOT = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/i, "");
 const API_BASE = `${API_ROOT}/api`;
 
-// Sesuaikan dengan endpoint upload yang tersedia di backend.
-const UPLOAD_POSTER_ENDPOINT = `${API_BASE}/uploads/event-poster`;
-
-const ALLOWED_STATUSES = [
-  "Coming Soon",
-  "Available",
-  "Limited",
-  "Sold Out",
-];
+const API = {
+  categories: `${API_BASE}/categories`,
+  artists: `${API_BASE}/artists`,
+  venues: `${API_BASE}/venues`,
+  events: `${API_BASE}/events`,
+  uploadPoster: `${API_BASE}/uploads/event-poster`,
+};
 
 const INITIAL_FORM = {
   category_id: "",
@@ -52,16 +45,10 @@ const INITIAL_FORM = {
   event_time: "",
   ticket_sale_start: "",
   ticket_sale_end: "",
-  status: "Coming Soon",
 };
-
-/* =========================================================
-   HELPERS
-========================================================= */
 
 const getToken = () => {
   if (typeof window === "undefined") return "";
-
   return (
     localStorage.getItem("token") ||
     localStorage.getItem("accessToken") ||
@@ -73,22 +60,17 @@ const parseResponse = async (response) => {
   const data = await response.json().catch(() => null);
 
   if (!data) {
-    throw new Error("Response backend tidak valid.");
+    throw new Error(`Response backend tidak valid. HTTP ${response.status}`);
   }
 
   if (!response.ok || data.success === false) {
     throw new Error(
-      data.message ||
-        data.error ||
-        `Request gagal dengan status ${response.status}.`
+      data.message || data.error || `Request gagal. HTTP ${response.status}`
     );
   }
 
   return data;
 };
-
-const getErrorMessage = (error) =>
-  error?.message || "Terjadi kesalahan pada server.";
 
 const getList = (data, key) => {
   if (Array.isArray(data?.[key])) return data[key];
@@ -97,29 +79,20 @@ const getList = (data, key) => {
   return [];
 };
 
-const getImageUrl = (path) => {
-  if (!path) return "";
-
-  if (/^https?:\/\//i.test(path)) {
-    return path;
-  }
-
-  return `${API_ROOT}/${String(path).replace(/^\/+/, "")}`;
-};
-
-/* =========================================================
-   COMPONENT
-========================================================= */
+const getErrorMessage = (error) =>
+  error?.message || "Terjadi kesalahan pada server.";
 
 export default function TambahEventPage() {
   const router = useRouter();
 
-  const [loading, setLoading] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
+  const [form, setForm] = useState(INITIAL_FORM);
 
   const [categories, setCategories] = useState([]);
   const [artists, setArtists] = useState([]);
   const [venues, setVenues] = useState([]);
+
+  const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
 
   const [posterMode, setPosterMode] = useState("file");
   const [posterPreview, setPosterPreview] = useState("");
@@ -130,12 +103,6 @@ export default function TambahEventPage() {
     message: "",
   });
 
-  const [form, setForm] = useState(INITIAL_FORM);
-
-  /* =========================================================
-     LOAD MASTER DATA
-  ========================================================= */
-
   useEffect(() => {
     let mounted = true;
 
@@ -143,26 +110,24 @@ export default function TambahEventPage() {
       try {
         setLoadingData(true);
 
-        const endpoints = [
-          `${API_BASE}/categories`,
-          `${API_BASE}/artists`,
-          `${API_BASE}/venues`,
-        ];
+        const responses = await Promise.all([
+          fetch(API.categories, {
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          }),
+          fetch(API.artists, {
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          }),
+          fetch(API.venues, {
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          }),
+        ]);
 
-        const responses = await Promise.all(
-          endpoints.map((url) =>
-            fetch(url, {
-              method: "GET",
-              headers: {
-                Accept: "application/json",
-              },
-              cache: "no-store",
-            })
-          )
+        const [categoryData, artistData, venueData] = await Promise.all(
+          responses.map(parseResponse)
         );
-
-        const [categoryData, artistData, venueData] =
-          await Promise.all(responses.map(parseResponse));
 
         if (!mounted) return;
 
@@ -171,7 +136,6 @@ export default function TambahEventPage() {
         setVenues(getList(venueData, "venues"));
       } catch (error) {
         console.error("LOAD MASTER DATA ERROR:", error);
-
         if (mounted) {
           setNotification({
             type: "error",
@@ -179,9 +143,7 @@ export default function TambahEventPage() {
           });
         }
       } finally {
-        if (mounted) {
-          setLoadingData(false);
-        }
+        if (mounted) setLoadingData(false);
       }
     };
 
@@ -192,43 +154,25 @@ export default function TambahEventPage() {
     };
   }, []);
 
-  /* =========================================================
-     CLEANUP PREVIEW URL
-  ========================================================= */
-
-  useEffect(() => {
-    return () => {
-      if (posterPreview) {
-        URL.revokeObjectURL(posterPreview);
-      }
-    };
-  }, [posterPreview]);
-
-  /* =========================================================
-     FORM CHANGE
-  ========================================================= */
-
   const handleChange = (event) => {
     const { name, value } = event.target;
-
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
-
-    if (notification.message) {
-      setNotification({
-        type: "",
-        message: "",
-      });
-    }
+    setNotification({
+      type: "",
+      message: "",
+    });
   };
 
-  /* =========================================================
-     POSTER MODE
-  ========================================================= */
-
   const handlePosterMode = (mode) => {
+    if (loading) return;
+
+    if (posterPreview) {
+      URL.revokeObjectURL(posterPreview);
+    }
+
     setPosterMode(mode);
     setSelectedFile(null);
     setPosterPreview("");
@@ -244,27 +188,17 @@ export default function TambahEventPage() {
     });
   };
 
-  /* =========================================================
-     SELECT POSTER
-  ========================================================= */
-
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
-
     if (!file) return;
 
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
 
     if (!allowedTypes.includes(file.type)) {
       setNotification({
         type: "error",
-        message: "Format poster harus JPG, JPEG, PNG, atau WEBP.",
+        message: "Poster harus berformat JPG, PNG, atau WEBP.",
       });
-
       event.target.value = "";
       return;
     }
@@ -274,40 +208,32 @@ export default function TambahEventPage() {
         type: "error",
         message: "Ukuran poster maksimal 5 MB.",
       });
-
       event.target.value = "";
       return;
     }
 
+    if (posterPreview) {
+      URL.revokeObjectURL(posterPreview);
+    }
+
     setSelectedFile(file);
-
-    setPosterPreview((previousPreview) => {
-      if (previousPreview) {
-        URL.revokeObjectURL(previousPreview);
-      }
-
-      return URL.createObjectURL(file);
-    });
-
-    setForm((previous) => ({
-      ...previous,
-      poster: "",
-    }));
+    setPosterPreview(URL.createObjectURL(file));
 
     setNotification({
       type: "",
       message: "",
     });
 
-    // Memungkinkan file yang sama dipilih kembali.
     event.target.value = "";
   };
 
-  /* =========================================================
-     REMOVE POSTER
-  ========================================================= */
-
   const removePoster = () => {
+    if (loading) return;
+
+    if (posterPreview) {
+      URL.revokeObjectURL(posterPreview);
+    }
+
     setSelectedFile(null);
     setPosterPreview("");
 
@@ -317,111 +243,35 @@ export default function TambahEventPage() {
     }));
   };
 
-  /* =========================================================
-     UPLOAD POSTER
-  ========================================================= */
-
-  const uploadPoster = async (token) => {
-    if (!selectedFile) {
-      throw new Error("Silakan pilih file poster terlebih dahulu.");
-    }
-
-    const formData = new FormData();
-    formData.append("poster", selectedFile);
-
-    const response = await fetch(UPLOAD_POSTER_ENDPOINT, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-
-    const data = await parseResponse(response);
-
-    const posterPath =
-      data.poster ||
-      data.path ||
-      data.url ||
-      data.file?.path ||
-      data.file?.url ||
-      "";
-
-    if (!posterPath) {
-      throw new Error(
-        "Upload berhasil, tetapi path poster tidak ditemukan dari backend."
-      );
-    }
-
-    return posterPath;
-  };
-
-  /* =========================================================
-     VALIDATION
-  ========================================================= */
-
   const validateForm = () => {
-    if (!form.category_id) {
-      return "Kategori event wajib dipilih.";
-    }
-
-    if (!form.artist_id) {
-      return "Artis wajib dipilih.";
-    }
-
-    if (!form.venue_id) {
-      return "Venue wajib dipilih.";
-    }
-
-    if (!form.event_name.trim()) {
-      return "Nama event wajib diisi.";
-    }
-
-    if (!form.event_date) {
-      return "Tanggal event wajib diisi.";
-    }
-
-    if (!form.event_time) {
-      return "Waktu event wajib diisi.";
-    }
-
-    if (!form.ticket_sale_start) {
+    if (!form.category_id) return "Kategori event wajib dipilih.";
+    if (!form.artist_id) return "Artis wajib dipilih.";
+    if (!form.venue_id) return "Venue wajib dipilih.";
+    if (!form.event_name.trim()) return "Nama event wajib diisi.";
+    if (form.event_name.trim().length > 150)
+      return "Nama event maksimal 150 karakter.";
+    if (!form.event_date) return "Tanggal event wajib diisi.";
+    if (!form.event_time) return "Waktu event wajib diisi.";
+    if (!form.ticket_sale_start)
       return "Tanggal mulai penjualan tiket wajib diisi.";
-    }
-
-    if (!form.ticket_sale_end) {
+    if (!form.ticket_sale_end)
       return "Tanggal akhir penjualan tiket wajib diisi.";
-    }
 
-    if (
-      form.ticket_sale_start >= form.ticket_sale_end
-    ) {
+    if (form.ticket_sale_start > form.ticket_sale_end)
       return "Tanggal akhir penjualan harus setelah tanggal mulai.";
-    }
 
-    if (form.ticket_sale_end > form.event_date) {
+    if (form.ticket_sale_end > form.event_date)
       return "Penjualan tiket tidak boleh berakhir setelah tanggal event.";
-    }
 
-    if (!ALLOWED_STATUSES.includes(form.status)) {
-      return "Status event tidak valid.";
-    }
-
-    if (posterMode === "file" && !selectedFile) {
-      return "Silakan pilih file poster terlebih dahulu.";
-    }
+    if (posterMode === "file" && !selectedFile)
+      return "Silakan pilih poster event.";
 
     if (posterMode === "url") {
-      if (!form.poster.trim()) {
-        return "Link poster wajib diisi.";
-      }
-
+      if (!form.poster.trim()) return "Link poster wajib diisi.";
       try {
         const url = new URL(form.poster.trim());
-
-        if (!["http:", "https:"].includes(url.protocol)) {
+        if (!["http:", "https:"].includes(url.protocol))
           return "Link poster harus menggunakan HTTP atau HTTPS.";
-        }
       } catch {
         return "Format link poster tidak valid.";
       }
@@ -430,132 +280,132 @@ export default function TambahEventPage() {
     return "";
   };
 
-  /* =========================================================
-     SUBMIT EVENT
-  ========================================================= */
+  const createEvent = async (token) => {
+    const payload = {
+      category_id: Number(form.category_id),
+      artist_id: Number(form.artist_id),
+      venue_id: Number(form.venue_id),
+      event_name: form.event_name.trim(),
+      description: form.description.trim() || null,
+      poster: posterMode === "url" ? form.poster.trim() : null,
+      seat_map_image: null,
+      event_date: form.event_date,
+      event_time: form.event_time,
+      ticket_sale_start: form.ticket_sale_start,
+      ticket_sale_end: form.ticket_sale_end,
+      status: "Coming Soon",
+    };
+
+    const response = await fetch(API.events, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await parseResponse(response);
+
+    const eventId =
+      data?.event?.id ?? data?.data?.event?.id ?? data?.data?.id;
+
+    if (!eventId) {
+      throw new Error("ID event tidak ditemukan pada response backend.");
+    }
+
+    return Number(eventId);
+  };
+
+  const uploadPoster = async (token, eventId) => {
+    if (!selectedFile) throw new Error("File poster belum dipilih.");
+    if (!eventId) throw new Error("ID event wajib dikirim.");
+
+    const formData = new FormData();
+    formData.append("poster", selectedFile);
+    formData.append("event_id", String(eventId));
+
+    const response = await fetch(API.uploadPoster, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await parseResponse(response);
+
+    if (!data.poster) {
+      throw new Error("Backend tidak mengembalikan path poster.");
+    }
+
+    return data.poster;
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (loading) return;
+    if (loading || loadingData) return;
 
-    setNotification({
-      type: "",
-      message: "",
-    });
+    setNotification({ type: "", message: "" });
 
     const validationError = validateForm();
-
     if (validationError) {
-      setNotification({
-        type: "error",
-        message: validationError,
-      });
-
+      setNotification({ type: "error", message: validationError });
       return;
     }
 
     const token = getToken();
-
     if (!token) {
       setNotification({
         type: "error",
         message: "Sesi login tidak ditemukan. Silakan login kembali.",
       });
-
       return;
     }
 
     try {
       setLoading(true);
 
-      let posterPath = "";
-
-      if (posterMode === "file") {
-        setNotification({
-          type: "info",
-          message: "Sedang meng-upload poster event...",
-        });
-
-        posterPath = await uploadPoster(token);
-      } else {
-        posterPath = form.poster.trim();
-      }
-
-      /*
-       * Payload mengikuti createEvent pada backend.
-       * organizer_id tidak dikirim dari frontend.
-       * Backend mengambil organizer_id dari req.user.id.
-       */
-      const payload = {
-        category_id: Number(form.category_id),
-        artist_id: Number(form.artist_id),
-        venue_id: Number(form.venue_id),
-
-        event_name: form.event_name.trim(),
-        description: form.description.trim() || null,
-
-        poster: posterPath || null,
-        seat_map_image: null,
-
-        event_date: form.event_date,
-        event_time: form.event_time,
-
-        ticket_sale_start: form.ticket_sale_start,
-        ticket_sale_end: form.ticket_sale_end,
-
-        status: form.status,
-      };
-
       setNotification({
         type: "info",
-        message: "Sedang menyimpan event...",
+        message: "Sedang menyimpan informasi event...",
       });
 
-      const response = await fetch(`${API_BASE}/events`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const eventId = await createEvent(token);
 
-      const data = await parseResponse(response);
-
-      const createdEventId =
-        data.event?.id ||
-        data.data?.event?.id ||
-        data.data?.id;
-
-      if (!createdEventId) {
-        throw new Error(
-          "Event tersimpan, tetapi ID event tidak ditemukan pada response backend."
-        );
+      if (posterMode === "file" && selectedFile) {
+        setNotification({
+          type: "info",
+          message: "Event berhasil dibuat. Sedang mengupload poster...",
+        });
+        await uploadPoster(token, eventId);
       }
 
       setNotification({
         type: "success",
-        message: "Event berhasil dibuat. Mengarahkan ke halaman tiket...",
+        message: "Event berhasil disimpan. Mengalihkan ke halaman tiket...",
       });
 
-      router.push(`/organizer/events/${createdEventId}/tiket`);
+      if (posterPreview) {
+        URL.revokeObjectURL(posterPreview);
+      }
+
+      setTimeout(() => {
+        router.push(`/organizer/event/${eventId}/tiket`);
+      }, 1000);
+
     } catch (error) {
       console.error("CREATE EVENT ERROR:", error);
-
       setNotification({
         type: "error",
         message: getErrorMessage(error),
       });
-    } finally {
       setLoading(false);
     }
   };
-
-  /* =========================================================
-     STYLING
-  ========================================================= */
 
   const inputClass =
     "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10 disabled:bg-slate-50 disabled:text-slate-400";
@@ -563,19 +413,15 @@ export default function TambahEventPage() {
   const labelClass =
     "mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500";
 
-  /* =========================================================
-     RENDER
-  ========================================================= */
+  const isLocked = loading;
 
   return (
     <div className="w-full min-w-0 text-[#0F172A]">
       <div className="mx-auto w-full max-w-7xl">
-
-        {/* HEADER */}
         <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div className="flex items-start gap-4">
             <Link
-              href="/organizer/events"
+              href="/organizer/event"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#112250]/30 hover:bg-[#112250]/5 hover:text-[#112250]"
             >
               <ArrowLeft size={19} />
@@ -585,7 +431,6 @@ export default function TambahEventPage() {
               <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
                 Tambah Event
               </h1>
-
               <p className="mt-1 text-sm text-slate-500">
                 Buat event baru untuk TicketVerse.
               </p>
@@ -598,7 +443,18 @@ export default function TambahEventPage() {
           </div>
         </div>
 
-        {/* NOTIFICATION */}
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <AlertCircle size={19} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-bold">Informasi penyimpanan event</p>
+            <p className="mt-1 text-xs leading-5">
+              Event baru akan disimpan sebagai Draft. Setelah kategori tiket
+              selesai ditambahkan, kamu dapat mengajukan event kepada Super
+              Admin untuk mendapatkan persetujuan.
+            </p>
+          </div>
+        </div>
+
         {notification.message && (
           <div className="mb-6">
             <div
@@ -618,9 +474,7 @@ export default function TambahEventPage() {
                 <AlertCircle size={19} />
               )}
 
-              <span className="flex-1">
-                {notification.message}
-              </span>
+              <span className="flex-1">{notification.message}</span>
 
               {!loading && (
                 <button
@@ -642,30 +496,20 @@ export default function TambahEventPage() {
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-
-            {/* KOLOM KIRI */}
             <div className="space-y-6 xl:col-span-2">
-
-              {/* INFORMASI EVENT */}
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-5">
-                  <h2 className="text-base font-bold text-[#0F172A]">
-                    Informasi Event
-                  </h2>
-
+                  <h2 className="text-base font-bold">Informasi Event</h2>
                   <p className="mt-1 text-xs text-slate-500">
                     Informasi dasar mengenai event yang akan dibuat.
                   </p>
                 </div>
 
                 <div className="grid gap-5 p-6 md:grid-cols-2">
-
-                  {/* NAMA EVENT */}
                   <div className="md:col-span-2">
                     <label className={labelClass}>
                       Nama Event <span className="text-red-500">*</span>
                     </label>
-
                     <input
                       type="text"
                       name="event_name"
@@ -673,147 +517,127 @@ export default function TambahEventPage() {
                       onChange={handleChange}
                       maxLength={150}
                       required
+                      disabled={isLocked}
                       placeholder="Contoh: GIGI Live Concert"
                       className={inputClass}
                     />
                   </div>
 
-                  {/* KATEGORI */}
                   <div>
                     <label className={labelClass}>
                       Kategori <span className="text-red-500">*</span>
                     </label>
-
                     <div className="relative">
                       <Tag
                         size={17}
                         className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                       />
-
                       <select
                         name="category_id"
                         value={form.category_id}
                         onChange={handleChange}
-                        disabled={loadingData}
+                        disabled={loadingData || isLocked}
                         required
                         className={`${inputClass} appearance-none pl-11`}
                       >
                         <option value="">
-                          {loadingData
-                            ? "Memuat kategori..."
-                            : "Pilih kategori"}
+                          {loadingData ? "Memuat kategori..." : "Pilih kategori"}
                         </option>
-
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.category_name}
+                        {categories.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.category_name}
                           </option>
                         ))}
                       </select>
                     </div>
-
                     {!loadingData && categories.length === 0 && (
                       <p className="mt-2 text-xs text-amber-600">
-                        Belum ada kategori. Tambahkan kategori terlebih dahulu.
+                        Belum ada kategori event.
                       </p>
                     )}
                   </div>
 
-                  {/* ARTIS */}
                   <div>
                     <label className={labelClass}>
                       Artis <span className="text-red-500">*</span>
                     </label>
-
                     <div className="relative">
                       <Music
                         size={17}
                         className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                       />
-
                       <select
                         name="artist_id"
                         value={form.artist_id}
                         onChange={handleChange}
-                        disabled={loadingData}
+                        disabled={loadingData || isLocked}
                         required
                         className={`${inputClass} appearance-none pl-11`}
                       >
                         <option value="">
                           {loadingData ? "Memuat artis..." : "Pilih artis"}
                         </option>
-
-                        {artists.map((artist) => (
-                          <option key={artist.id} value={artist.id}>
-                            {artist.artist_name}
+                        {artists.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.artist_name}
                           </option>
                         ))}
                       </select>
                     </div>
-
                     {!loadingData && artists.length === 0 && (
                       <p className="mt-2 text-xs text-amber-600">
-                        Belum ada artis. Tambahkan artis terlebih dahulu.
+                        Belum ada data artis.
                       </p>
                     )}
                   </div>
 
-                  {/* VENUE */}
                   <div className="md:col-span-2">
                     <label className={labelClass}>
                       Venue <span className="text-red-500">*</span>
                     </label>
-
                     <div className="relative">
                       <MapPin
                         size={17}
                         className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                       />
-
                       <select
                         name="venue_id"
                         value={form.venue_id}
                         onChange={handleChange}
-                        disabled={loadingData}
+                        disabled={loadingData || isLocked}
                         required
                         className={`${inputClass} appearance-none pl-11`}
                       >
                         <option value="">
                           {loadingData ? "Memuat venue..." : "Pilih venue"}
                         </option>
-
-                        {venues.map((venue) => (
-                          <option key={venue.id} value={venue.id}>
-                            {venue.venue_name}
-                            {venue.city ? ` — ${venue.city}` : ""}
+                        {venues.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.venue_name}
+                            {item.city ? ` — ${item.city}` : ""}
                           </option>
                         ))}
                       </select>
                     </div>
-
                     {!loadingData && venues.length === 0 && (
                       <p className="mt-2 text-xs text-amber-600">
-                        Belum ada venue. Tambahkan venue terlebih dahulu.
+                        Belum ada data venue.
                       </p>
                     )}
                   </div>
 
-                  {/* DESKRIPSI */}
                   <div className="md:col-span-2">
-                    <label className={labelClass}>
-                      Deskripsi Event
-                    </label>
-
+                    <label className={labelClass}>Deskripsi Event</label>
                     <textarea
                       name="description"
                       value={form.description}
                       onChange={handleChange}
                       rows={5}
                       maxLength={5000}
+                      disabled={isLocked}
                       placeholder="Masukkan deskripsi lengkap mengenai event..."
                       className={`${inputClass} resize-none`}
                     />
-
                     <p className="mt-1 text-right text-xs text-slate-400">
                       {form.description.length}/5000 karakter
                     </p>
@@ -821,151 +645,126 @@ export default function TambahEventPage() {
                 </div>
               </section>
 
-              {/* JADWAL EVENT */}
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-5">
-                  <h2 className="text-base font-bold text-[#0F172A]">
-                    Jadwal Event
-                  </h2>
-
+                  <h2 className="text-base font-bold">Jadwal Event</h2>
                   <p className="mt-1 text-xs text-slate-500">
                     Tentukan jadwal event dan periode penjualan tiket.
                   </p>
                 </div>
 
                 <div className="grid gap-5 p-6 md:grid-cols-2">
-
-                  {/* TANGGAL EVENT */}
                   <div>
                     <label className={labelClass}>
                       Tanggal Event <span className="text-red-500">*</span>
                     </label>
-
                     <div className="relative">
                       <CalendarDays
                         size={17}
                         className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                       />
-
                       <input
                         type="date"
                         name="event_date"
                         value={form.event_date}
                         onChange={handleChange}
                         required
+                        disabled={isLocked}
                         className={`${inputClass} pl-11`}
                       />
                     </div>
                   </div>
 
-                  {/* WAKTU EVENT */}
                   <div>
                     <label className={labelClass}>
                       Waktu Event <span className="text-red-500">*</span>
                     </label>
-
                     <div className="relative">
                       <Clock3
                         size={17}
                         className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                       />
-
                       <input
                         type="time"
                         name="event_time"
                         value={form.event_time}
                         onChange={handleChange}
                         required
+                        disabled={isLocked}
                         className={`${inputClass} pl-11`}
                       />
                     </div>
                   </div>
 
-                  {/* SALE START */}
                   <div>
                     <label className={labelClass}>
                       Mulai Penjualan Tiket{" "}
                       <span className="text-red-500">*</span>
                     </label>
-
                     <input
                       type="date"
                       name="ticket_sale_start"
                       value={form.ticket_sale_start}
                       onChange={handleChange}
                       required
+                      disabled={isLocked}
+                      max={form.ticket_sale_end || form.event_date || undefined}
                       className={inputClass}
                     />
                   </div>
 
-                  {/* SALE END */}
                   <div>
                     <label className={labelClass}>
                       Akhir Penjualan Tiket{" "}
                       <span className="text-red-500">*</span>
                     </label>
-
                     <input
                       type="date"
                       name="ticket_sale_end"
                       value={form.ticket_sale_end}
                       onChange={handleChange}
                       required
+                      disabled={isLocked}
                       min={form.ticket_sale_start || undefined}
                       max={form.event_date || undefined}
                       className={inputClass}
                     />
                   </div>
 
-                  {/* STATUS */}
                   <div className="md:col-span-2">
-                    <label className={labelClass}>
-                      Status Event
-                    </label>
-
-                    <select
-                      name="status"
-                      value={form.status}
-                      onChange={handleChange}
-                      className={inputClass}
-                    >
-                      {ALLOWED_STATUSES.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-
-                    <p className="mt-2 text-xs leading-5 text-slate-400">
-                      Pilih status event sesuai pilihan yang tersedia pada database.
-                    </p>
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 size={17} className="text-blue-600" />
+                        <p className="text-sm font-bold text-blue-900">
+                          Status awal: Coming Soon
+                        </p>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-blue-700">
+                        Status ketersediaan tiket akan diatur sesuai kondisi
+                        penjualan. Persetujuan event dikelola secara terpisah
+                        oleh Super Admin.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </section>
             </div>
 
-            {/* KOLOM KANAN */}
             <div className="space-y-6">
-
-              {/* POSTER */}
               <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-5">
-                  <h2 className="text-base font-bold text-[#0F172A]">
-                    Poster Event
-                  </h2>
-
+                  <h2 className="text-base font-bold">Poster Event</h2>
                   <p className="mt-1 text-xs text-slate-500">
                     Gunakan gambar dari komputer atau link gambar.
                   </p>
                 </div>
 
                 <div className="p-6">
-
-                  {/* MODE SELECTOR */}
                   <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
                     <button
                       type="button"
                       onClick={() => handlePosterMode("file")}
+                      disabled={isLocked}
                       className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
                         posterMode === "file"
                           ? "bg-white text-[#112250] shadow-sm"
@@ -979,6 +778,7 @@ export default function TambahEventPage() {
                     <button
                       type="button"
                       onClick={() => handlePosterMode("url")}
+                      disabled={isLocked}
                       className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
                         posterMode === "url"
                           ? "bg-white text-[#112250] shadow-sm"
@@ -990,7 +790,6 @@ export default function TambahEventPage() {
                     </button>
                   </div>
 
-                  {/* FILE MODE */}
                   {posterMode === "file" && (
                     <div className="mt-5">
                       {!posterPreview ? (
@@ -998,23 +797,20 @@ export default function TambahEventPage() {
                           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm transition group-hover:text-[#112250]">
                             <Upload size={24} />
                           </div>
-
                           <p className="text-sm font-bold text-slate-700">
                             Pilih gambar dari folder
                           </p>
-
                           <p className="mt-1 text-xs text-slate-400">
                             JPG, JPEG, PNG atau WEBP
                           </p>
-
                           <p className="mt-1 text-xs text-slate-400">
                             Maksimal 5 MB
                           </p>
-
                           <input
                             type="file"
                             accept="image/jpeg,image/png,image/webp"
                             onChange={handleFileChange}
+                            disabled={isLocked}
                             className="hidden"
                           />
                         </label>
@@ -1026,28 +822,24 @@ export default function TambahEventPage() {
                               alt="Preview poster event"
                               className="h-full w-full object-cover"
                             />
-
                             <button
                               type="button"
                               onClick={removePoster}
+                              disabled={isLocked}
                               className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-lg transition hover:bg-red-50 hover:text-red-600"
                             >
                               <X size={17} />
                             </button>
                           </div>
-
                           <div className="p-4">
                             <p className="truncate text-sm font-bold text-slate-700">
                               {selectedFile?.name}
                             </p>
-
                             <p className="mt-1 text-xs text-slate-400">
                               {selectedFile
-                                ? `${(
-                                    selectedFile.size /
-                                    1024 /
-                                    1024
-                                  ).toFixed(2)} MB`
+                                ? `${(selectedFile.size / 1024 / 1024).toFixed(
+                                    2
+                                  )} MB`
                                 : ""}
                             </p>
                           </div>
@@ -1056,36 +848,30 @@ export default function TambahEventPage() {
                     </div>
                   )}
 
-                  {/* URL MODE */}
                   {posterMode === "url" && (
                     <div className="mt-5">
-                      <label className={labelClass}>
-                        Link Poster
-                      </label>
-
+                      <label className={labelClass}>Link Poster</label>
                       <div className="relative">
                         <LinkIcon
                           size={17}
                           className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                         />
-
                         <input
                           type="url"
                           name="poster"
                           value={form.poster}
                           onChange={handleChange}
+                          disabled={isLocked}
                           placeholder="https://example.com/poster.jpg"
                           className={`${inputClass} pl-11`}
                         />
                       </div>
-
                       <p className="mt-2 text-xs leading-5 text-slate-400">
                         Masukkan URL langsung menuju gambar poster.
                       </p>
                     </div>
                   )}
 
-                  {/* URL PREVIEW */}
                   {posterMode === "url" && form.poster && (
                     <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
@@ -1093,28 +879,27 @@ export default function TambahEventPage() {
                           <ImageIcon size={16} />
                           Preview
                         </span>
-
                         <button
                           type="button"
                           onClick={removePoster}
+                          disabled={isLocked}
                           className="text-slate-400 transition hover:text-red-500"
                         >
                           <X size={17} />
                         </button>
                       </div>
-
                       <div className="aspect-[4/5] bg-slate-100">
                         <img
                           src={form.poster}
                           alt="Preview poster"
                           className="h-full w-full object-cover"
-                          onError={() => {
+                          onError={() =>
                             setNotification({
                               type: "error",
                               message:
-                                "Gambar dari link tidak dapat dimuat. Periksa kembali URL poster.",
-                            });
-                          }}
+                                "Gambar tidak dapat dimuat. Periksa URL poster.",
+                            })
+                          }
                         />
                       </div>
                     </div>
@@ -1122,30 +907,27 @@ export default function TambahEventPage() {
                 </div>
               </section>
 
-              {/* INFO POSTER */}
               <section className="rounded-2xl border border-[#112250]/15 bg-[#112250]/5 p-5">
                 <div className="flex gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#112250] text-white">
                     <ImageIcon size={17} />
                   </div>
-
                   <div>
                     <h3 className="text-sm font-bold text-slate-800">
                       Penyimpanan Poster
                     </h3>
-
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Poster dari folder akan dikirim ke server TicketVerse.
-                      Database menyimpan path gambar pada kolom poster.
+                      Poster dari folder akan diupload setelah event berhasil
+                      dibuat. Backend akan menyimpan path poster berdasarkan ID
+                      event.
                     </p>
                   </div>
                 </div>
               </section>
 
-              {/* ACTION BUTTON */}
               <div className="flex flex-col gap-3 sm:flex-row xl:flex-col">
                 <Link
-                  href="/organizer/events"
+                  href="/organizer/event"
                   className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
                 >
                   Batal

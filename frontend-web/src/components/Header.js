@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import {
@@ -29,25 +30,109 @@ export default function Header() {
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
 
-  // ==========================================================
-  // LOAD USER
-  // ==========================================================
+  const getPhoto = useCallback((currentUser) => {
+    const photo =
+      currentUser?.photo ||
+      currentUser?.profile_image ||
+      currentUser?.profile_picture ||
+      currentUser?.avatar ||
+      currentUser?.image ||
+      null;
 
-  useEffect(() => {
+    if (!photo) return null;
+
+    if (
+      photo.startsWith("http://") ||
+      photo.startsWith("https://") ||
+      photo.startsWith("data:")
+    ) {
+      return photo;
+    }
+
+    return `${API_URL}${photo.startsWith("/") ? "" : "/"}${photo}`;
+  }, [API_URL]);
+
+  const loadUser = useCallback(() => {
     try {
       const data = localStorage.getItem("user");
 
-      if (data) {
-        setUser(JSON.parse(data));
+      if (!data) {
+        setUser(null);
+        return;
       }
+
+      const parsedUser = JSON.parse(data);
+
+      setUser({
+        ...parsedUser,
+        fullname:
+          parsedUser.fullname ||
+          parsedUser.name ||
+          parsedUser.username ||
+          "User",
+        email: parsedUser.email || "",
+        photo: getPhoto(parsedUser),
+      });
     } catch (error) {
       console.error("Gagal membaca user:", error);
+      setUser(null);
     }
-  }, []);
+  }, [getPhoto]);
 
-  // ==========================================================
-  // GET USER ID
-  // ==========================================================
+  useEffect(() => {
+    loadUser();
+
+    const handleProfileUpdate = (event) => {
+      if (event.detail) {
+        const updatedUser = event.detail.user || event.detail;
+
+        const normalizedUser = {
+          ...updatedUser,
+          fullname:
+            updatedUser.fullname ||
+            updatedUser.name ||
+            updatedUser.username ||
+            "User",
+          email: updatedUser.email || "",
+          photo: getPhoto(updatedUser),
+        };
+
+        setUser(normalizedUser);
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            ...JSON.parse(localStorage.getItem("user") || "{}"),
+            ...updatedUser,
+          })
+        );
+      } else {
+        loadUser();
+      }
+    };
+
+    const handleStorageChange = (event) => {
+      if (event.key === "user") {
+        loadUser();
+      }
+    };
+
+    window.addEventListener(
+      "ticketverse:user-profile-updated",
+      handleProfileUpdate
+    );
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      window.removeEventListener(
+        "ticketverse:user-profile-updated",
+        handleProfileUpdate
+      );
+
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [loadUser, getPhoto]);
 
   const getUserId = () => {
     try {
@@ -69,18 +154,12 @@ export default function Header() {
     }
   };
 
-  // ==========================================================
-  // LOAD NOTIFICATIONS
-  // ==========================================================
-
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem("token");
       const userId = getUserId();
 
-      if (!token || !userId) {
-        return;
-      }
+      if (!token || !userId) return;
 
       setLoadingNotifications(true);
 
@@ -95,18 +174,13 @@ export default function Header() {
       );
 
       if (!response.ok) {
-        console.error(
-          "Gagal mengambil notifikasi:",
-          response.status
-        );
+        console.error("Gagal mengambil notifikasi:", response.status);
         return;
       }
 
       const data = await response.json();
 
-      if (!data.success) {
-        return;
-      }
+      if (!data.success) return;
 
       const notificationData = Array.isArray(data.notifications)
         ? data.notifications
@@ -120,10 +194,6 @@ export default function Header() {
     }
   };
 
-  // ==========================================================
-  // INITIAL NOTIFICATION + AUTO REFRESH
-  // ==========================================================
-
   useEffect(() => {
     if (!user) return;
 
@@ -133,14 +203,8 @@ export default function Header() {
       fetchNotifications();
     }, 30000);
 
-    return () => {
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [user]);
-
-  // ==========================================================
-  // UNREAD COUNT
-  // ==========================================================
 
   const unreadCount = notifications.filter(
     (notification) =>
@@ -149,34 +213,21 @@ export default function Header() {
       notification.is_read === "0"
   ).length;
 
-  // ==========================================================
-  // ROLE
-  // ==========================================================
-
   const getRoleName = () => {
     switch (user?.role) {
       case "super_admin":
         return "Super Admin";
-
       case "event_organizer":
         return "Event Organizer";
-
       case "customer":
         return "Customer";
-
       default:
         return "User";
     }
   };
 
-  // ==========================================================
-  // PAGE TITLE
-  // ==========================================================
-
   const getPageTitle = () => {
-    if (pathname.includes("/dashboard")) {
-      return "Dashboard";
-    }
+    if (pathname.includes("/dashboard")) return "Dashboard";
 
     if (
       pathname.includes("/users") ||
@@ -197,44 +248,17 @@ export default function Header() {
         : "Tiket";
     }
 
-    if (pathname.includes("/participants")) {
-      return "Peserta";
-    }
-
-    if (pathname.includes("/organizers")) {
-      return "Organizer";
-    }
-
-    if (pathname.includes("/reports")) {
-      return "Laporan";
-    }
-
-    if (pathname.includes("/favorites")) {
-      return "Favorit";
-    }
-
-    if (pathname.includes("/notifications")) {
-      return "Notifikasi";
-    }
-
-    if (pathname.includes("/profile")) {
-      return "Profil";
-    }
-
-    if (pathname.includes("/settings")) {
-      return "Pengaturan";
-    }
-
-    if (pathname.includes("/roles")) {
-      return "Roles & Permissions";
-    }
+    if (pathname.includes("/participants")) return "Peserta";
+    if (pathname.includes("/organizers")) return "Organizer";
+    if (pathname.includes("/reports")) return "Laporan";
+    if (pathname.includes("/favorites")) return "Favorit";
+    if (pathname.includes("/notifications")) return "Notifikasi";
+    if (pathname.includes("/profile")) return "Profil";
+    if (pathname.includes("/settings")) return "Pengaturan";
+    if (pathname.includes("/roles")) return "Roles & Permissions";
 
     return "Dashboard";
   };
-
-  // ==========================================================
-  // PROFILE URL
-  // ==========================================================
 
   const getProfileUrl = () => {
     if (user?.role === "super_admin") {
@@ -246,15 +270,11 @@ export default function Header() {
     }
 
     if (user?.role === "customer") {
-      return "/customer/profile";
+      return "/profile";
     }
 
     return "/profile";
   };
-
-  // ==========================================================
-  // SETTINGS URL
-  // ==========================================================
 
   const getSettingsUrl = () => {
     if (user?.role === "super_admin") {
@@ -265,16 +285,8 @@ export default function Header() {
       return "/organizer/settings";
     }
 
-    if (user?.role === "customer") {
-      return "/settings";
-    }
-
     return "/settings";
   };
-
-  // ==========================================================
-  // LOGOUT
-  // ==========================================================
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -284,19 +296,11 @@ export default function Header() {
     router.push("/login");
   };
 
-  // ==========================================================
-  // INITIAL
-  // ==========================================================
-
   const getInitial = () => {
-    if (!user?.fullname) return "U";
+    const fullname = user?.fullname || user?.name || "User";
 
-    return user.fullname.charAt(0).toUpperCase();
+    return fullname.charAt(0).toUpperCase();
   };
-
-  // ==========================================================
-  // TOGGLE NOTIFICATION
-  // ==========================================================
 
   const toggleNotification = () => {
     setNotificationOpen((prev) => !prev);
@@ -307,18 +311,10 @@ export default function Header() {
     }
   };
 
-  // ==========================================================
-  // TOGGLE PROFILE
-  // ==========================================================
-
   const toggleProfile = () => {
     setProfileOpen((prev) => !prev);
     setNotificationOpen(false);
   };
-
-  // ==========================================================
-  // MARK NOTIFICATION AS READ
-  // ==========================================================
 
   const markAsRead = async (notificationId) => {
     try {
@@ -338,9 +334,7 @@ export default function Header() {
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        return;
-      }
+      if (!response.ok || !data.success) return;
 
       setNotifications((prev) =>
         prev.map((notification) =>
@@ -353,16 +347,9 @@ export default function Header() {
         )
       );
     } catch (error) {
-      console.error(
-        "Gagal menandai notifikasi:",
-        error
-      );
+      console.error("Gagal menandai notifikasi:", error);
     }
   };
-
-  // ==========================================================
-  // CLICK NOTIFICATION
-  // ==========================================================
 
   const handleNotificationClick = async (notification) => {
     const isUnread =
@@ -375,18 +362,12 @@ export default function Header() {
     }
   };
 
-  // ==========================================================
-  // FORMAT TIME
-  // ==========================================================
-
   const formatNotificationTime = (createdAt) => {
     if (!createdAt) return "";
 
     const date = new Date(createdAt);
 
-    if (Number.isNaN(date.getTime())) {
-      return "";
-    }
+    if (Number.isNaN(date.getTime())) return "";
 
     const now = new Date();
 
@@ -394,9 +375,7 @@ export default function Header() {
       (now.getTime() - date.getTime()) / 1000
     );
 
-    if (diff < 60) {
-      return "Baru saja";
-    }
+    if (diff < 60) return "Baru saja";
 
     if (diff < 3600) {
       return `${Math.floor(diff / 60)} menit lalu`;
@@ -417,10 +396,6 @@ export default function Header() {
     });
   };
 
-  // ==========================================================
-  // NOTIFICATION ICON
-  // ==========================================================
-
   const getNotificationIcon = (title = "") => {
     const lowerTitle = title.toLowerCase();
 
@@ -429,49 +404,25 @@ export default function Header() {
       lowerTitle.includes("transaksi") ||
       lowerTitle.includes("bayar")
     ) {
-      return (
-        <CreditCard
-          size={15}
-          strokeWidth={1.8}
-        />
-      );
+      return <CreditCard size={15} strokeWidth={1.8} />;
     }
 
     if (
       lowerTitle.includes("event") ||
       lowerTitle.includes("konser")
     ) {
-      return (
-        <CalendarDays
-          size={15}
-          strokeWidth={1.8}
-        />
-      );
+      return <CalendarDays size={15} strokeWidth={1.8} />;
     }
 
     if (
       lowerTitle.includes("user") ||
       lowerTitle.includes("akun")
     ) {
-      return (
-        <User
-          size={15}
-          strokeWidth={1.8}
-        />
-      );
+      return <User size={15} strokeWidth={1.8} />;
     }
 
-    return (
-      <Info
-        size={15}
-        strokeWidth={1.8}
-      />
-    );
+    return <Info size={15} strokeWidth={1.8} />;
   };
-
-  // ==========================================================
-  // RETURN
-  // ==========================================================
 
   return (
     <header
@@ -499,10 +450,6 @@ export default function Header() {
           xl:px-10
         "
       >
-        {/* ==================================================
-            LEFT
-        ================================================== */}
-
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <div
@@ -563,22 +510,7 @@ export default function Header() {
           </div>
         </div>
 
-        {/* ==================================================
-            RIGHT
-        ================================================== */}
-
-        <div
-          className="
-            flex
-            items-center
-            gap-1.5
-            sm:gap-3
-          "
-        >
-          {/* =================================================
-              NOTIFICATION
-          ================================================= */}
-
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <div className="relative">
             <button
               onClick={toggleNotification}
@@ -605,11 +537,7 @@ export default function Header() {
               <Bell
                 size={19}
                 strokeWidth={1.8}
-                className="
-                  transition-transform
-                  duration-200
-                  group-hover:scale-105
-                "
+                className="transition-transform duration-200 group-hover:scale-105"
               />
 
               {unreadCount > 0 && (
@@ -634,16 +562,10 @@ export default function Header() {
                     ring-white
                   "
                 >
-                  {unreadCount > 9
-                    ? "9+"
-                    : unreadCount}
+                  {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
             </button>
-
-            {/* =================================================
-                NOTIFICATION DROPDOWN
-            ================================================= */}
 
             {notificationOpen && (
               <div
@@ -663,8 +585,6 @@ export default function Header() {
                   ring-black/[0.02]
                 "
               >
-                {/* HEADER */}
-
                 <div
                   className="
                     flex
@@ -679,35 +599,16 @@ export default function Header() {
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3
-                        className="
-                          text-[13px]
-                          font-bold
-                          text-[#112250]
-                        "
-                      >
+                      <h3 className="text-[13px] font-bold text-[#112250]">
                         Notifikasi
                       </h3>
 
                       {unreadCount > 0 && (
-                        <span
-                          className="
-                            h-1.5
-                            w-1.5
-                            rounded-full
-                            bg-[#3B507D]
-                          "
-                        />
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#3B507D]" />
                       )}
                     </div>
 
-                    <p
-                      className="
-                        mt-1
-                        text-[10px]
-                        text-[#8492A3]
-                      "
-                    >
+                    <p className="mt-1 text-[10px] text-[#8492A3]">
                       Aktivitas terbaru akun Anda
                     </p>
                   </div>
@@ -731,21 +632,8 @@ export default function Header() {
                   )}
                 </div>
 
-                {/* =================================================
-                    LOADING
-                ================================================= */}
-
-                {loadingNotifications &&
-                notifications.length === 0 ? (
-                  <div
-                    className="
-                      flex
-                      items-center
-                      justify-center
-                      px-5
-                      py-11
-                    "
-                  >
+                {loadingNotifications && notifications.length === 0 ? (
+                  <div className="flex items-center justify-center px-5 py-11">
                     <div className="flex items-center gap-2.5">
                       <div
                         className="
@@ -759,22 +647,12 @@ export default function Header() {
                         "
                       />
 
-                      <span
-                        className="
-                          text-[11px]
-                          font-medium
-                          text-[#697F93]
-                        "
-                      >
+                      <span className="text-[11px] font-medium text-[#697F93]">
                         Memuat notifikasi...
                       </span>
                     </div>
                   </div>
                 ) : notifications.length === 0 ? (
-                  /* =================================================
-                      EMPTY
-                  ================================================= */
-
                   <div className="px-5 py-11 text-center">
                     <div
                       className="
@@ -791,173 +669,107 @@ export default function Header() {
                         text-[#9AA6B2]
                       "
                     >
-                      <Bell
-                        size={19}
-                        strokeWidth={1.7}
-                      />
+                      <Bell size={19} strokeWidth={1.7} />
                     </div>
 
-                    <p
-                      className="
-                        mt-4
-                        text-[12px]
-                        font-bold
-                        text-[#112250]
-                      "
-                    >
+                    <p className="mt-4 text-[12px] font-bold text-[#112250]">
                       Belum ada notifikasi
                     </p>
 
-                    <p
-                      className="
-                        mx-auto
-                        mt-1.5
-                        max-w-[230px]
-                        text-[10px]
-                        leading-5
-                        text-[#9AA6B2]
-                      "
-                    >
-                      Notifikasi aktivitas akun akan muncul
-                      di sini.
+                    <p className="mx-auto mt-1.5 max-w-[230px] text-[10px] leading-5 text-[#9AA6B2]">
+                      Notifikasi aktivitas akun akan muncul di sini.
                     </p>
                   </div>
                 ) : (
-                  /* =================================================
-                      ITEMS
-                  ================================================= */
-
                   <div className="max-h-[390px] overflow-y-auto">
-                    {notifications
-                      .slice(0, 5)
-                      .map((notification) => {
-                        const isUnread =
-                          notification.is_read === 0 ||
-                          notification.is_read === false ||
-                          notification.is_read === "0";
+                    {notifications.slice(0, 5).map((notification) => {
+                      const isUnread =
+                        notification.is_read === 0 ||
+                        notification.is_read === false ||
+                        notification.is_read === "0";
 
-                        return (
-                          <button
-                            key={notification.id}
-                            onClick={() =>
-                              handleNotificationClick(
-                                notification
-                              )
+                      return (
+                        <button
+                          key={notification.id}
+                          onClick={() =>
+                            handleNotificationClick(notification)
+                          }
+                          className={`
+                            group
+                            flex
+                            w-full
+                            gap-3
+                            border-b
+                            border-[#EEF1F5]
+                            px-5
+                            py-4
+                            text-left
+                            transition-all
+                            duration-200
+                            hover:bg-[#F8FAFC]
+                            ${
+                              isUnread
+                                ? "bg-[#FCFDFE]"
+                                : "bg-white"
                             }
+                          `}
+                        >
+                          <div
                             className={`
-                              group
                               flex
-                              w-full
-                              gap-3
-                              border-b
-                              border-[#EEF1F5]
-                              px-5
-                              py-4
-                              text-left
-                              transition-all
-                              duration-200
-                              hover:bg-[#F8FAFC]
+                              h-9
+                              w-9
+                              flex-shrink-0
+                              items-center
+                              justify-center
+                              rounded-xl
+                              border
+                              transition
                               ${
                                 isUnread
-                                  ? "bg-[#FCFDFE]"
-                                  : "bg-white"
+                                  ? "border-[#E0E6EE] bg-[#F2F5F8] text-[#3B507D]"
+                                  : "border-[#EDF0F4] bg-[#F8F9FB] text-[#9AA6B2]"
                               }
                             `}
                           >
-                            {/* ICON */}
+                            {getNotificationIcon(notification.title)}
+                          </div>
 
-                            <div
-                              className={`
-                                flex
-                                h-9
-                                w-9
-                                flex-shrink-0
-                                items-center
-                                justify-center
-                                rounded-xl
-                                border
-                                transition
-                                ${
-                                  isUnread
-                                    ? "border-[#E0E6EE] bg-[#F2F5F8] text-[#3B507D]"
-                                    : "border-[#EDF0F4] bg-[#F8F9FB] text-[#9AA6B2]"
-                                }
-                              `}
-                            >
-                              {getNotificationIcon(
-                                notification.title
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p
+                                className={`
+                                  line-clamp-1
+                                  text-[12px]
+                                  leading-5
+                                  ${
+                                    isUnread
+                                      ? "font-bold text-[#112250]"
+                                      : "font-semibold text-[#4B5C72]"
+                                  }
+                                `}
+                              >
+                                {notification.title || "Notifikasi"}
+                              </p>
+
+                              {isUnread && (
+                                <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#3B507D]" />
                               )}
                             </div>
 
-                            {/* CONTENT */}
+                            <p className="mt-1 line-clamp-2 text-[10px] leading-[1.65] text-[#718096]">
+                              {notification.message || "Tidak ada pesan."}
+                            </p>
 
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-2">
-                                <p
-                                  className={`
-                                    line-clamp-1
-                                    text-[12px]
-                                    leading-5
-                                    ${
-                                      isUnread
-                                        ? "font-bold text-[#112250]"
-                                        : "font-semibold text-[#4B5C72]"
-                                    }
-                                  `}
-                                >
-                                  {notification.title ||
-                                    "Notifikasi"}
-                                </p>
-
-                                {isUnread && (
-                                  <span
-                                    className="
-                                      mt-1.5
-                                      h-1.5
-                                      w-1.5
-                                      flex-shrink-0
-                                      rounded-full
-                                      bg-[#3B507D]
-                                    "
-                                  />
-                                )}
-                              </div>
-
-                              <p
-                                className="
-                                  mt-1
-                                  line-clamp-2
-                                  text-[10px]
-                                  leading-[1.65]
-                                  text-[#718096]
-                                "
-                              >
-                                {notification.message ||
-                                  "Tidak ada pesan."}
-                              </p>
-
-                              <p
-                                className="
-                                  mt-1.5
-                                  text-[9px]
-                                  font-medium
-                                  text-[#A0AAB7]
-                                "
-                              >
-                                {formatNotificationTime(
-                                  notification.created_at
-                                )}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
+                            <p className="mt-1.5 text-[9px] font-medium text-[#A0AAB7]">
+                              {formatNotificationTime(notification.created_at)}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
-
-                {/* =================================================
-                    FOOTER
-                ================================================= */}
 
                 <button
                   onClick={() => {
@@ -982,30 +794,13 @@ export default function Header() {
                   "
                 >
                   Lihat semua notifikasi
-
                   <ArrowUpRight size={12} />
                 </button>
               </div>
             )}
           </div>
 
-          {/* =================================================
-              DIVIDER
-          ================================================= */}
-
-          <div
-            className="
-              hidden
-              h-8
-              w-px
-              bg-[#E4E8EE]
-              sm:block
-            "
-          />
-
-          {/* =================================================
-              PROFILE
-          ================================================= */}
+          <div className="hidden h-8 w-px bg-[#E4E8EE] sm:block" />
 
           <div className="relative">
             <button
@@ -1027,8 +822,6 @@ export default function Header() {
                 }
               `}
             >
-              {/* AVATAR */}
-
               <div
                 className="
                   relative
@@ -1052,57 +845,22 @@ export default function Header() {
                   <img
                     src={user.photo}
                     alt="Profile"
-                    className="
-                      h-full
-                      w-full
-                      object-cover
-                    "
+                    className="h-full w-full object-cover"
                   />
                 ) : (
                   getInitial()
                 )}
               </div>
 
-              {/* USER INFO */}
-
-              <div
-                className="
-                  hidden
-                  max-w-[170px]
-                  text-left
-                  sm:block
-                "
-              >
-                <p
-                  className="
-                    truncate
-                    text-[12px]
-                    font-bold
-                    tracking-[-0.01em]
-                    text-[#112250]
-                  "
-                >
+              <div className="hidden max-w-[170px] text-left sm:block">
+                <p className="truncate text-[12px] font-bold tracking-[-0.01em] text-[#112250]">
                   {user?.fullname || "User"}
                 </p>
 
                 <div className="mt-0.5 flex items-center gap-1.5">
-                  <span
-                    className="
-                      h-1.5
-                      w-1.5
-                      rounded-full
-                      bg-[#3B507D]
-                    "
-                  />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#3B507D]" />
 
-                  <p
-                    className="
-                      truncate
-                      text-[9px]
-                      font-medium
-                      text-[#718096]
-                    "
-                  >
+                  <p className="truncate text-[9px] font-medium text-[#718096]">
                     {getRoleName()}
                   </p>
                 </div>
@@ -1117,18 +875,10 @@ export default function Header() {
                   transition-transform
                   duration-200
                   sm:block
-                  ${
-                    profileOpen
-                      ? "rotate-180"
-                      : ""
-                  }
+                  ${profileOpen ? "rotate-180" : ""}
                 `}
               />
             </button>
-
-            {/* =================================================
-                PROFILE DROPDOWN
-            ================================================= */}
 
             {profileOpen && (
               <div
@@ -1147,8 +897,6 @@ export default function Header() {
                   ring-black/[0.02]
                 "
               >
-                {/* USER INFO */}
-
                 <div
                   className="
                     border-b
@@ -1183,11 +931,7 @@ export default function Header() {
                         <img
                           src={user.photo}
                           alt="Profile"
-                          className="
-                            h-full
-                            w-full
-                            object-cover
-                          "
+                          className="h-full w-full object-cover"
                         />
                       ) : (
                         getInitial()
@@ -1195,25 +939,11 @@ export default function Header() {
                     </div>
 
                     <div className="min-w-0">
-                      <p
-                        className="
-                          truncate
-                          text-[13px]
-                          font-bold
-                          text-[#112250]
-                        "
-                      >
+                      <p className="truncate text-[13px] font-bold text-[#112250]">
                         {user?.fullname || "User"}
                       </p>
 
-                      <p
-                        className="
-                          mt-0.5
-                          truncate
-                          text-[10px]
-                          text-[#718096]
-                        "
-                      >
+                      <p className="mt-0.5 truncate text-[10px] text-[#718096]">
                         {user?.email || "-"}
                       </p>
 
@@ -1231,30 +961,15 @@ export default function Header() {
                           py-1
                         "
                       >
-                        <span
-                          className="
-                            h-1.5
-                            w-1.5
-                            rounded-full
-                            bg-[#3B507D]
-                          "
-                        />
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#3B507D]" />
 
-                        <span
-                          className="
-                            text-[9px]
-                            font-bold
-                            text-[#3B507D]
-                          "
-                        >
+                        <span className="text-[9px] font-bold text-[#3B507D]">
                           {getRoleName()}
                         </span>
                       </div>
                     </div>
                   </div>
                 </div>
-
-                {/* MENU */}
 
                 <div className="p-2">
                   <button
@@ -1295,10 +1010,7 @@ export default function Header() {
                         group-hover:text-[#3B507D]
                       "
                     >
-                      <User
-                        size={16}
-                        strokeWidth={1.8}
-                      />
+                      <User size={16} strokeWidth={1.8} />
                     </span>
 
                     Profil Saya
@@ -1342,25 +1054,14 @@ export default function Header() {
                         group-hover:text-[#3B507D]
                       "
                     >
-                      <Settings
-                        size={16}
-                        strokeWidth={1.8}
-                      />
+                      <Settings size={16} strokeWidth={1.8} />
                     </span>
 
                     Pengaturan
                   </button>
                 </div>
 
-                {/* LOGOUT */}
-
-                <div
-                  className="
-                    border-t
-                    border-[#EAEFF4]
-                    p-2
-                  "
-                >
+                <div className="border-t border-[#EAEFF4] p-2">
                   <button
                     onClick={handleLogout}
                     className="
@@ -1394,10 +1095,7 @@ export default function Header() {
                         group-hover:bg-white
                       "
                     >
-                      <LogOut
-                        size={16}
-                        strokeWidth={1.8}
-                      />
+                      <LogOut size={16} strokeWidth={1.8} />
                     </span>
 
                     Logout
