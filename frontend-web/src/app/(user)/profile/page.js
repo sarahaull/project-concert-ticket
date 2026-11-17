@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -20,12 +19,44 @@ import {
   ArrowLeft,
   Sparkles,
   ImagePlus,
+  Building2,
+  Globe,
+  MapPin,
+  FileText,
+  Clock,
+  Send,
+  RefreshCw,
 } from "lucide-react";
 
-const API_URL =
+// Komponen SVG inline pengganti ikon Instagram dari lucide-react
+function InstagramIcon({ size = 24, className = "" }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
+const RAW_API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
+const API_URL = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/, "");
+
 const PROFILE_API = `${API_URL}/api/users/profile`;
+const ORGANIZER_API = `${API_URL}/api/organizer`;
 
 const initialForm = {
   fullname: "",
@@ -34,9 +65,30 @@ const initialForm = {
   birth_date: "",
 };
 
+const initialOrganizerForm = {
+  organization_name: "",
+  organization_type: "individual",
+  responsible_name: "",
+  address: "",
+  description: "",
+  instagram: "",
+  website: "",
+};
+
+async function readResponse(response) {
+  const text = await response.text();
+
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error("Respons server tidak valid.");
+  }
+}
+
 export default function ProfilePage() {
   const router = useRouter();
   const fileInputRef = useRef(null);
+  const previewUrlRef = useRef(null);
 
   const [user, setUser] = useState(null);
   const [form, setForm] = useState(initialForm);
@@ -51,6 +103,14 @@ export default function ProfilePage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [organizerLoading, setOrganizerLoading] = useState(false);
+  const [organizerSubmitting, setOrganizerSubmitting] = useState(false);
+  const [organizerApplication, setOrganizerApplication] = useState(null);
+  const [organizerForm, setOrganizerForm] = useState(initialOrganizerForm);
+  const [showOrganizerForm, setShowOrganizerForm] = useState(false);
+  const [organizerMessage, setOrganizerMessage] = useState("");
+  const [organizerError, setOrganizerError] = useState("");
+
   const getToken = () => {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("token");
@@ -62,7 +122,8 @@ export default function ProfilePage() {
     if (
       photo.startsWith("http://") ||
       photo.startsWith("https://") ||
-      photo.startsWith("data:")
+      photo.startsWith("data:") ||
+      photo.startsWith("blob:")
     ) {
       return photo;
     }
@@ -83,6 +144,14 @@ export default function ProfilePage() {
       .replace(/\b\w/g, (char) => char.toUpperCase());
   };
 
+  const getInitial = () => {
+    return (
+      user?.fullname?.charAt(0)?.toUpperCase() ||
+      user?.username?.charAt(0)?.toUpperCase() ||
+      "U"
+    );
+  };
+
   const setProfileForm = (profile) => {
     setForm({
       fullname: profile.fullname || "",
@@ -92,6 +161,12 @@ export default function ProfilePage() {
     });
 
     setSelectedPhoto(null);
+
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+
     setPhotoPreview(getPhotoUrl(profile.photo));
   };
 
@@ -115,22 +190,39 @@ export default function ProfilePage() {
         cache: "no-store",
       });
 
-      const data = await response.json();
+      const data = await readResponse(response);
 
       if (response.status === 401) {
         localStorage.removeItem("token");
+        localStorage.removeItem("user");
         router.replace("/login");
         return;
       }
 
       if (!response.ok || !data.success || !data.user) {
-        throw new Error(
-          data.message || "Gagal mengambil profil."
-        );
+        throw new Error(data.message || "Gagal mengambil profil.");
       }
 
       setUser(data.user);
       setProfileForm(data.user);
+
+      const storedUser = localStorage.getItem("user");
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+
+          localStorage.setItem(
+            "user",
+            JSON.stringify({
+              ...parsedUser,
+              ...data.user,
+            })
+          );
+        } catch (error) {
+          console.warn("LOCAL USER UPDATE:", error);
+        }
+      }
     } catch (error) {
       console.error("FETCH PROFILE ERROR:", error);
       setErrorMessage(error.message || "Gagal mengambil profil.");
@@ -139,14 +231,94 @@ export default function ProfilePage() {
     }
   };
 
+  const fetchOrganizerApplication = async () => {
+    try {
+      setOrganizerLoading(true);
+      setOrganizerError("");
+
+      const token = getToken();
+
+      if (!token) return;
+
+      const response = await fetch(`${ORGANIZER_API}/application/me`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+
+      const data = await readResponse(response);
+
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        router.replace("/login");
+        return;
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Gagal mengambil status pengajuan organizer."
+        );
+      }
+
+      setOrganizerApplication(data.data || null);
+
+      if (data.data) {
+        setOrganizerForm({
+          organization_name: data.data.organization_name || "",
+          organization_type: data.data.organization_type || "individual",
+          responsible_name:
+            data.data.responsible_name || user?.fullname || "",
+          address: data.data.address || "",
+          description: data.data.description || "",
+          instagram: data.data.instagram || "",
+          website: data.data.website || "",
+        });
+      } else {
+        setOrganizerForm((prev) => ({
+          ...prev,
+          responsible_name: user?.fullname || "",
+        }));
+      }
+    } catch (error) {
+      console.error("FETCH ORGANIZER APPLICATION ERROR:", error);
+      setOrganizerError(error.message || "Gagal mengambil pengajuan EO.");
+    } finally {
+      setOrganizerLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProfile();
+
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
   }, []);
+
+  useEffect(() => {
+    if (user && user.role === "customer") {
+      fetchOrganizerApplication();
+    }
+  }, [user?.id, user?.role]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
 
     setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleOrganizerChange = (event) => {
+    const { name, value } = event.target;
+
+    setOrganizerForm((prev) => ({
       ...prev,
       [name]: value,
     }));
@@ -178,7 +350,12 @@ export default function ProfilePage() {
     setErrorMessage("");
     setSelectedPhoto(file);
 
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+
     const preview = URL.createObjectURL(file);
+    previewUrlRef.current = preview;
     setPhotoPreview(preview);
   };
 
@@ -218,26 +395,22 @@ export default function ProfilePage() {
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await readResponse(response);
 
       if (response.status === 401) {
         localStorage.removeItem("token");
+        localStorage.removeItem("user");
         router.replace("/login");
         return;
       }
 
       if (!response.ok || !data.success || !data.user) {
-        throw new Error(
-          data.message || "Gagal menyimpan profil."
-        );
+        throw new Error(data.message || "Gagal menyimpan profil.");
       }
 
-      // Gunakan data terbaru yang dikembalikan database.
       setUser(data.user);
       setProfileForm(data.user);
 
-      // Perbarui informasi profil di localStorage
-      // tanpa mengubah token autentikasi.
       const storedUser = localStorage.getItem("user");
 
       if (storedUser) {
@@ -257,15 +430,10 @@ export default function ProfilePage() {
       }
 
       setEditing(false);
-      setSuccessMessage(
-        data.message || "Profil berhasil diperbarui."
-      );
+      setSuccessMessage(data.message || "Profil berhasil diperbarui.");
     } catch (error) {
       console.error("SAVE PROFILE ERROR:", error);
-
-      setErrorMessage(
-        error.message || "Gagal memperbarui profil."
-      );
+      setErrorMessage(error.message || "Gagal memperbarui profil.");
     } finally {
       setSaving(false);
     }
@@ -280,12 +448,75 @@ export default function ProfilePage() {
     setSuccessMessage("");
   };
 
-  const getInitial = () => {
-    return (
-      user?.fullname?.charAt(0)?.toUpperCase() ||
-      user?.username?.charAt(0)?.toUpperCase() ||
-      "U"
-    );
+  const handleSubmitOrganizer = async (event) => {
+    event.preventDefault();
+
+    try {
+      setOrganizerSubmitting(true);
+      setOrganizerError("");
+      setOrganizerMessage("");
+
+      const token = getToken();
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      if (
+        !organizerForm.organization_name.trim() ||
+        !organizerForm.responsible_name.trim() ||
+        !organizerForm.address.trim() ||
+        !organizerForm.description.trim()
+      ) {
+        throw new Error(
+          "Nama organisasi, penanggung jawab, alamat, dan deskripsi wajib diisi."
+        );
+      }
+
+      const response = await fetch(`${ORGANIZER_API}/application`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          organization_name: organizerForm.organization_name.trim(),
+          organization_type: organizerForm.organization_type,
+          responsible_name: organizerForm.responsible_name.trim(),
+          address: organizerForm.address.trim(),
+          description: organizerForm.description.trim(),
+          instagram: organizerForm.instagram.trim(),
+          website: organizerForm.website.trim(),
+        }),
+      });
+
+      const data = await readResponse(response);
+
+      if (response.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        router.replace("/login");
+        return;
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Gagal mengirim pengajuan EO.");
+      }
+
+      setOrganizerMessage(
+        data.message || "Pengajuan berhasil dikirim."
+      );
+
+      setShowOrganizerForm(false);
+
+      await fetchOrganizerApplication();
+    } catch (error) {
+      console.error("SUBMIT ORGANIZER ERROR:", error);
+      setOrganizerError(error.message || "Gagal mengirim pengajuan.");
+    } finally {
+      setOrganizerSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -332,10 +563,11 @@ export default function ProfilePage() {
     );
   }
 
+  const applicationStatus = organizerApplication?.status;
+  const isOrganizer = user.role === "event_organizer";
+
   return (
     <div className="w-full space-y-6 pb-12 text-[#112250]">
-
-      {/* HEADER */}
       <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-50 blur-3xl" />
 
@@ -404,7 +636,6 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {/* NOTIFICATION */}
       {successMessage && (
         <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
           <CheckCircle2 size={20} />
@@ -420,8 +651,6 @@ export default function ProfilePage() {
       )}
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-
-        {/* PROFILE CARD */}
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="relative h-32 bg-gradient-to-br from-[#0D1F42] via-[#112250] to-[#294A85]">
             <div className="absolute -right-8 -top-12 h-40 w-40 rounded-full border border-white/10" />
@@ -523,7 +752,6 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        {/* PERSONAL INFORMATION */}
         <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-6 sm:p-8">
             <div className="flex items-center gap-3">
@@ -544,8 +772,6 @@ export default function ProfilePage() {
 
           <div className="p-6 sm:p-8">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-
-              {/* FULLNAME */}
               <div>
                 <label className="mb-2 block text-xs font-bold text-slate-500">
                   Nama Lengkap
@@ -572,7 +798,6 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* USERNAME */}
               <div>
                 <label className="mb-2 block text-xs font-bold text-slate-500">
                   Username
@@ -585,12 +810,12 @@ export default function ProfilePage() {
                     {user.username || "-"}
                   </div>
                 </div>
+
                 <p className="mt-2 text-xs text-slate-400">
                   Username tidak dapat diubah.
                 </p>
               </div>
 
-              {/* EMAIL */}
               <div>
                 <label className="mb-2 block text-xs font-bold text-slate-500">
                   Email
@@ -605,12 +830,12 @@ export default function ProfilePage() {
                     </span>
                   </div>
                 </div>
+
                 <p className="mt-2 text-xs text-slate-400">
                   Email digunakan sebagai identitas akun.
                 </p>
               </div>
 
-              {/* PHONE */}
               <div>
                 <label className="mb-2 block text-xs font-bold text-slate-500">
                   Nomor HP
@@ -636,7 +861,6 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* GENDER */}
               <div>
                 <label className="mb-2 block text-xs font-bold text-slate-500">
                   Jenis Kelamin
@@ -660,7 +884,6 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* BIRTH DATE */}
               <div>
                 <label className="mb-2 block text-xs font-bold text-slate-500">
                   Tanggal Lahir
@@ -686,7 +909,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ACCOUNT INFORMATION */}
             <div className="mt-9 border-t border-dashed border-slate-200 pt-7">
               <h3 className="flex items-center gap-2 text-sm font-black">
                 <ShieldCheck size={18} />
@@ -714,7 +936,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* SAVE BUTTON */}
             {editing && (
               <div className="mt-8 flex flex-col justify-between gap-4 border-t border-dashed border-slate-200 pt-6 sm:flex-row sm:items-center">
                 <div>
@@ -753,6 +974,355 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
+
+      {user.role === "customer" && (
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-6 sm:p-8">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-[#112250]">
+                  <Building2 size={23} />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-black">
+                    Daftar Event Organizer
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Ajukan akun Anda untuk menjadi penyelenggara event TicketVerse.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={fetchOrganizerApplication}
+                disabled={organizerLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                <RefreshCw
+                  size={15}
+                  className={organizerLoading ? "animate-spin" : ""}
+                />
+                Refresh Status
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 sm:p-8">
+            {organizerMessage && (
+              <div className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+                <CheckCircle2 size={20} />
+                {organizerMessage}
+              </div>
+            )}
+
+            {organizerError && (
+              <div className="mb-5 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">
+                <AlertCircle size={20} />
+                {organizerError}
+              </div>
+            )}
+
+            {organizerLoading ? (
+              <div className="flex items-center justify-center gap-3 py-10 text-sm font-semibold text-slate-500">
+                <Loader2 size={22} className="animate-spin" />
+                Memeriksa status pengajuan...
+              </div>
+            ) : applicationStatus === "pending" ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                    <Clock size={24} />
+                  </div>
+
+                  <div>
+                    <h3 className="font-black text-amber-900">
+                      Pengajuan Sedang Ditinjau
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-amber-800">
+                      Pengajuan Event Organizer Anda sudah diterima dan sedang diperiksa oleh Super Admin. Anda dapat menggunakan akun sebagai customer selama proses pemeriksaan.
+                    </p>
+
+                    <div className="mt-4 space-y-1 text-sm text-amber-900">
+                      <p>
+                        <strong>Organisasi:</strong>{" "}
+                        {organizerApplication.organization_name}
+                      </p>
+                      <p>
+                        <strong>Penanggung jawab:</strong>{" "}
+                        {organizerApplication.responsible_name}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : applicationStatus === "approved" || isOrganizer ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                    <CheckCircle2 size={25} />
+                  </div>
+
+                  <div>
+                    <h3 className="font-black text-emerald-900">
+                      Pengajuan Berhasil Disetujui
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-emerald-800">
+                      Akun Anda sudah memiliki akses Event Organizer TicketVerse.
+                    </p>
+                    <p className="mt-2 text-sm text-emerald-800">
+                      Jika role baru belum terlihat, silakan logout lalu login kembali.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {applicationStatus === "rejected" && (
+                  <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle
+                        size={22}
+                        className="shrink-0 text-red-600"
+                      />
+                      <div>
+                        <h3 className="font-black text-red-800">
+                          Pengajuan Belum Disetujui
+                        </h3>
+                        <p className="mt-2 text-sm leading-6 text-red-700">
+                          {organizerApplication.rejection_reason ||
+                            "Pengajuan Anda ditolak oleh Super Admin."}
+                        </p>
+                        <p className="mt-2 text-xs text-red-600">
+                          Silakan perbaiki informasi dan kirim ulang pengajuan.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!showOrganizerForm ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                    <h3 className="text-base font-black">
+                      Jadilah Event Organizer
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-500">
+                      Isi data organisasi dan informasi penanggung jawab untuk mengajukan akun Event Organizer. Pengajuan akan diperiksa oleh Super Admin sebelum akses diberikan.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrganizerError("");
+                        setOrganizerMessage("");
+                        setShowOrganizerForm(true);
+                      }}
+                      className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#112250] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#1A326A]"
+                    >
+                      <Building2 size={17} />
+                      {applicationStatus === "rejected"
+                        ? "Perbaiki Pengajuan"
+                        : "Ajukan Menjadi Organizer"}
+                    </button>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleSubmitOrganizer}
+                    className="space-y-6"
+                  >
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-xs font-bold text-slate-500">
+                          Nama Organisasi
+                        </label>
+                        <div className="relative">
+                          <Building2
+                            size={17}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                          />
+                          <input
+                            type="text"
+                            name="organization_name"
+                            value={organizerForm.organization_name}
+                            onChange={handleOrganizerChange}
+                            maxLength={150}
+                            required
+                            placeholder="Nama organisasi atau brand"
+                            className="h-12 w-full rounded-xl border border-slate-200 pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold text-slate-500">
+                          Jenis Organisasi
+                        </label>
+                        <select
+                          name="organization_type"
+                          value={organizerForm.organization_type}
+                          onChange={handleOrganizerChange}
+                          className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                        >
+                          <option value="individual">Individu</option>
+                          <option value="community">Komunitas</option>
+                          <option value="company">Perusahaan</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold text-slate-500">
+                          Nama Penanggung Jawab
+                        </label>
+                        <div className="relative">
+                          <User
+                            size={17}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                          />
+                          <input
+                            type="text"
+                            name="responsible_name"
+                            value={organizerForm.responsible_name}
+                            onChange={handleOrganizerChange}
+                            maxLength={150}
+                            required
+                            placeholder="Nama penanggung jawab"
+                            className="h-12 w-full rounded-xl border border-slate-200 pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold text-slate-500">
+                          Instagram
+                        </label>
+                        <div className="relative">
+                          <InstagramIcon
+                            size={17}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                          />
+                          <input
+                            type="text"
+                            name="instagram"
+                            value={organizerForm.instagram}
+                            onChange={handleOrganizerChange}
+                            placeholder="@username"
+                            className="h-12 w-full rounded-xl border border-slate-200 pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="mb-2 block text-xs font-bold text-slate-500">
+                          Alamat Organisasi
+                        </label>
+                        <div className="relative">
+                          <MapPin
+                            size={17}
+                            className="absolute left-4 top-4 text-slate-400"
+                          />
+                          <textarea
+                            name="address"
+                            value={organizerForm.address}
+                            onChange={handleOrganizerChange}
+                            rows={3}
+                            required
+                            placeholder="Alamat lengkap organisasi"
+                            className="w-full rounded-xl border border-slate-200 py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="mb-2 block text-xs font-bold text-slate-500">
+                          Deskripsi Organisasi
+                        </label>
+                        <div className="relative">
+                          <FileText
+                            size={17}
+                            className="absolute left-4 top-4 text-slate-400"
+                          />
+                          <textarea
+                            name="description"
+                            value={organizerForm.description}
+                            onChange={handleOrganizerChange}
+                            rows={4}
+                            required
+                            placeholder="Jelaskan organisasi dan pengalaman dalam menyelenggarakan event."
+                            className="w-full rounded-xl border border-slate-200 py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="mb-2 block text-xs font-bold text-slate-500">
+                          Website
+                        </label>
+                        <div className="relative">
+                          <Globe
+                            size={17}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                          />
+                          <input
+                            type="url"
+                            name="website"
+                            value={organizerForm.website}
+                            onChange={handleOrganizerChange}
+                            placeholder="https://website.com"
+                            className="h-12 w-full rounded-xl border border-slate-200 pl-11 pr-4 text-sm font-semibold outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col-reverse justify-end gap-3 border-t border-dashed border-slate-200 pt-6 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => setShowOrganizerForm(false)}
+                        disabled={organizerSubmitting}
+                        className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold transition hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Batal
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={organizerSubmitting}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#112250] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#1A326A] disabled:opacity-60"
+                      >
+                        {organizerSubmitting ? (
+                          <Loader2 size={17} className="animate-spin" />
+                        ) : (
+                          <Send size={17} />
+                        )}
+                        {organizerSubmitting
+                          ? "Mengirim..."
+                          : "Kirim Pengajuan"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
+      {isOrganizer && (
+        <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 size={24} className="text-emerald-600" />
+            <div>
+              <h2 className="font-black text-emerald-900">
+                Akun Event Organizer Aktif
+              </h2>
+              <p className="mt-1 text-sm text-emerald-800">
+                Anda sudah dapat menggunakan fitur Event Organizer TicketVerse.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -24,9 +25,12 @@ import {
   Users,
   TrendingUp,
   CircleDollarSign,
+  Map,
 } from "lucide-react";
 
-const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const RAW_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+
 const API_ROOT = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/i, "");
 const API_BASE = `${API_ROOT}/api`;
 
@@ -44,6 +48,7 @@ const labelClass =
 
 const getToken = () => {
   if (typeof window === "undefined") return "";
+
   return (
     localStorage.getItem("token") ||
     localStorage.getItem("accessToken") ||
@@ -73,12 +78,14 @@ const getEventData = (data) => {
 
 const getTicketCategories = (data) => {
   if (Array.isArray(data)) return data;
+
   const categories =
     data?.ticket_categories ||
     data?.data?.ticket_categories ||
     data?.categories ||
     data?.data?.categories ||
     data?.data;
+
   return Array.isArray(categories) ? categories : [];
 };
 
@@ -91,8 +98,11 @@ const formatRupiah = (value) =>
 
 const formatDate = (value) => {
   if (!value) return "-";
+
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) return value;
+
   return new Intl.DateTimeFormat("id-ID", {
     day: "numeric",
     month: "long",
@@ -113,12 +123,12 @@ export default function KelolaTiketEventPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(INITIAL_FORM);
-  
+
   const [notification, setNotification] = useState({
     type: "",
     message: "",
   });
-  
+
   const [formError, setFormError] = useState("");
 
   const apiRequest = useCallback(async (endpoint, options = {}) => {
@@ -161,6 +171,7 @@ export default function KelolaTiketEventPage() {
       setCategories(categoryList);
     } catch (error) {
       console.error("LOAD TICKET DATA ERROR:", error);
+
       setNotification({
         type: "error",
         message: error.message || "Gagal mengambil data event dan tiket.",
@@ -198,10 +209,13 @@ export default function KelolaTiketEventPage() {
 
   const filteredCategories = useMemo(() => {
     const keyword = search.toLowerCase().trim();
+
     if (!keyword) return categories;
 
     return categories.filter((category) =>
-      String(category.category_name || "").toLowerCase().includes(keyword)
+      String(category.category_name || "")
+        .toLowerCase()
+        .includes(keyword)
     );
   }, [categories, search]);
 
@@ -211,7 +225,12 @@ export default function KelolaTiketEventPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((previous) => ({ ...previous, [name]: value }));
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+
     setFormError("");
   };
 
@@ -232,15 +251,21 @@ export default function KelolaTiketEventPage() {
 
   const openEditForm = (category) => {
     setEditingId(category.id);
+
     setForm({
       category_name: category.category_name || "",
       price: String(category.price ?? ""),
       quota: String(category.quota ?? ""),
     });
+
     setFormError("");
     setShowForm(true);
     setNotification({ type: "", message: "" });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
   const validateForm = () => {
@@ -289,9 +314,11 @@ export default function KelolaTiketEventPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (saving) return;
 
     const error = validateForm();
+
     if (error) {
       setFormError(error);
       return;
@@ -314,12 +341,14 @@ export default function KelolaTiketEventPage() {
           method: "PUT",
           body: JSON.stringify(payload),
         });
+
         notify("success", "Kategori tiket berhasil diperbarui.");
       } else {
         await apiRequest("/ticket-categories", {
           method: "POST",
           body: JSON.stringify(payload),
         });
+
         notify("success", "Kategori tiket berhasil ditambahkan.");
       }
 
@@ -327,6 +356,7 @@ export default function KelolaTiketEventPage() {
       await loadData();
     } catch (error) {
       console.error("SAVE TICKET CATEGORY ERROR:", error);
+
       setFormError(error.message || "Gagal menyimpan kategori tiket.");
     } finally {
       setSaving(false);
@@ -349,9 +379,11 @@ export default function KelolaTiketEventPage() {
       });
 
       notify("success", "Kategori tiket berhasil dihapus.");
+
       await loadData();
     } catch (error) {
       console.error("DELETE TICKET CATEGORY ERROR:", error);
+
       notify("error", error.message || "Gagal menghapus kategori tiket.");
     } finally {
       setDeletingId(null);
@@ -362,7 +394,11 @@ export default function KelolaTiketEventPage() {
     return (
       <div className="flex min-h-[65vh] items-center justify-center">
         <div className="text-center">
-          <Loader2 size={35} className="mx-auto animate-spin text-[#23354D]" />
+          <Loader2
+            size={35}
+            className="mx-auto animate-spin text-[#23354D]"
+          />
+
           <p className="mt-4 text-sm font-medium text-slate-500">
             Memuat data event dan tiket...
           </p>
@@ -373,6 +409,7 @@ export default function KelolaTiketEventPage() {
 
   return (
     <div className="w-full min-w-0 space-y-6 pb-10 text-[#0F172A]">
+      {/* HEADER */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-start gap-4">
           <Link
@@ -396,7 +433,7 @@ export default function KelolaTiketEventPage() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-500">
-              Atur kategori, harga, dan kuota tiket event.
+              Atur kategori, harga, kuota, dan denah tiket event.
             </p>
           </div>
         </div>
@@ -407,11 +444,15 @@ export default function KelolaTiketEventPage() {
           disabled={loading}
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
         >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          <RefreshCw
+            size={16}
+            className={loading ? "animate-spin" : ""}
+          />
           Refresh Data
         </button>
       </div>
 
+      {/* NOTIFICATION */}
       {notification.message && (
         <div
           className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium ${
@@ -425,7 +466,9 @@ export default function KelolaTiketEventPage() {
           ) : (
             <AlertCircle size={19} />
           )}
+
           <span className="flex-1">{notification.message}</span>
+
           <button
             type="button"
             onClick={() => setNotification({ type: "", message: "" })}
@@ -435,6 +478,7 @@ export default function KelolaTiketEventPage() {
         </div>
       )}
 
+      {/* EVENT INFORMATION */}
       {event && (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:p-6">
@@ -463,6 +507,7 @@ export default function KelolaTiketEventPage() {
                 <span className="rounded-full bg-[#EFF2F7] px-3 py-1 text-[11px] font-bold text-[#23354D]">
                   EVENT
                 </span>
+
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
                   {event.status || "Belum ada status"}
                 </span>
@@ -477,10 +522,12 @@ export default function KelolaTiketEventPage() {
                   <CalendarDays size={15} />
                   {formatDate(event.event_date)}
                 </span>
+
                 <span className="flex items-center gap-2">
                   <Music size={15} />
                   {event.event_time || "-"}
                 </span>
+
                 <span className="flex items-center gap-2">
                   <Tag size={15} />
                   ID Event: {event.id}
@@ -492,9 +539,11 @@ export default function KelolaTiketEventPage() {
               <p className="text-xs font-semibold text-slate-500">
                 Total Kategori
               </p>
+
               <p className="mt-1 text-3xl font-bold text-[#0D1F42]">
                 {categories.length}
               </p>
+
               <p className="mt-1 text-[11px] text-slate-400">
                 Kategori tiket
               </p>
@@ -503,6 +552,7 @@ export default function KelolaTiketEventPage() {
         </section>
       )}
 
+      {/* STATISTICS */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           icon={Layers}
@@ -510,18 +560,21 @@ export default function KelolaTiketEventPage() {
           value={statistics.totalQuota.toLocaleString("id-ID")}
           description="Kapasitas seluruh tiket"
         />
+
         <StatCard
           icon={Ticket}
           label="Tiket Terjual"
           value={statistics.sold.toLocaleString("id-ID")}
           description="Total tiket yang terjual"
         />
+
         <StatCard
           icon={Users}
           label="Tiket Tersedia"
           value={statistics.remaining.toLocaleString("id-ID")}
           description="Sisa tiket yang tersedia"
         />
+
         <StatCard
           icon={TrendingUp}
           label="Potensi Pendapatan"
@@ -531,6 +584,7 @@ export default function KelolaTiketEventPage() {
         />
       </div>
 
+      {/* FORM TAMBAH / EDIT */}
       {showForm && (
         <section
           id="ticket-category-form"
@@ -541,10 +595,12 @@ export default function KelolaTiketEventPage() {
               <h2 className="text-base font-bold text-[#0D1F42]">
                 {editingId ? "Edit Kategori Tiket" : "Tambah Kategori Tiket"}
               </h2>
+
               <p className="mt-1 text-xs text-slate-500">
                 Lengkapi informasi kategori tiket untuk event ini.
               </p>
             </div>
+
             <button
               type="button"
               onClick={resetForm}
@@ -558,12 +614,16 @@ export default function KelolaTiketEventPage() {
           <form onSubmit={handleSubmit} className="p-6">
             <div className="grid gap-5 md:grid-cols-3">
               <div>
-                <label className={labelClass}>Nama Kategori *</label>
+                <label className={labelClass}>
+                  Nama Kategori *
+                </label>
+
                 <div className="relative">
                   <Tag
                     size={17}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                   <input
                     type="text"
                     name="category_name"
@@ -578,12 +638,16 @@ export default function KelolaTiketEventPage() {
               </div>
 
               <div>
-                <label className={labelClass}>Harga Tiket (Rupiah) *</label>
+                <label className={labelClass}>
+                  Harga Tiket (Rupiah) *
+                </label>
+
                 <div className="relative">
                   <Wallet
                     size={17}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                   <input
                     type="number"
                     name="price"
@@ -599,12 +663,16 @@ export default function KelolaTiketEventPage() {
               </div>
 
               <div>
-                <label className={labelClass}>Kuota Tiket *</label>
+                <label className={labelClass}>
+                  Kuota Tiket *
+                </label>
+
                 <div className="relative">
                   <Users
                     size={17}
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                   />
+
                   <input
                     type="number"
                     name="quota"
@@ -625,8 +693,11 @@ export default function KelolaTiketEventPage() {
                 <p className="text-xs font-semibold text-[#495B7D]">
                   Estimasi pendapatan maksimal kategori
                 </p>
+
                 <p className="mt-1 text-xl font-bold text-[#0D1F42]">
-                  {formatRupiah(Number(form.price) * Number(form.quota))}
+                  {formatRupiah(
+                    Number(form.price) * Number(form.quota)
+                  )}
                 </p>
               </div>
             )}
@@ -647,6 +718,7 @@ export default function KelolaTiketEventPage() {
               >
                 Batal
               </button>
+
               <button
                 type="submit"
                 disabled={saving}
@@ -669,16 +741,19 @@ export default function KelolaTiketEventPage() {
         </section>
       )}
 
+      {/* DAFTAR KATEGORI */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col justify-between gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:px-6">
           <div>
             <h2 className="text-base font-bold text-[#0D1F42]">
               Daftar Kategori Tiket
             </h2>
+
             <p className="mt-1 text-xs text-slate-500">
-              Kelola harga dan kapasitas setiap kategori tiket.
+              Kelola harga, kapasitas, dan denah setiap kategori tiket.
             </p>
           </div>
+
           <button
             type="button"
             onClick={openAddForm}
@@ -696,6 +771,7 @@ export default function KelolaTiketEventPage() {
               size={18}
               className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
             />
+
             <input
               type="text"
               value={search}
@@ -708,20 +784,26 @@ export default function KelolaTiketEventPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 size={28} className="animate-spin text-[#23354D]" />
+            <Loader2
+              size={28}
+              className="animate-spin text-[#23354D]"
+            />
           </div>
         ) : categories.length === 0 ? (
           <div className="px-5 py-20 text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F0F3F8] text-[#495B7D]">
               <Ticket size={30} />
             </div>
+
             <h3 className="mt-5 text-base font-bold text-[#0D1F42]">
               Belum Ada Kategori Tiket
             </h3>
+
             <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-slate-500">
-              Event ini belum memiliki kategori tiket. Tambahkan
-              kategori seperti VIP, Festival, atau Regular.
+              Event ini belum memiliki kategori tiket. Tambahkan kategori
+              seperti VIP, Festival, atau Regular.
             </p>
+
             <button
               type="button"
               onClick={openAddForm}
@@ -738,7 +820,7 @@ export default function KelolaTiketEventPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left">
+              <table className="w-full min-w-[1000px] text-left">
                 <thead>
                   <tr className="bg-[#F8FAFC] text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <th className="px-6 py-4">Kategori</th>
@@ -754,10 +836,17 @@ export default function KelolaTiketEventPage() {
                 <tbody className="divide-y divide-slate-100">
                   {filteredCategories.map((category) => {
                     const quota = Number(category.quota || 0);
-                    const remaining = Number(category.remaining_ticket || 0);
+                    const remaining = Number(
+                      category.remaining_ticket || 0
+                    );
+
                     const sold = Math.max(0, quota - remaining);
+
                     const percentage =
-                      quota > 0 ? Math.min(100, (sold / quota) * 100) : 0;
+                      quota > 0
+                        ? Math.min(100, (sold / quota) * 100)
+                        : 0;
+
                     const soldOut = remaining <= 0;
 
                     return (
@@ -770,10 +859,12 @@ export default function KelolaTiketEventPage() {
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EFF2F7] text-[#23354D]">
                               <Ticket size={19} />
                             </div>
+
                             <div>
                               <p className="text-sm font-bold text-[#0D1F42]">
                                 {category.category_name}
                               </p>
+
                               <p className="mt-1 text-[11px] text-slate-400">
                                 ID: {category.id}
                               </p>
@@ -795,6 +886,7 @@ export default function KelolaTiketEventPage() {
                           <p className="text-sm font-bold text-slate-700">
                             {sold.toLocaleString("id-ID")}
                           </p>
+
                           <div className="mt-2 h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
                             <div
                               className="h-full rounded-full bg-[#495B7D]"
@@ -821,8 +913,22 @@ export default function KelolaTiketEventPage() {
                           </span>
                         </td>
 
+                        {/* AKSI KATEGORI */}
                         <td className="px-6 py-5">
                           <div className="flex justify-end gap-2">
+                            {/* ATUR DENAH */}
+                            <Link
+                              href={`/organizer/event/${eventId}/denah-kursi?categoryId=${encodeURIComponent(
+                                category.id
+                              )}`}
+                              title={`Atur denah ${category.category_name}`}
+                              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+                            >
+                              <Map size={15} />
+                              <span>Atur Denah</span>
+                            </Link>
+
+                            {/* EDIT */}
                             <button
                               type="button"
                               title="Edit kategori"
@@ -832,6 +938,8 @@ export default function KelolaTiketEventPage() {
                             >
                               <Pencil size={16} />
                             </button>
+
+                            {/* HAPUS */}
                             <button
                               type="button"
                               title="Hapus kategori"
@@ -840,7 +948,10 @@ export default function KelolaTiketEventPage() {
                               className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                             >
                               {deletingId === category.id ? (
-                                <Loader2 size={16} className="animate-spin" />
+                                <Loader2
+                                  size={16}
+                                  className="animate-spin"
+                                />
                               ) : (
                                 <Trash2 size={16} />
                               )}
@@ -859,6 +970,7 @@ export default function KelolaTiketEventPage() {
                 Menampilkan {filteredCategories.length} dari{" "}
                 {categories.length} kategori tiket
               </span>
+
               <span>
                 Total tiket tersedia:{" "}
                 <strong className="text-[#0D1F42]">
@@ -870,21 +982,24 @@ export default function KelolaTiketEventPage() {
         )}
       </section>
 
+      {/* INFORMASI */}
       <div className="rounded-2xl border border-[#8BA3C5]/30 bg-[#F0F3F8] p-5">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#23354D] text-white">
             <CircleDollarSign size={19} />
           </div>
+
           <div>
             <h3 className="text-sm font-bold text-[#0D1F42]">
               Informasi Pengelolaan Tiket
             </h3>
+
             <p className="mt-1 text-xs leading-6 text-slate-600">
-              Setiap kategori tiket terhubung langsung dengan event yang dipilih.
-              Kuota dan sisa tiket disimpan pada tabel ticket_categories. Jumlah
-              tiket terjual ditampilkan berdasarkan selisih kuota dan
-              remaining_ticket. Pastikan backend melakukan validasi transaksi
-              agar jumlah tiket yang tersedia selalu akurat.
+              Setiap kategori tiket terhubung langsung dengan event yang
+              dipilih. Kuota dan sisa tiket disimpan pada tabel
+              ticket_categories. Jumlah tiket terjual ditampilkan berdasarkan
+              selisih kuota dan remaining_ticket. Gunakan tombol Atur Denah
+              untuk mengelola section dan kursi pada kategori tiket.
             </p>
           </div>
         </div>
@@ -893,12 +1008,21 @@ export default function KelolaTiketEventPage() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, description, compact = false }) {
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  description,
+  compact = false,
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold text-slate-500">{label}</p>
+          <p className="text-xs font-semibold text-slate-500">
+            {label}
+          </p>
+
           <p
             className={`mt-3 break-words font-bold tracking-tight text-[#0D1F42] ${
               compact ? "text-lg sm:text-xl" : "text-2xl"
@@ -906,8 +1030,12 @@ function StatCard({ icon: Icon, label, value, description, compact = false }) {
           >
             {value}
           </p>
-          <p className="mt-2 text-[11px] text-slate-400">{description}</p>
+
+          <p className="mt-2 text-[11px] text-slate-400">
+            {description}
+          </p>
         </div>
+
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EFF2F7] text-[#23354D]">
           <Icon size={21} />
         </div>

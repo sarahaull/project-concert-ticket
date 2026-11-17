@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import {
   ArrowLeft,
@@ -33,6 +33,80 @@ const RAW_API_URL =
 
 const API_URL = RAW_API_URL.replace(/\/+$/, "").replace(/\/api$/i, "");
 
+// ===============================
+// AUTH HELPERS
+// ===============================
+
+function getToken() {
+  if (typeof window === "undefined") return "";
+
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("authToken") ||
+    localStorage.getItem("auth_token") ||
+    ""
+  );
+}
+
+function decodeJwtPayload(token) {
+  if (!token) return null;
+
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "="
+    );
+
+    const json = decodeURIComponent(
+      atob(padded)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+
+    return JSON.parse(json);
+  } catch (error) {
+    console.warn("DECODE JWT ERROR:", error);
+    return null;
+  }
+}
+
+function getUserId() {
+  const stored = typeof window !== "undefined"
+    ? localStorage.getItem("user")
+    : null;
+
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      const id = parsed?.id || parsed?.user_id || parsed?.userId;
+      if (id) return Number(id);
+    } catch (error) {
+      console.warn("PARSE LOCAL USER ERROR:", error);
+    }
+  }
+
+  const payload = decodeJwtPayload(getToken());
+
+  const id =
+    payload?.id ||
+    payload?.user_id ||
+    payload?.userId ||
+    payload?.sub;
+
+  return id ? Number(id) : null;
+}
+
+// ===============================
+// ASSET & API HELPERS
+// ===============================
+
 function getAssetUrl(path) {
   if (!path) return null;
 
@@ -50,10 +124,16 @@ function getAssetUrl(path) {
 }
 
 async function apiRequest(endpoint, options = {}) {
+  const token = getToken();
+
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers: {
       Accept: "application/json",
+      ...(options.body && !(options.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
     cache: "no-store",
@@ -68,11 +148,14 @@ async function apiRequest(endpoint, options = {}) {
   }
 
   if (!response.ok || data.success === false) {
-    throw new Error(
+    const error = new Error(
       data.message ||
         data.error ||
         `Request gagal (${response.status})`
     );
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -277,12 +360,11 @@ function TicketCategoryCard({ ticket }) {
     quota > 0 ? Math.min(100, (sold / quota) * 100) : 0;
 
   const soldOut = quota > 0 && remaining <= 0;
-  const almostSoldOut = quota > 0 && remaining > 0 && (remaining / quota) < 0.2;
+  const almostSoldOut =
+    quota > 0 && remaining > 0 && remaining / quota < 0.2;
 
   return (
     <div className="group relative overflow-hidden rounded-[20px] border border-[#E5EAF1] bg-white p-6 transition-all duration-300 hover:-translate-y-1 hover:border-[#112250]/30 hover:shadow-[0_20px_40px_-15px_rgba(17,34,80,0.15)]">
-      
-      {/* Ornamen Latar Belakang */}
       <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-[#EEF3F9] to-transparent blur-2xl transition duration-500 group-hover:scale-150 group-hover:bg-[#DCE7F7]/60" />
 
       <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -307,12 +389,13 @@ function TicketCategoryCard({ ticket }) {
             )}
           </div>
 
-          {/* HARGA GLOWING */}
           <div className="mt-3 flex items-baseline gap-1.5">
             <p className="text-[32px] font-black leading-none tracking-tight text-[#112250] [text-shadow:0_0_20px_rgba(17,34,80,0.4)] transition-all duration-300 group-hover:[text-shadow:0_0_30px_rgba(17,34,80,0.6)]">
               {formatCurrency(ticket.price)}
             </p>
-            <span className="text-[11px] font-semibold text-[#98A3B2]">/ tiket</span>
+            <span className="text-[11px] font-semibold text-[#98A3B2]">
+              / tiket
+            </span>
           </div>
         </div>
 
@@ -322,12 +405,16 @@ function TicketCategoryCard({ ticket }) {
         </div>
       </div>
 
-      {/* PROGRESS BAR & STATISTIK */}
       <div className="relative mt-6 rounded-xl border border-[#F1F4F9] bg-[#FBFCFE] p-4 transition-colors group-hover:bg-[#F8FAFC]">
         <div className="mb-3 flex items-center justify-between text-[11px]">
-          <span className="font-semibold text-[#8793A3]">Ketersediaan Tiket</span>
+          <span className="font-semibold text-[#8793A3]">
+            Ketersediaan Tiket
+          </span>
           <span className="font-bold text-[#112250]">
-            {remaining.toLocaleString("id-ID")} <span className="font-medium text-[#98A3B2]">/ {quota.toLocaleString("id-ID")}</span>
+            {remaining.toLocaleString("id-ID")}{" "}
+            <span className="font-medium text-[#98A3B2]">
+              / {quota.toLocaleString("id-ID")}
+            </span>
           </span>
         </div>
 
@@ -347,8 +434,14 @@ function TicketCategoryCard({ ticket }) {
             <CheckCircle2 size={12} className="text-emerald-500" />
             Terjual {sold.toLocaleString("id-ID")}
           </span>
-          <span className={`font-bold ${soldOut ? "text-red-500" : "text-[#112250]"}`}>
-            {soldOut ? "Kuota habis" : `${remaining.toLocaleString("id-ID")} tersedia`}
+          <span
+            className={`font-bold ${
+              soldOut ? "text-red-500" : "text-[#112250]"
+            }`}
+          >
+            {soldOut
+              ? "Kuota habis"
+              : `${remaining.toLocaleString("id-ID")} tersedia`}
           </span>
         </div>
       </div>
@@ -358,6 +451,8 @@ function TicketCategoryCard({ ticket }) {
 
 export default function EventDetailPage() {
   const params = useParams();
+  const router = useRouter();
+
   const eventId = Array.isArray(params?.id)
     ? params.id[0]
     : params?.id;
@@ -369,8 +464,13 @@ export default function EventDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [ticketError, setTicketError] = useState("");
-  const [liked, setLiked] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
+
+  // ==== WISHLIST STATE ====
+  const [liked, setLiked] = useState(false);
+  const [wishlistId, setWishlistId] = useState(null);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [wishlistError, setWishlistError] = useState("");
 
   const fetchEventDetail = useCallback(
     async (isRefresh = false) => {
@@ -425,9 +525,7 @@ export default function EventDetailPage() {
         }
       } catch (err) {
         console.error("GET EVENT DETAIL ERROR:", err);
-        setError(
-          err.message || "Gagal mengambil detail event."
-        );
+        setError(err.message || "Gagal mengambil detail event.");
         setEvent(null);
       } finally {
         setLoading(false);
@@ -437,9 +535,117 @@ export default function EventDetailPage() {
     [eventId]
   );
 
+  // ==== CEK STATUS WISHLIST SAAT HALAMAN DIMUAT ====
+  const checkWishlist = useCallback(async () => {
+    if (!eventId) return;
+
+    const token = getToken();
+
+    if (!token) {
+      setLiked(false);
+      setWishlistId(null);
+      return;
+    }
+
+    try {
+      const result = await apiRequest(
+        `/api/wishlist/me/check/${encodeURIComponent(eventId)}`
+      );
+
+      setLiked(Boolean(result.in_wishlist));
+      setWishlistId(result.wishlist_id || null);
+    } catch (err) {
+      // 401 = belum login, cukup diamkan (heart tetap abu)
+      if (err?.status !== 401) {
+        console.warn("CHECK WISHLIST ERROR:", err);
+      }
+      setLiked(false);
+      setWishlistId(null);
+    }
+  }, [eventId]);
+
   useEffect(() => {
     fetchEventDetail();
   }, [fetchEventDetail]);
+
+  useEffect(() => {
+    checkWishlist();
+  }, [checkWishlist]);
+
+  // ==== TOGGLE WISHLIST ====
+  const handleToggleWishlist = async () => {
+    if (wishlistLoading) return;
+
+    const token = getToken();
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    const userId = getUserId();
+
+    if (!userId) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setWishlistLoading(true);
+      setWishlistError("");
+      setShareMessage("");
+
+      if (liked) {
+        // Hapus dari wishlist via event ID
+        await apiRequest(
+          `/api/wishlist/event/${encodeURIComponent(eventId)}`,
+          { method: "DELETE" }
+        );
+
+        setLiked(false);
+        setWishlistId(null);
+        setShareMessage("Dihapus dari wishlist.");
+      } else {
+        // Tambah ke wishlist — user_id diambil backend dari token
+        const result = await apiRequest("/api/wishlist", {
+          method: "POST",
+          body: JSON.stringify({ event_id: Number(eventId) }),
+        });
+
+        setLiked(true);
+        setWishlistId(result?.wishlist?.id || null);
+        setShareMessage(
+          result?.message || "Event ditambahkan ke wishlist."
+        );
+      }
+
+      setTimeout(() => setShareMessage(""), 2500);
+    } catch (err) {
+      console.error("TOGGLE WISHLIST ERROR:", err);
+
+      if (err?.status === 401) {
+        router.push("/login");
+        return;
+      }
+
+      // Kalau backend bilang "sudah ada di wishlist", sinkronkan state
+      if (
+        err?.status === 409 &&
+        err?.data?.wishlist_id
+      ) {
+        setLiked(true);
+        setWishlistId(err.data.wishlist_id);
+      } else {
+        setWishlistError(
+          err.message || "Gagal memperbarui wishlist."
+        );
+        setShareMessage(err.message || "Gagal memperbarui wishlist.");
+        setTimeout(() => setShareMessage(""), 3000);
+      }
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
 
   const ticketStats = useMemo(() => {
     const validTickets = ticketCategories.filter(
@@ -453,8 +659,7 @@ export default function EventDetailPage() {
     );
 
     const remaining = validTickets.reduce(
-      (total, ticket) =>
-        total + getTicketRemaining(ticket),
+      (total, ticket) => total + getTicketRemaining(ticket),
       0
     );
 
@@ -464,8 +669,7 @@ export default function EventDetailPage() {
       .map((ticket) => Number(ticket.price))
       .filter((price) => Number.isFinite(price) && price >= 0);
 
-    const price =
-      prices.length > 0 ? Math.min(...prices) : 0;
+    const price = prices.length > 0 ? Math.min(...prices) : 0;
 
     return {
       price,
@@ -480,20 +684,14 @@ export default function EventDetailPage() {
     ticketStats.quota > 0
       ? Math.min(
           100,
-          Math.round(
-            (ticketStats.sold / ticketStats.quota) * 100
-          )
+          Math.round((ticketStats.sold / ticketStats.quota) * 100)
         )
       : 0;
 
   const isSoldOut =
-    ticketStats.totalCategories > 0 &&
-    ticketStats.remaining <= 0;
+    ticketStats.totalCategories > 0 && ticketStats.remaining <= 0;
 
-  const saleStatus = useMemo(
-    () => getSaleStatus(event),
-    [event]
-  );
+  const saleStatus = useMemo(() => getSaleStatus(event), [event]);
 
   const formattedDate = useMemo(
     () => formatDate(event?.event_date),
@@ -513,10 +711,7 @@ export default function EventDetailPage() {
     event?.artist_name ||
     "Penyelenggara Event";
 
-  const locationName = [
-    event?.venue_name,
-    event?.city,
-  ]
+  const locationName = [event?.venue_name, event?.city]
     .filter(Boolean)
     .join(", ");
 
@@ -611,15 +806,14 @@ export default function EventDetailPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F6F8FB] text-[#112250] pb-16">
-      
+    <main className="min-h-screen bg-[#F6F8FB] pb-16 text-[#112250]">
       <section className="relative w-full overflow-hidden bg-[#0D1F42]">
         <div className="absolute inset-0 z-0">
           {posterUrl ? (
             <img
               src={posterUrl}
               alt="background"
-              className="h-full w-full scale-[1.8] object-cover object-center blur-2xl opacity-60"
+              className="h-full w-full scale-[1.8] object-cover object-center opacity-60 blur-2xl"
             />
           ) : (
             <div className="h-full w-full bg-[#112250]" />
@@ -628,17 +822,18 @@ export default function EventDetailPage() {
 
         <div className="absolute inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_0%,#07162F_100%)] opacity-90" />
         <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#07162F] via-[#07162F]/70 to-transparent" />
-        
         <div className="absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/5 to-transparent bg-[length:24px_24px] bg-repeat opacity-30" />
 
         <div className="relative z-20 mx-auto flex w-full max-w-[1200px] flex-col justify-between px-5 py-8 sm:px-8 lg:px-12">
-          
           <div className="flex items-center justify-between gap-3">
             <Link
               href="/cari-acara"
               className="group inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-white hover:text-[#112250]"
             >
-              <ArrowLeft size={15} className="transition group-hover:-translate-x-0.5" />
+              <ArrowLeft
+                size={15}
+                className="transition group-hover:-translate-x-0.5"
+              />
               Kembali ke Event
             </Link>
 
@@ -654,27 +849,43 @@ export default function EventDetailPage() {
 
               <button
                 type="button"
-                onClick={() => setLiked((value) => !value)}
-                className={`flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10 backdrop-blur-md transition ${
+                onClick={handleToggleWishlist}
+                disabled={wishlistLoading}
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10 backdrop-blur-md transition disabled:opacity-60 ${
                   liked
                     ? "text-red-400 hover:bg-white hover:text-red-500"
                     : "text-white hover:bg-white hover:text-[#112250]"
                 }`}
-                aria-label="Simpan event"
+                aria-label={
+                  liked
+                    ? "Hapus dari wishlist"
+                    : "Tambahkan ke wishlist"
+                }
+                title={
+                  liked
+                    ? "Hapus dari wishlist"
+                    : "Tambahkan ke wishlist"
+                }
               >
-                <Heart size={17} fill={liked ? "currentColor" : "none"} />
+                {wishlistLoading ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <Heart
+                    size={17}
+                    fill={liked ? "currentColor" : "none"}
+                  />
+                )}
               </button>
             </div>
           </div>
 
-          {shareMessage && (
+          {(shareMessage || wishlistError) && (
             <div className="absolute right-5 top-20 z-50 animate-fade-in rounded-lg bg-white px-4 py-2 text-xs font-semibold text-[#112250] shadow-xl">
-              {shareMessage}
+              {wishlistError || shareMessage}
             </div>
           )}
 
           <div className="mt-12 flex flex-col-reverse items-start gap-10 md:flex-row md:items-end md:justify-between lg:mt-16">
-            
             <div className="w-full max-w-3xl flex-1">
               <div className="mb-4 flex flex-wrap items-center gap-2.5">
                 <span className="rounded-full bg-white px-3.5 py-1.5 text-[10px] font-bold text-[#112250] shadow-sm">
@@ -729,23 +940,22 @@ export default function EventDetailPage() {
                     className="h-full w-full object-contain object-center transition duration-700 group-hover:scale-105"
                   />
                 ) : (
-                  <div className="flex h-full w-full flex-col items-center justify-center text-white/40">
+                  <div className="flex h-full flex-col items-center justify-center text-white/40">
                     <ImageIcon size={48} strokeWidth={1.2} />
-                    <span className="mt-3 text-xs font-medium">Poster tidak tersedia</span>
+                    <span className="mt-3 text-xs font-medium">
+                      Poster tidak tersedia
+                    </span>
                   </div>
                 )}
               </div>
             </div>
-
           </div>
         </div>
       </section>
 
-      <div className="mx-auto w-full max-w-[1200px] px-5 py-8 sm:px-8 lg:px-12 mt-2">
+      <div className="mx-auto mt-2 w-full max-w-[1200px] px-5 py-8 sm:px-8 lg:px-12">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_380px]">
-          
           <div className="space-y-8">
-            
             <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
               <div className="flex items-center justify-between gap-4 border-b border-[#EEF1F5] pb-5">
                 <div>
@@ -791,7 +1001,7 @@ export default function EventDetailPage() {
             </section>
 
             <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="mb-4 flex items-center gap-2">
                 <Sparkles size={16} className="text-[#526B92]" />
                 <h2 className="text-xl font-bold text-[#112250]">
                   Tentang Event
@@ -810,7 +1020,7 @@ export default function EventDetailPage() {
               id="kategori-tiket"
               className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]"
             >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-[#EEF1F5] pb-5">
+              <div className="flex flex-col gap-4 border-b border-[#EEF1F5] pb-5 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8A96A8]">
                     Pilihan Tiket
@@ -834,17 +1044,21 @@ export default function EventDetailPage() {
               {ticketError && (
                 <div className="mt-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-800">
                   <AlertCircle size={20} className="mt-0.5 shrink-0" />
+
                   <div>
                     <p className="font-bold">
                       Kategori tiket belum berhasil dimuat
                     </p>
+
                     <p className="mt-1 text-amber-700">{ticketError}</p>
+
                     <button
                       type="button"
                       onClick={() => fetchEventDetail(true)}
                       className="mt-3 inline-flex items-center gap-1.5 font-bold text-amber-900 hover:underline"
                     >
-                      <RefreshCw size={14} /> Muat ulang data
+                      <RefreshCw size={14} />
+                      Muat ulang data
                     </button>
                   </div>
                 </div>
@@ -877,7 +1091,7 @@ export default function EventDetailPage() {
             </section>
 
             <section className="rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_8px_30px_rgba(17,34,80,0.05)]">
-              <div className="flex items-center gap-2 mb-6">
+              <div className="mb-6 flex items-center gap-2">
                 <TrendingUp size={16} className="text-[#526B92]" />
                 <h2 className="text-xl font-bold text-[#112250]">
                   Pengalaman yang kamu dapatkan
@@ -932,7 +1146,6 @@ export default function EventDetailPage() {
 
           <aside>
             <div className="sticky top-8 rounded-[24px] border border-[#DDE4ED] bg-white p-7 shadow-[0_20px_60px_rgba(17,34,80,0.08)]">
-              
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-[#98A3B2]">
@@ -958,7 +1171,7 @@ export default function EventDetailPage() {
               <div className="my-7 border-t border-[#EEF1F5]" />
 
               <div>
-                <div className="flex items-center justify-between text-xs mb-2">
+                <div className="mb-2 flex items-center justify-between text-xs">
                   <span className="text-[#8793A3]">
                     Ketersediaan tiket
                   </span>
@@ -989,8 +1202,8 @@ export default function EventDetailPage() {
               <div
                 className={`mt-6 rounded-2xl border p-4 ${
                   saleStatus.available
-                    ? "bg-emerald-50/50 border-emerald-100"
-                    : "bg-amber-50/50 border-amber-100"
+                    ? "border-emerald-100 bg-emerald-50/50"
+                    : "border-amber-100 bg-amber-50/50"
                 }`}
               >
                 <div className="flex items-start gap-3">
@@ -1064,8 +1277,12 @@ export default function EventDetailPage() {
                   <span className="relative z-10 flex items-center gap-2">
                     <Ticket size={18} />
                     Beli Tiket
-                    <ChevronRight size={16} className="transition group-hover:translate-x-0.5" />
+                    <ChevronRight
+                      size={16}
+                      className="transition group-hover:translate-x-0.5"
+                    />
                   </span>
+
                   <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                 </Link>
               )}
@@ -1113,7 +1330,10 @@ export default function EventDetailPage() {
 
               <button
                 type="button"
-                onClick={() => fetchEventDetail(true)}
+                onClick={() => {
+                  fetchEventDetail(true);
+                  checkWishlist();
+                }}
                 disabled={refreshing}
                 className="mt-7 flex w-full items-center justify-center gap-2 rounded-xl border border-[#DDE4ED] bg-[#FBFCFE] py-3 text-xs font-bold text-[#52627A] transition hover:bg-[#F6F8FB] hover:text-[#112250] disabled:opacity-60"
               >

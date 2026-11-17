@@ -1,29 +1,35 @@
-
 const express = require("express");
 
 const {
   getAllWishlist,
   getWishlistById,
   getWishlistByUser,
+  checkWishlistStatus,
   createWishlist,
   deleteWishlist,
+  deleteWishlistByEvent,
 } = require("../controllers/wishlistController");
+
+const verifyToken = require("../middleware/auth");
 
 const router = express.Router();
 
-// GET semua wishlist
+
 router.get("/", getAllWishlist);
 
-// GET wishlist berdasarkan user ID
+
+
+router.get("/me/check/:eventId", verifyToken, checkWishlistStatus);
+
 router.get("/user/:userId", getWishlistByUser);
 
-// GET wishlist berdasarkan ID wishlist
+router.post("/", verifyToken, createWishlist);
+
+router.delete("/:id", verifyToken, deleteWishlist);
+
+router.delete("/event/:eventId", verifyToken, deleteWishlistByEvent);
+
+
 router.get("/:id", getWishlistById);
-
-// TAMBAH wishlist
-router.post("/", createWishlist);
-
-// HAPUS wishlist
-router.delete("/:id", deleteWishlist);
 
 module.exports = router;

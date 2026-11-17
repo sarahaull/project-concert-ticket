@@ -526,10 +526,243 @@ const getEventBookings = async (req, res) => {
 // EXPORT
 // ============================================================
 
+
+
+// ============================================================
+// PENGAJUAN EVENT ORGANIZER
+// Semua fungsi lama di atas tetap dipertahankan.
+// ============================================================
+
+const getOrganizerApplication = async (req, res) => {
+  try {
+    const userId = getOrganizerId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "User belum terautentikasi." });
+    }
+
+    const [users] = await db.query(
+      "SELECT id, role FROM users WHERE id = ? LIMIT 1",
+      [userId]
+    );
+    if (!users.length) {
+      return res.status(404).json({ success: false, message: "User tidak ditemukan." });
+    }
+
+    const [rows] = await db.query(
+      `SELECT id, user_id, organization_name, organization_type, responsible_name,
+              address, description, instagram, website, status, rejection_reason,
+              reviewed_by, reviewed_at, created_at, updated_at
+       FROM organizer_profiles WHERE user_id = ? LIMIT 1`,
+      [userId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      role: users[0].role,
+      data: rows[0] || null,
+    });
+  } catch (error) {
+    return sendServerError(res, error, "Gagal mengambil status pengajuan organizer.");
+  }
+};
+
+const submitOrganizerApplication = async (req, res) => {
+  try {
+    const userId = getOrganizerId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "User belum terautentikasi." });
+    }
+
+    const {
+      organization_name,
+      organization_type = "individual",
+      responsible_name,
+      address,
+      description,
+      instagram,
+      website,
+    } = req.body || {};
+
+    if (!organization_name?.trim() || !responsible_name?.trim() || !address?.trim() || !description?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Nama organisasi, nama penanggung jawab, alamat, dan deskripsi wajib diisi.",
+      });
+    }
+
+    if (!["company", "community", "individual"].includes(organization_type)) {
+      return res.status(400).json({ success: false, message: "Jenis organisasi tidak valid." });
+    }
+
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [users] = await connection.query(
+        "SELECT id, role FROM users WHERE id = ? FOR UPDATE",
+        [userId]
+      );
+      if (!users.length) {
+        await connection.rollback();
+        return res.status(404).json({ success: false, message: "User tidak ditemukan." });
+      }
+      if (users[0].role === "event_organizer") {
+        await connection.rollback();
+        return res.status(409).json({ success: false, message: "Akun ini sudah menjadi event organizer." });
+      }
+      if (users[0].role !== "customer") {
+        await connection.rollback();
+        return res.status(403).json({ success: false, message: "Hanya akun customer yang dapat mengajukan menjadi organizer." });
+      }
+
+      const [existing] = await connection.query(
+        "SELECT id, status FROM organizer_profiles WHERE user_id = ? FOR UPDATE",
+        [userId]
+      );
+
+      if (existing.length && existing[0].status === "pending") {
+        await connection.rollback();
+        return res.status(409).json({ success: false, message: "Pengajuan kamu masih menunggu pemeriksaan." });
+      }
+      if (existing.length && existing[0].status === "approved") {
+        await connection.rollback();
+        return res.status(409).json({ success: false, message: "Pengajuan kamu sudah disetujui." });
+      }
+
+      if (existing.length) {
+        await connection.query(
+          `UPDATE organizer_profiles
+           SET organization_name = ?, organization_type = ?, responsible_name = ?,
+               address = ?, description = ?, instagram = ?, website = ?,
+               status = 'pending', rejection_reason = NULL, reviewed_by = NULL,
+               reviewed_at = NULL, updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = ?`,
+          [organization_name.trim(), organization_type, responsible_name.trim(), address.trim(),
+           description.trim(), instagram?.trim() || null, website?.trim() || null, userId]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO organizer_profiles
+           (user_id, organization_name, organization_type, responsible_name, address,
+            description, instagram, website, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+          [userId, organization_name.trim(), organization_type, responsible_name.trim(), address.trim(),
+           description.trim(), instagram?.trim() || null, website?.trim() || null]
+        );
+      }
+
+      await connection.commit();
+      return res.status(201).json({ success: true, message: "Pengajuan event organizer berhasil dikirim dan menunggu pemeriksaan." });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    return sendServerError(res, error, "Gagal mengirim pengajuan organizer.");
+  }
+};
+
+const getOrganizerApplications = async (req, res) => {
+  try {
+    const status = req.query.status || "pending";
+    const allowed = ["pending", "approved", "rejected", "all"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, message: "Filter status tidak valid." });
+    }
+
+    const where = status === "all" ? "" : "WHERE op.status = ?";
+    const params = status === "all" ? [] : [status];
+    const [rows] = await db.query(
+      `SELECT op.*, u.fullname, u.username, u.email, u.phone
+       FROM organizer_profiles op
+       INNER JOIN users u ON u.id = op.user_id
+       ${where}
+       ORDER BY CASE WHEN op.status = 'pending' THEN 0 ELSE 1 END, op.created_at DESC`,
+      params
+    );
+    return res.status(200).json({ success: true, data: rows });
+  } catch (error) {
+    return sendServerError(res, error, "Gagal mengambil daftar pengajuan organizer.");
+  }
+};
+
+const reviewOrganizerApplication = async (req, res) => {
+  let connection;
+  try {
+    const reviewerId = getOrganizerId(req);
+    const applicationId = Number(req.params.id);
+    const { decision, rejection_reason } = req.body || {};
+
+    if (!Number.isInteger(applicationId) || applicationId <= 0) {
+      return res.status(400).json({ success: false, message: "ID pengajuan tidak valid." });
+    }
+    if (!["approved", "rejected"].includes(decision)) {
+      return res.status(400).json({ success: false, message: "Keputusan harus approved atau rejected." });
+    }
+    if (decision === "rejected" && !rejection_reason?.trim()) {
+      return res.status(400).json({ success: false, message: "Alasan penolakan wajib diisi." });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+    const [applications] = await connection.query(
+      "SELECT id, user_id, status FROM organizer_profiles WHERE id = ? FOR UPDATE",
+      [applicationId]
+    );
+    if (!applications.length) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: "Pengajuan tidak ditemukan." });
+    }
+    if (applications[0].status !== "pending") {
+      await connection.rollback();
+      return res.status(409).json({ success: false, message: "Pengajuan ini sudah pernah diperiksa." });
+    }
+
+    const application = applications[0];
+    await connection.query(
+      `UPDATE organizer_profiles
+       SET status = ?, rejection_reason = ?, reviewed_by = ?,
+           reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [decision, decision === "rejected" ? rejection_reason.trim() : null, reviewerId, applicationId]
+    );
+
+    if (decision === "approved") {
+      await connection.query(
+        "UPDATE users SET role = 'event_organizer' WHERE id = ? AND role = 'customer'",
+        [application.user_id]
+      );
+    }
+
+    await connection.commit();
+    return res.status(200).json({
+      success: true,
+      message: decision === "approved"
+        ? "Pengajuan disetujui. User perlu logout lalu login kembali agar role terbaru terbaca."
+        : "Pengajuan berhasil ditolak.",
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    return sendServerError(res, error, "Gagal memproses pengajuan organizer.");
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+
 module.exports = {
+  // Controller organizer lama
   getProfile,
   updateProfile,
   getEventStats,
   getMyEvents,
   getEventBookings,
+
+  // Pengajuan dan pemeriksaan organizer
+  getOrganizerApplication,
+  submitOrganizerApplication,
+  getOrganizerApplications,
+  reviewOrganizerApplication,
 };

@@ -2,342 +2,498 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   Building2,
   MapPin,
   Users,
   Save,
-  Plus,
-  X,
+  ImagePlus,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Hash,
+  Info,
+  Globe,
+  Camera,
   Sparkles,
+  ChevronRight,
 } from "lucide-react";
 
-const STORAGE_KEY = "ticketverse_venues";
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "");
+
+const API_BASE = API_URL.endsWith("/api")
+  ? `${API_URL}/venues`
+  : `${API_URL}/api/venues`;
 
 export default function NewVenuePage() {
   const router = useRouter();
 
   const [form, setForm] = useState({
-    name: "",
-    type: "",
-    address: "",
+    venue_name: "",
     city: "",
+    address: "",
     capacity: "",
-    status: "Aktif",
-    description: "",
+    image: "",
   });
 
-  const [facilities, setFacilities] = useState([]);
-  const [facilityInput, setFacilityInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
+    setError("");
   };
 
-  const addFacility = () => {
-    const value = facilityInput.trim();
-
-    if (!value) return;
-
-    if (facilities.includes(value)) {
-      setFacilityInput("");
-      return;
-    }
-
-    setFacilities((prev) => [...prev, value]);
-    setFacilityInput("");
-  };
-
-  const removeFacility = (facility) => {
-    setFacilities((prev) =>
-      prev.filter((item) => item !== facility)
+  const getToken = () => {
+    if (typeof window === "undefined") return "";
+    return (
+      localStorage.getItem("token") ||
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("authToken") ||
+      ""
     );
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
 
-    if (
-      !form.name ||
-      !form.type ||
-      !form.address ||
-      !form.city ||
-      !form.capacity
-    ) {
-      alert("Lengkapi data venue terlebih dahulu.");
+    const venueName = form.venue_name.trim();
+    const city = form.city.trim();
+    const address = form.address.trim();
+    const capacity = Number(form.capacity);
+
+    if (!venueName || !city || !address || !form.capacity) {
+      setError("Nama venue, kota, alamat, dan kapasitas wajib diisi.");
       return;
     }
 
+    if (!Number.isInteger(capacity) || capacity <= 0) {
+      setError("Kapasitas harus berupa angka bulat lebih dari 0.");
+      return;
+    }
+
+    if (form.image.trim()) {
+      try {
+        new URL(form.image.trim());
+      } catch {
+        setError("URL gambar tidak valid. Masukkan URL gambar yang benar.");
+        return;
+      }
+    }
+
     setSaving(true);
+    setError("");
+    setSuccess("");
 
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      const token = getToken();
+      const response = await fetch(API_BASE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          venue_name: venueName,
+          city,
+          address,
+          capacity,
+          image: form.image.trim() || null,
+        }),
+      });
 
-      const newVenue = {
-        id: `VEN-${String(Date.now()).slice(-6)}`,
-        name: form.name,
-        type: form.type,
-        address: form.address,
-        city: form.city,
-        capacity: Number(form.capacity),
-        status: form.status,
-        description: form.description,
-        facilities,
-        createdAt: new Date().toISOString().split("T")[0],
-      };
+      const result = await response.json().catch(() => ({}));
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([...saved, newVenue]));
+      if (!response.ok || result.success === false) {
+        throw new Error(
+          result.message || "Gagal menambahkan venue ke database."
+        );
+      }
 
-      router.push("/superadmin/venues");
-    } catch (error) {
-      console.error(error);
-      alert("Gagal menyimpan venue.");
+      setSuccess(result.message || "Venue berhasil ditambahkan.");
+
+      setTimeout(() => {
+        router.push("/superadmin/venues");
+        router.refresh();
+      }, 800);
+    } catch (err) {
+      console.error("Create venue error:", err);
+      setError(
+        err.message || "Terjadi kesalahan saat menghubungkan ke server."
+      );
       setSaving(false);
     }
   };
 
+  // Progress: 3 field wajib + image opsional
+  const filledCount = [
+    form.venue_name.trim(),
+    form.city.trim(),
+    form.address.trim(),
+    form.capacity,
+  ].filter(Boolean).length;
+  const progress = Math.round((filledCount / 4) * 100);
+
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-8 pb-12">
-      
+    <div className="mx-auto w-full max-w-[1400px] space-y-4 px-1 pb-10 sm:space-y-6 sm:px-2 lg:px-0">
       {/* HEADER */}
-      <div className="flex items-center gap-5">
-        <button
-          type="button"
-          onClick={() => router.push("/superadmin/venues")}
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-slate-50 hover:text-indigo-600"
-        >
-          <ArrowLeft size={20} />
-        </button>
-
-        <div>
-          <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-600">
-            <Building2 size={14} />
-            Master Data / Venue
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-[#112250] md:text-3xl">
-            Tambah Venue Baru
-          </h1>
-          <p className="mt-1 text-sm font-medium text-slate-500">
-            Tambahkan lokasi baru yang dapat digunakan untuk berbagai event.
-          </p>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        
-        {/* INFORMASI UTAMA */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5">
-          <div className="flex items-center gap-4 border-b border-slate-100 bg-slate-50/50 px-6 py-5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-              <Building2 size={24} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-[#112250]">Informasi Venue</h2>
-              <p className="mt-0.5 text-xs font-medium text-slate-500">
-                Lengkapi data utama mengenai lokasi venue.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 p-6 md:grid-cols-2">
-            <InputField
-              label="Nama Venue"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              placeholder="Contoh: Gelora Bung Karno"
-              required
-            />
-
-            <div>
-              <label className="mb-2 block text-xs font-bold text-[#112250]">
-                Tipe Venue <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="type"
-                value={form.type}
-                onChange={handleChange}
-                required
-                className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-[#112250] outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
-              >
-                <option value="">Pilih tipe venue</option>
-                <option value="Stadium">Stadium</option>
-                <option value="Convention Hall">Convention Hall</option>
-                <option value="Indoor Arena">Indoor Arena</option>
-                <option value="Outdoor">Outdoor</option>
-                <option value="Theater">Theater</option>
-                <option value="Hall">Hall</option>
-              </select>
-            </div>
-
-            <InputField
-              label="Kota"
-              name="city"
-              value={form.city}
-              onChange={handleChange}
-              placeholder="Contoh: Jakarta"
-              required
-            />
-
-            <InputField
-              label="Kapasitas (Orang)"
-              name="capacity"
-              type="number"
-              value={form.capacity}
-              onChange={handleChange}
-              placeholder="Contoh: 50000"
-              required
-            />
-
-            <div className="md:col-span-2">
-              <label className="mb-2 flex items-center gap-2 text-xs font-bold text-[#112250]">
-                <MapPin size={15} className="text-indigo-500" />
-                Alamat Lengkap <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                required
-                rows={3}
-                placeholder="Masukkan alamat lengkap venue..."
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-medium leading-relaxed text-[#112250] outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-xs font-bold text-[#112250]">
-                Deskripsi Venue
-              </label>
-              <textarea
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                rows={4}
-                placeholder="Berikan deskripsi singkat mengenai keunggulan atau fasilitas umum venue ini..."
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-medium leading-relaxed text-[#112250] outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* FASILITAS */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-900/5">
-          <div className="flex items-center gap-4 border-b border-slate-100 bg-slate-50/50 px-6 py-5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
-              <Sparkles size={24} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-[#112250]">Fasilitas Venue</h2>
-              <p className="mt-0.5 text-xs font-medium text-slate-500">
-                Tambahkan fasilitas apa saja yang tersedia di lokasi ini.
-              </p>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                value={facilityInput}
-                onChange={(e) => setFacilityInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addFacility();
-                  }
-                }}
-                placeholder="Ketik fasilitas (Cth: VIP Parking, AC, Food Court)"
-                className="h-12 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-[#112250] outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
-              />
-              <button
-                type="button"
-                onClick={addFacility}
-                className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#112250] px-6 text-sm font-bold text-white shadow-md transition hover:bg-indigo-900 sm:w-auto"
-              >
-                <Plus size={18} />
-                Tambah
-              </button>
-            </div>
-
-            {facilities.length > 0 && (
-              <div className="mt-5 flex flex-wrap gap-2.5">
-                {facilities.map((facility) => (
-                  <div
-                    key={facility}
-                    className="inline-flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-700 shadow-sm"
-                  >
-                    {facility}
-                    <button
-                      type="button"
-                      onClick={() => removeFacility(facility)}
-                      className="rounded-full p-0.5 text-indigo-400 transition-colors hover:bg-indigo-100 hover:text-red-500"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {facilities.length === 0 && (
-              <div className="mt-4 flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8">
-                <p className="text-sm font-medium text-slate-400">
-                  Belum ada fasilitas yang ditambahkan.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* STATUS */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-900/5">
-          <label className="mb-2 block text-xs font-bold text-[#112250]">
-            Status Publikasi Venue
-          </label>
-          <select
-            name="status"
-            value={form.status}
-            onChange={handleChange}
-            className="h-12 w-full max-w-md rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-[#112250] outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
-          >
-            <option value="Aktif">Aktif (Dapat digunakan untuk Event)</option>
-            <option value="Tidak Aktif">Tidak Aktif (Disembunyikan)</option>
-          </select>
-        </div>
-
-        {/* ACTION BUTTONS */}
-        <div className="flex flex-col-reverse items-center justify-end gap-3 pt-4 sm:flex-row">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
           <button
             type="button"
             onClick={() => router.push("/superadmin/venues")}
-            className="h-12 w-full rounded-xl border border-slate-200 bg-white px-6 text-sm font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 sm:w-auto"
+            aria-label="Kembali"
+            className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#DCE2EA] bg-white text-[#697F93] transition hover:bg-slate-50 active:scale-95 sm:mt-1"
           >
-            Batal
+            <ArrowLeft size={17} />
           </button>
-
-          <button
-            type="submit"
-            disabled={saving}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-8 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-all hover:-translate-y-0.5 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:translate-y-0 sm:w-auto"
-          >
-            <Save size={18} />
-            {saving ? "Menyimpan..." : "Simpan Venue"}
-          </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#8795A7]">
+              <Building2 size={11} />
+              Master Data / Venue / Tambah
+            </div>
+            <h1 className="mt-1 text-xl font-semibold text-[#112250] sm:text-2xl">
+              Tambah Venue Baru
+            </h1>
+            <p className="mt-1 text-xs text-[#8795A7] sm:text-sm">
+              Tambahkan lokasi baru yang dapat digunakan untuk berbagai event.
+            </p>
+          </div>
         </div>
 
+        <div className="flex w-full gap-2 sm:w-auto">
+          <Link
+            href="/superadmin/venues"
+            className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-[#DCE2EA] bg-white px-4 text-xs font-semibold text-[#53657D] transition hover:bg-slate-50 active:scale-[0.98] sm:flex-none"
+          >
+            <ArrowLeft size={14} />
+            Kembali
+          </Link>
+        </div>
+      </div>
+
+      {/* HERO BANNER */}
+      <section className="relative overflow-hidden rounded-2xl border border-[#DDE3EB] bg-gradient-to-br from-[#0D1D35] via-[#142B4B] to-[#1D3A61] p-5 text-white shadow-sm sm:p-7">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/5" />
+        <div className="pointer-events-none absolute -bottom-16 right-20 h-48 w-48 rounded-full bg-white/5" />
+
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 backdrop-blur">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold sm:text-lg">
+                Lengkapi Data Venue
+              </h2>
+              <p className="mt-1 max-w-lg text-xs leading-5 text-white/70 sm:text-sm">
+                Isi informasi utama venue dengan lengkap agar dapat digunakan
+                pada event. Tanda <span className="text-red-300">*</span>{" "}
+                menandakan field wajib.
+              </p>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div className="w-full shrink-0 rounded-xl border border-white/15 bg-white/10 p-3.5 backdrop-blur sm:w-56">
+            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-white/70">
+              <span>Kelengkapan</span>
+              <span className="text-white">{progress}%</span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/15">
+              <div
+                className="h-full rounded-full bg-white transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[10px] text-white/60">
+              {filledCount} dari 4 field wajib terisi
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ALERTS */}
+      {error && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+          <AlertCircle size={20} className="mt-0.5 shrink-0" />
+          <p className="leading-6">{error}</p>
+        </div>
+      )}
+
+      {success && (
+        <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-700">
+          <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
+          <p className="leading-6">{success}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
+        {/* LEFT: FORM */}
+        <div className="space-y-4 sm:space-y-5 lg:col-span-2">
+          {/* INFORMASI VENUE */}
+          <section className="overflow-hidden rounded-2xl border border-[#DDE3EB] bg-white shadow-sm">
+            <div className="flex items-center gap-3 border-b border-[#EDF0F4] bg-[#F8FAFC] px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F1F4F8] text-[#53657D] sm:h-10 sm:w-10">
+                <Building2 size={18} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[#112250]">
+                  Informasi Venue
+                </h2>
+                <p className="mt-0.5 text-[10px] text-[#8795A7] sm:text-[11px]">
+                  Lengkapi informasi utama mengenai lokasi venue.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 p-4 sm:gap-5 sm:p-6 md:grid-cols-2">
+              <InputField
+                label="Nama Venue"
+                name="venue_name"
+                value={form.venue_name}
+                onChange={handleChange}
+                placeholder="Contoh: Gelora Bung Karno"
+                icon={Building2}
+                required
+              />
+
+              <InputField
+                label="Kota"
+                name="city"
+                value={form.city}
+                onChange={handleChange}
+                placeholder="Contoh: Jakarta"
+                icon={MapPin}
+                required
+              />
+
+              <InputField
+                label="Kapasitas (Orang)"
+                name="capacity"
+                type="number"
+                value={form.capacity}
+                onChange={handleChange}
+                placeholder="Contoh: 50000"
+                icon={Users}
+                required
+                min="1"
+              />
+
+              <div className="md:col-span-2">
+                <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold text-[#112250] sm:text-xs">
+                  <MapPin size={14} className="text-[#53657D]" />
+                  Alamat Lengkap
+                  <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  name="address"
+                  value={form.address}
+                  onChange={handleChange}
+                  required
+                  rows={3}
+                  placeholder="Masukkan alamat lengkap venue..."
+                  className="w-full resize-none rounded-xl border border-[#DCE2EA] bg-[#F8FAFC] px-3.5 py-3 text-sm font-medium leading-relaxed text-[#112250] outline-none transition-all placeholder:text-[#9AA6B2] focus:border-[#315A91] focus:bg-white focus:ring-4 focus:ring-[#315A91]/10 sm:px-4 sm:py-3.5"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* GAMBAR VENUE */}
+          <section className="overflow-hidden rounded-2xl border border-[#DDE3EB] bg-white shadow-sm">
+            <div className="flex items-center gap-3 border-b border-[#EDF0F4] bg-[#F8FAFC] px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F1F4F8] text-[#53657D] sm:h-10 sm:w-10">
+                <Camera size={18} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[#112250]">
+                  Gambar Venue
+                </h2>
+                <p className="mt-0.5 text-[10px] text-[#8795A7] sm:text-[11px]">
+                  Masukkan URL gambar venue untuk ditampilkan pada halaman.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-4 sm:p-6">
+              <InputField
+                label="URL Gambar"
+                name="image"
+                value={form.image}
+                onChange={handleChange}
+                placeholder="https://example.com/gambar-venue.jpg"
+                icon={Globe}
+                type="url"
+              />
+
+              {form.image.trim() && (
+                <div className="overflow-hidden rounded-xl border border-[#E5EAF0] bg-[#F6F8FA]">
+                  <div className="flex items-center gap-2 border-b border-[#E5EAF0] bg-white px-4 py-2.5">
+                    <ImagePlus size={13} className="text-[#53657D]" />
+                    <p className="text-[11px] font-semibold text-[#53657D]">
+                      Preview Gambar
+                    </p>
+                  </div>
+                  <img
+                    src={form.image}
+                    alt="Preview venue"
+                    className="max-h-72 w-full object-contain"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                    onLoad={(e) => {
+                      e.currentTarget.style.display = "block";
+                    }}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 rounded-lg bg-[#F5F7FA] p-3 text-[11px] leading-5 text-[#697F93]">
+                <Info size={14} className="mt-0.5 shrink-0 text-[#8795A7]" />
+                <p>
+                  Isi dengan URL gambar langsung. Kosongkan jika venue belum
+                  memiliki gambar.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* INFO PENYIMPANAN */}
+          <section className="rounded-2xl border border-[#DDE3EB] bg-[#F5F7FA] p-4 sm:p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#53657D] shadow-sm">
+                <Info size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[#112250]">
+                  Informasi penyimpanan
+                </h3>
+                <p className="mt-1 text-[11px] leading-6 text-[#697F93] sm:text-xs">
+                  Data venue akan disimpan langsung ke database melalui API
+                  backend TicketVerse. Data yang dikirim meliputi nama venue,
+                  kota, alamat, kapasitas, dan URL gambar.
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* RIGHT: SIDEBAR */}
+        <aside className="space-y-4 sm:space-y-5">
+          {/* RINGKASAN */}
+          <section className="rounded-2xl border border-[#DDE3EB] bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F1F4F8] text-[#53657D]">
+                <Sparkles size={15} />
+              </div>
+              <h2 className="text-sm font-semibold text-[#112250]">
+                Ringkasan Venue
+              </h2>
+            </div>
+
+            <div className="mt-4 rounded-xl bg-[#F3F6FA] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#8795A7]">
+                Nama Venue
+              </p>
+              <p className="mt-1 break-words text-sm font-semibold text-[#112250]">
+                {form.venue_name.trim() || "Belum diisi"}
+              </p>
+
+              <div className="mt-3 flex items-center gap-1.5 text-[11px] text-[#697F93]">
+                <MapPin size={12} />
+                {form.city.trim() || "Kota belum diisi"}
+              </div>
+
+              <div className="mt-2 flex items-center gap-1.5 text-[11px] text-[#697F93]">
+                <Users size={12} />
+                {form.capacity
+                  ? `${new Intl.NumberFormat("id-ID").format(
+                      Number(form.capacity) || 0
+                    )} orang`
+                  : "Kapasitas belum diisi"}
+              </div>
+
+              <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-5 text-[#697F93]">
+                <Hash size={12} className="mt-0.5 shrink-0" />
+                <span className="break-words">
+                  {form.address.trim() || "Alamat belum diisi"}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* CHECKLIST */}
+          <section className="rounded-2xl border border-[#DDE3EB] bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F1F4F8] text-[#53657D]">
+                <CheckCircle2 size={15} />
+              </div>
+              <h2 className="text-sm font-semibold text-[#112250]">
+                Kelengkapan Data
+              </h2>
+            </div>
+
+            <div className="mt-4 space-y-2.5">
+              <ChecklistItem
+                label="Nama Venue"
+                done={!!form.venue_name.trim()}
+              />
+              <ChecklistItem label="Kota" done={!!form.city.trim()} />
+              <ChecklistItem label="Alamat" done={!!form.address.trim()} />
+              <ChecklistItem label="Kapasitas" done={!!form.capacity} />
+              <ChecklistItem
+                label="Gambar (opsional)"
+                done={!!form.image.trim()}
+                optional
+              />
+            </div>
+          </section>
+
+          {/* TOMBOL AKSI */}
+          <section className="space-y-2 rounded-2xl border border-[#DDE3EB] bg-white p-4 shadow-sm sm:p-5">
+            <button
+              type="submit"
+              form="venue-form"
+              disabled={saving}
+              onClick={handleSubmit}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#112250] px-5 text-xs font-semibold text-white transition hover:bg-[#1B3560] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:h-12 sm:text-sm"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  Simpan Venue
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/superadmin/venues")}
+              disabled={saving}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#DCE2EA] bg-white px-5 text-xs font-semibold text-[#53657D] transition hover:bg-slate-50 active:scale-[0.98] disabled:opacity-50 sm:h-12 sm:text-sm"
+            >
+              <ArrowLeft size={15} />
+              Batal
+            </button>
+          </section>
+        </aside>
       </form>
     </div>
   );
 }
 
-// KOMPONEN INPUT YANG SUDAH DIDESAIN ULANG
 function InputField({
   label,
   name,
@@ -346,12 +502,17 @@ function InputField({
   placeholder,
   type = "text",
   required = false,
+  min,
+  icon: Icon,
 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-bold text-[#112250]">
-        {label} {required && <span className="text-red-500">*</span>}
+      <label className="mb-2 flex items-center gap-2 text-[11px] font-semibold text-[#112250] sm:text-xs">
+        {Icon && <Icon size={14} className="text-[#53657D]" />}
+        {label}
+        {required && <span className="text-red-500">*</span>}
       </label>
+
       <input
         type={type}
         name={name}
@@ -359,8 +520,37 @@ function InputField({
         onChange={onChange}
         placeholder={placeholder}
         required={required}
-        className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-[#112250] outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+        min={min}
+        className="h-11 w-full rounded-xl border border-[#DCE2EA] bg-[#F8FAFC] px-3.5 text-sm font-medium text-[#112250] outline-none transition-all placeholder:text-[#9AA6B2] focus:border-[#315A91] focus:bg-white focus:ring-4 focus:ring-[#315A91]/10 sm:h-12 sm:px-4"
       />
+    </div>
+  );
+}
+
+function ChecklistItem({ label, done, optional = false }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+          done
+            ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+            : "border-[#DCE2EA] bg-[#F5F7FA] text-[#9AA6B2]"
+        }`}
+      >
+        {done ? <CheckCircle2 size={12} /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+      </span>
+      <span
+        className={`text-xs font-medium ${
+          done ? "text-[#334155]" : "text-[#8795A7]"
+        }`}
+      >
+        {label}
+      </span>
+      {optional && (
+        <span className="ml-auto rounded-md bg-[#F1F4F8] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#8795A7]">
+          Opsional
+        </span>
+      )}
     </div>
   );
 }

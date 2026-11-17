@@ -1,17 +1,15 @@
+
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
-
 import NextImage from "next/image";
 
 import {
   Gauge,
   Music2,
   Tags,
-  ShoppingCart,
-  CreditCard,
   QrCode,
   Users,
   Mic2,
@@ -19,7 +17,6 @@ import {
   FolderOpen,
   Star,
   Bell,
-  MessageSquare,
   BarChart3,
   UserCircle,
   LogOut,
@@ -40,6 +37,7 @@ export default function SidebarSuperAdmin() {
 
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
+  const [tooltip, setTooltip] = useState(null);
 
   const widthRef = useRef(DEFAULT_WIDTH);
   const draggingRef = useRef(false);
@@ -47,8 +45,6 @@ export default function SidebarSuperAdmin() {
   const startWidthRef = useRef(DEFAULT_WIDTH);
 
   const isCollapsed = width <= 100;
-
-  const [tooltip, setTooltip] = useState(null);
 
   const updateWidth = (newWidth, save = true) => {
     const safeWidth = Math.min(
@@ -163,34 +159,83 @@ export default function SidebarSuperAdmin() {
     {
       title: "Menu Utama",
       items: [
-        { label: "Dashboard", href: "/superadmin/dashboard", icon: Gauge },
-        { label: "Manajemen Event", href: "/superadmin/events", icon: Music2 },
-        { label: "Kategori & Kuota Tiket", href: "/superadmin/kategori-tiket", icon: Tags },
-        { label: "Validasi E-Ticket", href: "/superadmin/validasi-etiket", icon: QrCode },
+        {
+          label: "Dashboard",
+          href: "/superadmin/dashboard",
+          icon: Gauge,
+        },
+        {
+          label: "Manajemen Event",
+          href: "/superadmin/events",
+          icon: Music2,
+        },
+     
+        {
+          label: "Validasi E-Ticket",
+          href: "/superadmin/validasi-etiket",
+          icon: QrCode,
+        },
       ],
     },
     {
       title: "Master Data",
       items: [
-        { label: "Manajemen Pengguna", href: "/superadmin/users", icon: Users },
-        { label: "Data Artis", href: "/superadmin/artis", icon: Mic2 },
-        { label: "Data Venue", href: "/superadmin/venues", icon: MapPin },
-        { label: "Kategori Konser", href: "/superadmin/kategori-konser", icon: FolderOpen },
+        {
+          label: "Manajemen Pengguna",
+          href: "/superadmin/users",
+          icon: Users,
+        },
+        {
+          label: "Kelola EO",
+          href: "/superadmin/kelola-eo",
+          icon: Crown,
+        },
+        {
+          label: "Data Artis",
+          href: "/superadmin/artis",
+          icon: Mic2,
+        },
+        {
+          label: "Data Venue",
+          href: "/superadmin/venues",
+          icon: MapPin,
+        },
+        
       ],
     },
     {
       title: "Interaksi & Informasi",
       items: [
-        { label: "Ulasan Konser", href: "/superadmin/kelola-ulasan", icon: Star },
-        { label: "Notifikasi", href: "/superadmin/kelola-notif", icon: Bell },
-        { label: "Kelola Banner Publik", href: "/superadmin/banners", icon: ImageIcon },
+        {
+          label: "Ulasan Konser",
+          href: "/superadmin/kelola-ulasan",
+          icon: Star,
+        },
+        {
+          label: "Notifikasi",
+          href: "/superadmin/kelola-notif",
+          icon: Bell,
+        },
+        {
+          label: "Kelola Banner Publik",
+          href: "/superadmin/banners",
+          icon: ImageIcon,
+        },
       ],
     },
     {
       title: "System",
       items: [
-        { label: "Laporan & Analitik", href: "/superadmin/laporan", icon: BarChart3 },
-        { label: "Profil Super Admin", href: "/superadmin/profile", icon: UserCircle },
+        {
+          label: "Laporan & Analitik",
+          href: "/superadmin/laporan",
+          icon: BarChart3,
+        },
+        {
+          label: "Profil Super Admin",
+          href: "/superadmin/profile",
+          icon: UserCircle,
+        },
       ],
     },
   ];
@@ -222,7 +267,8 @@ export default function SidebarSuperAdmin() {
     const Icon = menu.icon;
 
     const isActive =
-      pathname === menu.href || pathname.startsWith(menu.href + "/");
+      pathname === menu.href ||
+      pathname.startsWith(menu.href + "/");
 
     return (
       <Link
@@ -238,15 +284,16 @@ export default function SidebarSuperAdmin() {
           w-full
           items-center
           rounded-xl
-
-          ${isCollapsed ? "justify-center px-3 py-3" : "gap-3 px-3 py-2.5"}
-
+          ${
+            isCollapsed
+              ? "justify-center px-3 py-3"
+              : "gap-3 px-3 py-2.5"
+          }
           ${
             isActive
               ? "bg-[#294A78]/40 text-white shadow-[inset_0_0_0_1px_rgba(138,180,248,0.18)]"
               : "text-slate-300 hover:bg-[#294A78]/25 hover:text-white"
           }
-
           ${isDragging ? "" : "transition-all duration-200"}
         `}
       >
@@ -300,7 +347,6 @@ export default function SidebarSuperAdmin() {
           to-[#193556]
           text-white
           shadow-[8px_0_30px_rgba(7,18,35,0.30)]
-
           ${isDragging ? "" : "transition-[width] duration-200 ease-out"}
         `}
         style={{ width: `${width}px` }}
@@ -312,7 +358,6 @@ export default function SidebarSuperAdmin() {
             items-center
             border-b
             border-[#5275A5]/20
-
             ${isCollapsed ? "justify-center px-2" : "px-5"}
           `}
         >
@@ -392,39 +437,7 @@ export default function SidebarSuperAdmin() {
             </div>
           ))}
 
-          {!isCollapsed && (
-            <p className="mb-2 px-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#8198B8]">
-              Akun
-            </p>
-          )}
-
-          <div
-            className={`
-              flex
-              items-center
-              rounded-xl
-              border
-              border-[#5275A5]/20
-              bg-[#17304E]/50
-
-              ${isCollapsed ? "justify-center p-2" : "gap-3 px-3 py-2.5"}
-            `}
-          >
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-[#5275A5]/40 bg-[#1C3A5C] text-[#B7CAE4]">
-              <UserCircle size={19} strokeWidth={1.5} />
-            </div>
-
-            {!isCollapsed && (
-              <div className="min-w-0">
-                <p className="truncate text-[12px] font-medium text-slate-200">
-                  Super Admin
-                </p>
-                <p className="truncate text-[10px] text-[#8198B8]">
-                  superadmin@ticketverse.com
-                </p>
-              </div>
-            )}
-          </div>
+        
 
           <button
             onClick={handleLogout}
@@ -439,12 +452,13 @@ export default function SidebarSuperAdmin() {
               items-center
               rounded-xl
               text-[#8FA4C0]
-
-              ${isCollapsed ? "justify-center p-3" : "gap-3 px-3 py-2.5"}
-
+              ${
+                isCollapsed
+                  ? "justify-center p-3"
+                  : "gap-3 px-3 py-2.5"
+              }
               hover:bg-[#263F5F]/60
               hover:text-[#B8CBE5]
-
               ${isDragging ? "" : "transition-all duration-200"}
             `}
           >

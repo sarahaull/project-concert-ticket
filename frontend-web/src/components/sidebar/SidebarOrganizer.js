@@ -73,8 +73,6 @@ const MENU_SECTIONS = [
     title: "Keuangan",
     items: [
       { label: "Pendapatan", href: "/organizer/keuangan/pendapatan", icon: Banknote },
-      { label: "Pencairan Dana", href: "/organizer/keuangan/pencairan", icon: Wallet },
-      { label: "Riwayat Transaksi", href: "/organizer/keuangan/riwayat", icon: ReceiptText },
     ],
   },
   {
@@ -425,28 +423,7 @@ export default function SidebarOrganizer() {
             </div>
           ))}
 
-          {!isCollapsed && (
-            <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Akun
-            </p>
-          )}
-
-          <div
-            className={`
-              flex items-center rounded-xl border border-white/10 bg-white/5
-              ${isCollapsed ? "justify-center p-2" : "gap-3 px-3 py-2.5"}
-            `}
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/30">
-              <UserCircle size={19} strokeWidth={1.5} />
-            </div>
-            {!isCollapsed && (
-              <div className="min-w-0">
-                <p className="truncate text-[12px] font-medium text-slate-200">Organizer</p>
-                <p className="truncate text-[10px] text-slate-500">organizer@ticketverse.com</p>
-              </div>
-            )}
-          </div>
+        
 
           <button
             onClick={handleLogout}

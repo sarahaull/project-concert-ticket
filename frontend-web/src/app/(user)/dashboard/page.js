@@ -139,7 +139,6 @@ const StatsCard = ({ title, value, icon, subtitle, trendLabel }) => {
 
   const Icon = iconMap[icon] || Ticket;
 
-  // Palet Warna 100% Biru/Slate
   const accents = {
     ticket: 'bg-blue-50 text-blue-700 bg-blue-600',
     active: 'bg-sky-50 text-sky-600 bg-sky-500',
@@ -989,6 +988,7 @@ export default function DashboardPage() {
             Number(event.min_price) ||
             Number(event.price) ||
             Number(event.starting_price) ||
+            Number(event.ticket_price) ||
             0,
           image: getEventPoster(event),
           isWishlisted: Boolean(wishlistItem),

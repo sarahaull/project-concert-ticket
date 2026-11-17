@@ -1,6 +1,5 @@
 const db = require("../config/db");
 
-// ===== Ambil Semua Artist =====
 const getArtists = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -29,7 +28,6 @@ const getArtists = async (req, res) => {
   }
 };
 
-// ===== Ambil Artist Berdasarkan ID =====
 const getArtistById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -68,7 +66,6 @@ const getArtistById = async (req, res) => {
   }
 };
 
-// ===== Tambah Artist =====
 const createArtist = async (req, res) => {
   try {
     const {
@@ -132,7 +129,6 @@ const createArtist = async (req, res) => {
   }
 };
 
-// ===== Update Artist =====
 const updateArtist = async (req, res) => {
   try {
     const { id } = req.params;
@@ -210,7 +206,6 @@ const updateArtist = async (req, res) => {
   }
 };
 
-// ===== Hapus Artist =====
 const deleteArtist = async (req, res) => {
   try {
     const { id } = req.params;

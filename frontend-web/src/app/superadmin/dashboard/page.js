@@ -77,44 +77,42 @@ const getRelativeTime = (date) => {
 
 /* ---------------------------------- Cards --------------------------------- */
 
-function StatsCard({ title, value, subtitle, icon: Icon, accent, loading }) {
+function StatsCard({ title, value, subtitle, icon: Icon, loading }) {
   return (
-    <div className="group relative overflow-hidden rounded-2xl bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
-      <div
-        className="absolute -right-10 -top-10 h-28 w-28 rounded-full blur-2xl opacity-10 transition-opacity duration-500 group-hover:opacity-25"
-        style={{ background: accent }}
-      />
-      <div className="relative flex justify-between items-start mb-3">
-        <div
-          className="flex h-10 w-10 items-center justify-center rounded-xl"
-          style={{ background: `${accent}18`, color: accent }}
-        >
+    <div className="group relative overflow-hidden rounded-2xl border border-[#e0e8f0]/60 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#8ab4f8]/40 hover:shadow-[0_10px_30px_rgba(10,22,40,0.08)]">
+      <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[#8ab4f8]/10 blur-2xl opacity-40 transition-opacity duration-500 group-hover:opacity-80" />
+
+      <div className="relative mb-3 flex items-start justify-between">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f0f5fc] text-[#112250] transition-colors duration-300 group-hover:bg-[#112250] group-hover:text-white">
           <Icon className="h-5 w-5" />
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-600">
-          <SparklesIcon className="h-3 w-3" />
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#f0f5fc] px-2 py-1 text-[10px] font-semibold text-[#112250]">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
           Live
         </span>
       </div>
-      <p className="relative text-[11px] font-medium uppercase tracking-wider text-[#7e91b2]">
+
+      <p className="relative text-[11px] font-semibold uppercase tracking-wider text-[#7e91b2]">
         {title}
       </p>
       <p className="relative mt-1 break-words text-xl font-bold text-[#0a1628]">
-        {loading ? "..." : value}
+        {loading ? (
+          <span className="inline-block h-6 w-24 animate-pulse rounded bg-[#e0e8f0]" />
+        ) : (
+          value
+        )}
       </p>
       <p className="relative mt-1 text-[10px] text-[#7e91b2]">{subtitle}</p>
     </div>
   );
 }
 
-function SystemCard({ icon, iconBg, iconColor, title, value, subtitle }) {
+function SystemCard({ icon, title, value, subtitle }) {
   return (
-    <div className="group rounded-2xl border border-[#e0e8f0]/50 bg-white/90 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
+    <div className="group rounded-2xl border border-[#e0e8f0]/60 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#8ab4f8]/40 hover:shadow-[0_10px_30px_rgba(10,22,40,0.08)]">
       <div className="flex items-center gap-2">
-        <div
-          className={`flex h-8 w-8 items-center justify-center rounded-lg ${iconBg}`}
-        >
-          <span className={iconColor}>{icon}</span>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f0f5fc] text-[#112250] transition-colors duration-300 group-hover:bg-[#112250] group-hover:text-white">
+          {icon}
         </div>
         <p className="text-[11px] font-medium text-[#7e91b2]">{title}</p>
       </div>
@@ -130,7 +128,7 @@ function ChartSkeleton() {
   return (
     <div className="flex h-full items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-[#7e91b2]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#8ab4f8] border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#112250] border-t-transparent" />
         <span className="text-xs">Memuat grafik...</span>
       </div>
     </div>
@@ -306,27 +304,27 @@ export default function AdminDashboard() {
           data: chartTransactions.map((item) =>
             Number(item.total_price || 0)
           ),
-          borderColor: "#8ab4f8",
+          borderColor: "#112250",
           backgroundColor: (context) => {
             const chart = context.chart;
             const { ctx, chartArea } = chart;
-            if (!chartArea) return "rgba(138,180,248,0.1)";
+            if (!chartArea) return "rgba(17,34,80,0.1)";
             const gradient = ctx.createLinearGradient(
               0,
               chartArea.top,
               0,
               chartArea.bottom
             );
-            gradient.addColorStop(0, "rgba(138,180,248,0.3)");
-            gradient.addColorStop(0.5, "rgba(138,180,248,0.08)");
-            gradient.addColorStop(1, "rgba(138,180,248,0)");
+            gradient.addColorStop(0, "rgba(17,34,80,0.28)");
+            gradient.addColorStop(0.5, "rgba(17,34,80,0.06)");
+            gradient.addColorStop(1, "rgba(17,34,80,0)");
             return gradient;
           },
           fill: true,
           tension: 0.42,
           pointRadius: 4,
           pointHoverRadius: 8,
-          pointBackgroundColor: "#8ab4f8",
+          pointBackgroundColor: "#112250",
           pointBorderColor: "#ffffff",
           pointBorderWidth: 2,
           borderWidth: 2.5,
@@ -350,10 +348,15 @@ export default function AdminDashboard() {
       datasets: [
         {
           data: [paid, pending, failed, other],
-          backgroundColor: ["#6bcf8a", "#f5bd58", "#ef7777", "#8ab4f8"],
+          backgroundColor: [
+            "#112250",
+            "#4a6b9a",
+            "#8ab4f8",
+            "#dbe6f5",
+          ],
           borderColor: "#ffffff",
           borderWidth: 3,
-          hoverOffset: 8,
+          hoverOffset: 10,
         },
       ],
     };
@@ -365,14 +368,21 @@ export default function AdminDashboard() {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
+    animation: {
+      duration: 900,
+      easing: "easeOutQuart",
+    },
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: "rgba(10,22,40,0.95)",
+        backgroundColor: "rgba(10,22,40,0.96)",
         titleColor: "#e0e8f0",
         bodyColor: "#8aa0c0",
+        borderColor: "rgba(138,180,248,0.25)",
+        borderWidth: 1,
         padding: 12,
         cornerRadius: 10,
+        displayColors: false,
         callbacks: {
           label: (context) => formatRupiah(context.raw),
         },
@@ -386,7 +396,7 @@ export default function AdminDashboard() {
       },
       y: {
         beginAtZero: true,
-        grid: { color: "rgba(74,107,154,0.08)" },
+        grid: { color: "rgba(17,34,80,0.06)" },
         border: { display: false },
         ticks: {
           color: "#7e91b2",
@@ -400,13 +410,21 @@ export default function AdminDashboard() {
   const doughnutOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: "72%",
+    cutout: "74%",
+    rotation: -90,
+    circumference: 360,
+    animation: {
+      animateRotate: true,
+      animateScale: true,
+      duration: 1000,
+      easing: "easeOutQuart",
+    },
     plugins: {
       legend: {
         position: "bottom",
         labels: {
           color: "#7e91b2",
-          font: { size: 10 },
+          font: { size: 10, weight: "500" },
           boxWidth: 8,
           padding: 14,
           usePointStyle: true,
@@ -414,9 +432,11 @@ export default function AdminDashboard() {
         },
       },
       tooltip: {
-        backgroundColor: "rgba(10,22,40,0.95)",
+        backgroundColor: "rgba(10,22,40,0.96)",
         titleColor: "#e0e8f0",
         bodyColor: "#8aa0c0",
+        borderColor: "rgba(138,180,248,0.25)",
+        borderWidth: 1,
         padding: 12,
         cornerRadius: 10,
       },
@@ -464,19 +484,20 @@ export default function AdminDashboard() {
       {/* HERO */}
       <section className="relative w-full overflow-hidden rounded-2xl px-6 py-8 shadow-[0_8px_30px_rgba(10,20,40,0.25)]">
         <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#13213b] to-[#1b2f4e]" />
-        <div className="absolute -right-16 -top-16 h-64 w-64 animate-pulse rounded-full bg-[#5a8ad0]/15 blur-3xl" />
+        <div className="absolute -right-16 -top-16 h-64 w-64 animate-pulse rounded-full bg-[#8ab4f8]/15 blur-3xl" />
         <div className="absolute -bottom-20 left-20 h-48 w-48 rounded-full bg-[#8ab4f8]/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(138,180,248,0.08),transparent_55%)]" />
 
-        <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+        <div className="relative flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="mb-3 flex items-center gap-2">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#8ab4f8]" />
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8aa0c0]">
                 Overview
               </p>
             </div>
 
-            <h1 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-white">
+            <h1 className="text-[26px] font-bold tracking-tight text-white sm:text-[32px]">
               Selamat datang,{" "}
               <span className="bg-gradient-to-r from-[#8ab4f8] to-[#b0c8e0] bg-clip-text text-transparent">
                 Super Admin
@@ -499,11 +520,11 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="flex gap-3 w-full sm:w-auto">
+          <div className="flex w-full gap-3 sm:w-auto">
             <select
               value={selectedPeriod}
               onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="bg-white/10 border border-white/20 text-white text-xs font-medium rounded-xl px-3 py-2 outline-none backdrop-blur-sm cursor-pointer hover:bg-white/20 transition-all"
+              className="cursor-pointer rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-medium text-white outline-none backdrop-blur-sm transition-all hover:bg-white/20"
             >
               <option className="text-black" value="all">
                 Semua Data
@@ -519,7 +540,7 @@ export default function AdminDashboard() {
             <button
               onClick={() => loadDashboard(true)}
               disabled={refreshing}
-              className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#8ab4f8] to-[#5a8ad0] text-[#0a1628] text-xs font-bold px-4 py-2.5 rounded-xl hover:shadow-[0_8px_25px_rgba(138,180,248,0.3)] hover:-translate-y-0.5 transition-all disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8ab4f8] to-[#5a8ad0] px-4 py-2.5 text-xs font-bold text-[#0a1628] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_25px_rgba(138,180,248,0.35)] disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
@@ -535,7 +556,9 @@ export default function AdminDashboard() {
         <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <ExclamationCircleIcon className="h-5 w-5 flex-shrink-0" />
           <div>
-            <p className="font-semibold">Gagal memuat sebagian data dashboard</p>
+            <p className="font-semibold">
+              Gagal memuat sebagian data dashboard
+            </p>
             <p className="mt-1">{error}</p>
             <p className="mt-2 text-xs">
               Pastikan token Super Admin masih berlaku dan backend berjalan.
@@ -545,13 +568,14 @@ export default function AdminDashboard() {
       )}
 
       {/* STATS */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Total Pengguna"
           value={formatNumber(summary.users)}
-          subtitle={`${formatNumber(summary.customers)} customer · ${formatNumber(summary.organizers)} organizer`}
+          subtitle={`${formatNumber(
+            summary.customers
+          )} customer · ${formatNumber(summary.organizers)} organizer`}
           icon={UsersIcon}
-          accent="#8ab4f8"
           loading={loading}
         />
         <StatsCard
@@ -559,7 +583,6 @@ export default function AdminDashboard() {
           value={formatRupiah(recentPaidRevenue)}
           subtitle={`${paidTransactions.length} transaksi berstatus Paid`}
           icon={CreditCardIcon}
-          accent="#6bcf8a"
           loading={loading}
         />
         <StatsCard
@@ -567,7 +590,6 @@ export default function AdminDashboard() {
           value={formatNumber(summary.events)}
           subtitle={`${events.length} event terbaru dimuat`}
           icon={CalendarIcon}
-          accent="#8ab4f8"
           loading={loading}
         />
         <StatsCard
@@ -575,21 +597,27 @@ export default function AdminDashboard() {
           value={formatNumber(summary.tickets)}
           subtitle="Tiket tercatat di platform"
           icon={TicketIcon}
-          accent="#c084fc"
           loading={loading}
         />
       </section>
 
       {/* CHARTS */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
-          <h2 className="text-[15px] font-bold text-[#0a1628] mb-1 flex items-center gap-2">
-            <span className="w-1 h-4 rounded-full bg-[#8ab4f8]" />
-            Tren Transaksi Terbaru
-          </h2>
-          <p className="text-[11px] text-[#7e91b2] mb-6">
-            Nilai pesanan berdasarkan transaksi terbaru
-          </p>
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-[#e0e8f0]/60 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-[#0a1628]">
+                <span className="h-4 w-1 rounded-full bg-[#112250]" />
+                Tren Transaksi Terbaru
+              </h2>
+              <p className="text-[11px] text-[#7e91b2]">
+                Nilai pesanan berdasarkan transaksi terbaru
+              </p>
+            </div>
+            <span className="rounded-lg bg-[#f0f5fc] px-2 py-1 text-[10px] font-semibold text-[#112250]">
+              {chartTransactions.length} data
+            </span>
+          </div>
           <div className="h-[300px]">
             {loading ? (
               <ChartSkeleton />
@@ -603,15 +631,22 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
-          <h2 className="text-[15px] font-bold text-[#0a1628] mb-1 flex items-center gap-2">
-            <span className="w-1 h-4 rounded-full bg-[#4a6b9a]" />
-            Status Pembayaran
-          </h2>
-          <p className="text-[11px] text-[#7e91b2] mb-6">
-            Distribusi transaksi terbaru
-          </p>
-          <div className="h-[300px]">
+        <div className="rounded-2xl border border-[#e0e8f0]/60 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start justify-between">
+            <div>
+              <h2 className="mb-1 flex items-center gap-2 text-[15px] font-bold text-[#0a1628]">
+                <span className="h-4 w-1 rounded-full bg-[#4a6b9a]" />
+                Status Pembayaran
+              </h2>
+              <p className="text-[11px] text-[#7e91b2]">
+                Distribusi transaksi terbaru
+              </p>
+            </div>
+            <span className="rounded-lg bg-[#f0f5fc] px-2 py-1 text-[10px] font-semibold text-[#112250]">
+              {transactions.length} total
+            </span>
+          </div>
+          <div className="relative h-[300px]">
             {loading ? (
               <ChartSkeleton />
             ) : transactions.length === 0 ? (
@@ -619,10 +654,21 @@ export default function AdminDashboard() {
                 Belum ada data pembayaran.
               </div>
             ) : (
-              <Doughnut data={doughnutData} options={doughnutOptions} />
+              <>
+                <Doughnut data={doughnutData} options={doughnutOptions} />
+                <div className="pointer-events-none absolute inset-0 top-0 flex h-[220px] flex-col items-center justify-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#7e91b2]">
+                    Total
+                  </p>
+                  <p className="text-xl font-bold text-[#0a1628]">
+                    {transactions.length}
+                  </p>
+                  <p className="text-[10px] text-[#7e91b2]">transaksi</p>
+                </div>
+              </>
             )}
           </div>
-          <div className="mt-3 space-y-2 border-t border-slate-100 pt-4 text-xs">
+          <div className="mt-3 space-y-2 border-t border-[#e0e8f0]/60 pt-4 text-xs">
             <div className="flex justify-between">
               <span className="text-slate-500">Berhasil</span>
               <span className="font-semibold text-emerald-600">
@@ -641,11 +687,11 @@ export default function AdminDashboard() {
 
       {/* LISTS */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
+        <div className="rounded-2xl border border-[#e0e8f0]/60 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-[15px] font-bold text-[#0a1628] flex items-center gap-2">
-                <FireIcon className="h-4 w-4 text-amber-500" />
+              <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#0a1628]">
+                <FireIcon className="h-4 w-4 text-[#112250]" />
                 Event Terbaru
               </h2>
               <p className="mt-0.5 text-[11px] text-[#7e91b2]">
@@ -654,7 +700,7 @@ export default function AdminDashboard() {
             </div>
             <Link
               href="/superadmin/events"
-              className="flex items-center gap-1 text-[11px] font-semibold text-[#5a7aad] hover:text-[#0a1628]"
+              className="flex items-center gap-1 text-[11px] font-semibold text-[#112250] transition hover:text-[#5a7aad]"
             >
               Lihat semua
               <ArrowUpRightIcon className="h-3 w-3" />
@@ -702,7 +748,7 @@ export default function AdminDashboard() {
                       {event.organizer_name || "Organizer belum tersedia"}
                     </p>
                   </div>
-                  <span className="max-w-[90px] truncate rounded-full bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-600">
+                  <span className="max-w-[90px] truncate rounded-full bg-[#f0f5fc] px-2 py-1 text-[9px] font-semibold text-[#112250]">
                     {event.approval_status || event.status || "Event"}
                   </span>
                 </div>
@@ -711,10 +757,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
+        <div className="rounded-2xl border border-[#e0e8f0]/60 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-[15px] font-bold text-[#0a1628] flex items-center gap-2">
+              <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#0a1628]">
                 <UsersIcon className="h-4 w-4 text-[#3B507D]" />
                 Pengguna Terbaru
               </h2>
@@ -724,7 +770,7 @@ export default function AdminDashboard() {
             </div>
             <Link
               href="/superadmin/users"
-              className="flex items-center gap-1 text-[11px] font-semibold text-[#5a7aad] hover:text-[#0a1628]"
+              className="flex items-center gap-1 text-[11px] font-semibold text-[#112250] transition hover:text-[#5a7aad]"
             >
               Lihat semua
               <ArrowUpRightIcon className="h-3 w-3" />
@@ -758,7 +804,7 @@ export default function AdminDashboard() {
                       {user.email || "-"}
                     </p>
                   </div>
-                  <span className="rounded-full bg-indigo-50 px-2 py-1 text-[9px] font-semibold text-indigo-600">
+                  <span className="rounded-full bg-[#f0f5fc] px-2 py-1 text-[9px] font-semibold text-[#112250]">
                     {user.role || "User"}
                   </span>
                 </div>
@@ -767,9 +813,9 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="bg-white/90 backdrop-blur-sm border border-[#e0e8f0]/50 p-6 rounded-2xl shadow-sm">
+        <div className="rounded-2xl border border-[#e0e8f0]/60 bg-white p-6 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-[15px] font-bold text-[#0a1628] flex items-center gap-2">
+            <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#0a1628]">
               <ClockIcon className="h-4 w-4 text-[#3B507D]" />
               Aktivitas Sistem
             </h2>
@@ -790,9 +836,9 @@ export default function AdminDashboard() {
               activities.map((activity, index) => (
                 <div key={activity.id} className="flex items-start gap-3">
                   <div className="relative flex flex-shrink-0 flex-col items-center">
-                    <span className="mt-1.5 h-2 w-2 rounded-full bg-[#5a8ad0] shadow-[0_0_8px_rgba(90,138,208,0.4)]" />
+                    <span className="mt-1.5 h-2 w-2 rounded-full bg-[#112250] shadow-[0_0_8px_rgba(17,34,80,0.35)]" />
                     {index !== activities.length - 1 && (
-                      <span className="absolute top-4 h-8 w-px bg-[#d0d8e4]" />
+                      <span className="absolute top-4 h-8 w-px bg-[#e0e8f0]" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -811,35 +857,27 @@ export default function AdminDashboard() {
       </section>
 
       {/* SYSTEM */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SystemCard
           icon={<CheckCircleIcon className="h-4 w-4" />}
-          iconBg="bg-emerald-500/10"
-          iconColor="text-emerald-500"
           title="Status Sistem"
           value={systemStatus}
           subtitle="Status koneksi dashboard"
         />
         <SystemCard
           icon={<CalendarIcon className="h-4 w-4" />}
-          iconBg="bg-blue-500/10"
-          iconColor="text-blue-500"
           title="Total Event"
           value={formatNumber(summary.events)}
           subtitle="Data dari database events"
         />
         <SystemCard
           icon={<TicketIcon className="h-4 w-4" />}
-          iconBg="bg-purple-500/10"
-          iconColor="text-purple-500"
           title="Total Tiket"
           value={formatNumber(summary.tickets)}
           subtitle="Data dari database tickets"
         />
         <SystemCard
           icon={<ClockIcon className="h-4 w-4" />}
-          iconBg="bg-amber-500/10"
-          iconColor="text-amber-500"
           title="Transaksi Pending"
           value={formatNumber(pendingTransactions.length)}
           subtitle="Dari data terbaru yang dimuat"

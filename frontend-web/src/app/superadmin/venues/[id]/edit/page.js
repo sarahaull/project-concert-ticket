@@ -1,299 +1,454 @@
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   Building2,
   MapPin,
   Users,
   Save,
-  Plus,
+  Image as ImageIcon,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
   X,
+  Camera,
+  Hash,
 } from "lucide-react";
 
-const STORAGE_KEY = "ticketverse_venues";
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "");
+
+const API_BASE = API_URL.endsWith("/api")
+  ? `${API_URL}/venues`
+  : `${API_URL}/api/venues`;
+
+const getToken = () => {
+  if (typeof window === "undefined") return null;
+
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("authToken")
+  );
+};
+
+const getHeaders = (includeJson = false) => {
+  const token = getToken();
+
+  return {
+    ...(includeJson
+      ? { "Content-Type": "application/json" }
+      : {}),
+    ...(token
+      ? { Authorization: `Bearer ${token}` }
+      : {}),
+  };
+};
+
+const normalizeVenue = (data) => ({
+  id: data.id,
+  name: data.venue_name || "",
+  city: data.city || "",
+  address: data.address || "",
+  capacity:
+    data.capacity === null || data.capacity === undefined
+      ? ""
+      : String(data.capacity),
+  image: data.image || "",
+  createdAt: data.created_at || null,
+});
 
 export default function EditVenuePage() {
   const params = useParams();
   const router = useRouter();
 
-  const [form, setForm] = useState(null);
-  const [facilities, setFacilities] = useState([]);
-  const [facilityInput, setFacilityInput] = useState("");
+  const venueId = params?.id;
+
+  const [form, setForm] = useState({
+    name: "",
+    city: "",
+    address: "",
+    capacity: "",
+    image: "",
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [imageError, setImageError] = useState(false);
+
+  // ========================================
+  // GET DETAIL VENUE
+  // ========================================
+
+  const fetchVenue = useCallback(async () => {
+    if (!venueId) return;
+
+    setLoading(true);
+    setError("");
+
     try {
-      const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "[]"
+      const response = await fetch(
+        `${API_BASE}/${encodeURIComponent(venueId)}`,
+        {
+          method: "GET",
+          headers: getHeaders(),
+          cache: "no-store",
+        }
       );
 
-      const venue = saved.find(
-        (item) => item.id === params.id
-      );
+      const data = await response.json().catch(() => ({}));
 
-      if (venue) {
-        setForm({
-          name: venue.name || "",
-          type: venue.type || "",
-          address: venue.address || "",
-          city: venue.city || "",
-          capacity: venue.capacity || "",
-          status: venue.status || "Aktif",
-          description: venue.description || "",
-        });
-
-        setFacilities(venue.facilities || []);
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+          data.error ||
+          "Gagal mengambil data venue."
+        );
       }
-    } catch (error) {
-      console.error(error);
+
+      const venueData = data.venue || data.data;
+
+      if (!venueData) {
+        throw new Error("Data venue tidak ditemukan.");
+      }
+
+      const normalized = normalizeVenue(venueData);
+
+      setForm({
+        name: normalized.name,
+        city: normalized.city,
+        address: normalized.address,
+        capacity: normalized.capacity,
+        image: normalized.image,
+      });
+
+      setImageError(false);
+    } catch (err) {
+      console.error("GET VENUE ERROR:", err);
+
+      setError(
+        err.message || "Terjadi kesalahan saat mengambil venue."
+      );
     } finally {
       setLoading(false);
     }
-  }, [params.id]);
+  }, [venueId]);
+
+  useEffect(() => {
+    fetchVenue();
+  }, [fetchVenue]);
+
+  // ========================================
+  // INPUT HANDLER
+  // ========================================
 
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       [name]: value,
     }));
+
+    setError("");
+    setSuccess("");
+
+    if (name === "image") {
+      setImageError(false);
+    }
   };
 
-  const addFacility = () => {
-    const value = facilityInput.trim();
+  // ========================================
+  // VALIDASI
+  // ========================================
 
-    if (!value) return;
-
-    if (!facilities.includes(value)) {
-      setFacilities((prev) => [...prev, value]);
+  const validateForm = () => {
+    if (!form.name.trim()) {
+      return "Nama venue wajib diisi.";
     }
 
-    setFacilityInput("");
-  };
+    if (!form.city.trim()) {
+      return "Kota venue wajib diisi.";
+    }
 
-  const removeFacility = (facility) => {
-    setFacilities((prev) =>
-      prev.filter((item) => item !== facility)
-    );
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
+    if (!form.address.trim()) {
+      return "Alamat venue wajib diisi.";
+    }
 
     if (
-      !form.name ||
-      !form.type ||
-      !form.address ||
-      !form.city ||
-      !form.capacity
+      form.capacity === "" ||
+      !Number.isFinite(Number(form.capacity)) ||
+      Number(form.capacity) <= 0
     ) {
-      alert("Lengkapi data venue terlebih dahulu.");
+      return "Kapasitas venue harus lebih dari 0.";
+    }
+
+    if (!Number.isInteger(Number(form.capacity))) {
+      return "Kapasitas harus berupa bilangan bulat.";
+    }
+
+    return "";
+  };
+
+  // ========================================
+  // UPDATE VENUE
+  // ========================================
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    setError("");
+    setSuccess("");
+
+    const validationError = validateForm();
+
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setSaving(true);
 
     try {
-      const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) || "[]"
-      );
+      const payload = {
+        venue_name: form.name.trim(),
+        city: form.city.trim(),
+        address: form.address.trim(),
+        capacity: Number(form.capacity),
+        image: form.image.trim() || null,
+      };
 
-      const updated = saved.map((venue) => {
-        if (venue.id !== params.id) {
-          return venue;
+      const response = await fetch(
+        `${API_BASE}/${encodeURIComponent(venueId)}`,
+        {
+          method: "PUT",
+          headers: getHeaders(true),
+          body: JSON.stringify(payload),
         }
-
-        return {
-          ...venue,
-          name: form.name,
-          type: form.type,
-          address: form.address,
-          city: form.city,
-          capacity: Number(form.capacity),
-          status: form.status,
-          description: form.description,
-          facilities,
-        };
-      });
-
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(updated)
       );
 
-      router.push(`/superadmin/venues/${params.id}`);
-    } catch (error) {
-      console.error(error);
-      alert("Gagal memperbarui venue.");
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+          data.error ||
+          "Gagal memperbarui venue."
+        );
+      }
+
+      setSuccess(
+        data.message || "Venue berhasil diperbarui."
+      );
+
+      // Pastikan detail mengambil data terbaru dari backend
+      setTimeout(() => {
+        router.push(`/superadmin/venues/${venueId}`);
+        router.refresh();
+      }, 800);
+    } catch (err) {
+      console.error("UPDATE VENUE ERROR:", err);
+
+      setError(
+        err.message || "Terjadi kesalahan saat memperbarui venue."
+      );
+
       setSaving(false);
     }
   };
 
+  // ========================================
+  // LOADING
+  // ========================================
+
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <p className="text-[12px] text-[#8795A7]">
-          Memuat data venue...
+      <div className="flex min-h-[450px] flex-col items-center justify-center gap-3">
+        <RefreshCw className="h-7 w-7 animate-spin text-[#112250]" />
+
+        <p className="text-sm font-medium text-[#8795A7]">
+          Memuat data venue dari server...
         </p>
       </div>
     );
   }
 
-  if (!form) {
+  // ========================================
+  // ERROR LOAD
+  // ========================================
+
+  if (error && !form.name && !form.city && !form.address) {
     return (
-      <div className="flex min-h-[400px] flex-col items-center justify-center">
+      <div className="flex min-h-[450px] flex-col items-center justify-center px-5 text-center">
+        <AlertCircle size={35} className="text-red-500" />
 
-        <Building2
-          size={30}
-          className="text-[#8795A7]"
-        />
+        <h2 className="mt-4 text-base font-semibold text-[#112250]">
+          Gagal memuat venue
+        </h2>
 
-        <p className="mt-3 text-[12px] font-semibold text-[#112250]">
-          Venue tidak ditemukan
+        <p className="mt-2 text-sm text-[#8795A7]">
+          {error}
         </p>
 
-        <button
-          onClick={() =>
-            router.push("/superadmin/venues")
-          }
-          className="mt-4 flex h-9 items-center gap-2 rounded-xl bg-[#112250] px-4 text-[10px] font-semibold text-white"
-        >
-          <ArrowLeft size={14} />
-          Kembali
-        </button>
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={fetchVenue}
+            className="flex h-10 items-center gap-2 rounded-xl border border-[#DCE2EA] px-4 text-xs font-semibold text-[#112250]"
+          >
+            <RefreshCw size={14} />
+            Coba Lagi
+          </button>
 
+          <Link
+            href="/superadmin/venues"
+            className="flex h-10 items-center gap-2 rounded-xl bg-[#112250] px-4 text-xs font-semibold text-white"
+          >
+            <ArrowLeft size={14} />
+            Kembali
+          </Link>
+        </div>
       </div>
     );
   }
+
+  // ========================================
+  // MAIN PAGE
+  // ========================================
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] space-y-6">
+    <div className="mx-auto w-full max-w-[1100px] space-y-6 pb-8">
 
       {/* HEADER */}
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() =>
+              router.push(`/superadmin/venues/${venueId}`)
+            }
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#DCE2EA] bg-white text-[#697F93] transition hover:bg-[#F5F7FA]"
+          >
+            <ArrowLeft size={17} />
+          </button>
 
-        <button
-          onClick={() =>
-            router.push(`/superadmin/venues/${params.id}`)
-          }
-          className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#DCE2EA] bg-white text-[#697F93] transition hover:bg-[#F5F7FA]"
-        >
-          <ArrowLeft size={17} />
-        </button>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8795A7]">
+              Master Data / Venue / Edit
+            </p>
 
-        <div>
+            <h1 className="mt-1 text-xl font-semibold tracking-tight text-[#112250] sm:text-2xl">
+              Edit Venue
+            </h1>
 
-          <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-[#8795A7]">
-            Master Data / Venue / Edit
-          </p>
-
-          <h1 className="mt-1 text-[23px] font-semibold tracking-[-0.03em] text-[#112250]">
-            Edit Venue
-          </h1>
-
-          <p className="mt-1 text-[11px] text-[#697F93]">
-            Perbarui informasi venue.
-          </p>
-
+            <p className="mt-1 text-xs text-[#697F93]">
+              Perbarui informasi venue dari database.
+            </p>
+          </div>
         </div>
 
+        <div className="flex items-center gap-2 rounded-lg border border-[#DDE3EB] bg-white px-3 py-2">
+          <Hash size={14} className="text-[#8795A7]" />
+
+          <span className="text-xs font-medium text-[#53657D]">
+            ID Venue: {venueId}
+          </span>
+        </div>
       </div>
+
+      {/* ALERT ERROR */}
+
+      {error && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <AlertCircle
+            size={17}
+            className="mt-0.5 shrink-0 text-red-600"
+          />
+
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-red-700">
+              Gagal memperbarui venue
+            </p>
+
+            <p className="mt-1 break-words text-xs text-red-600">
+              {error}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setError("")}
+            className="ml-auto text-red-500"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* ALERT SUCCESS */}
+
+      {success && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <CheckCircle2
+            size={17}
+            className="text-emerald-600"
+          />
+
+          <p className="text-xs font-semibold text-emerald-700">
+            {success}
+          </p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
 
-        {/* INFORMASI */}
+        {/* INFORMASI VENUE */}
 
-        <div className="rounded-2xl border border-[#DDE3EB] bg-white shadow-[0_8px_30px_rgba(17,34,80,0.035)]">
+        <section className="overflow-hidden rounded-2xl border border-[#DDE3EB] bg-white shadow-sm">
 
-          <div className="border-b border-[#E8ECF1] px-6 py-5">
-
+          <div className="border-b border-[#E8ECF1] px-5 py-5 sm:px-6">
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#3B507D]">
                 <Building2 size={19} />
               </div>
 
               <div>
-                <h2 className="text-[13px] font-semibold text-[#112250]">
+                <h2 className="text-sm font-semibold text-[#112250]">
                   Informasi Venue
                 </h2>
 
-                <p className="mt-0.5 text-[10px] text-[#8795A7]">
-                  Perbarui data utama venue.
+                <p className="mt-1 text-[11px] text-[#8795A7]">
+                  Ubah informasi utama venue.
                 </p>
               </div>
-
             </div>
-
           </div>
 
-          <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 p-5 sm:p-6 md:grid-cols-2">
 
             <InputField
               label="Nama Venue"
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder="Nama venue"
+              placeholder="Masukkan nama venue"
               required
             />
-
-            <div>
-
-              <label className="mb-2 block text-[10px] font-semibold text-[#53657D]">
-                Tipe Venue
-              </label>
-
-              <select
-                name="type"
-                value={form.type}
-                onChange={handleChange}
-                required
-                className="h-11 w-full rounded-xl border border-[#DCE2EA] bg-white px-3 text-[11px] text-[#112250] outline-none focus:border-[#8BA7CF]"
-              >
-                <option value="">
-                  Pilih tipe venue
-                </option>
-
-                <option value="Stadium">
-                  Stadium
-                </option>
-
-                <option value="Convention Hall">
-                  Convention Hall
-                </option>
-
-                <option value="Indoor Arena">
-                  Indoor Arena
-                </option>
-
-                <option value="Outdoor">
-                  Outdoor
-                </option>
-
-                <option value="Theater">
-                  Theater
-                </option>
-
-                <option value="Hall">
-                  Hall
-                </option>
-
-              </select>
-
-            </div>
 
             <InputField
               label="Kota"
               name="city"
               value={form.city}
               onChange={handleChange}
-              placeholder="Kota"
+              placeholder="Masukkan kota venue"
               required
             />
 
@@ -303,15 +458,15 @@ export default function EditVenuePage() {
               type="number"
               value={form.capacity}
               onChange={handleChange}
-              placeholder="Kapasitas"
+              placeholder="Masukkan kapasitas"
               required
+              min="1"
             />
 
             <div className="md:col-span-2">
-
-              <label className="mb-2 flex items-center gap-2 text-[10px] font-semibold text-[#53657D]">
-                <MapPin size={13} />
-                Alamat
+              <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#53657D]">
+                <MapPin size={14} />
+                Alamat Venue
               </label>
 
               <textarea
@@ -320,138 +475,135 @@ export default function EditVenuePage() {
                 onChange={handleChange}
                 rows={3}
                 required
-                className="w-full resize-none rounded-xl border border-[#DCE2EA] px-3 py-3 text-[11px] text-[#112250] outline-none focus:border-[#8BA7CF]"
+                placeholder="Masukkan alamat lengkap venue"
+                className="w-full resize-none rounded-xl border border-[#DCE2EA] bg-white px-3 py-3 text-xs text-[#112250] outline-none transition placeholder:text-[#A0AAB7] focus:border-[#8BA7CF] focus:ring-4 focus:ring-[#8BA7CF]/10"
               />
+            </div>
+
+          </div>
+        </section>
+
+        {/* GAMBAR VENUE */}
+
+        <section className="overflow-hidden rounded-2xl border border-[#DDE3EB] bg-white shadow-sm">
+
+          <div className="border-b border-[#E8ECF1] px-5 py-5 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#3B507D]">
+                <Camera size={19} />
+              </div>
+
+              <div>
+                <h2 className="text-sm font-semibold text-[#112250]">
+                  Gambar Venue
+                </h2>
+
+                <p className="mt-1 text-[11px] text-[#8795A7]">
+                  Perbarui URL gambar venue.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 p-5 sm:p-6">
+
+            {/* IMAGE PREVIEW */}
+
+            <div className="relative flex min-h-[200px] items-center justify-center overflow-hidden rounded-xl border border-[#E5EAF0] bg-[#F5F7FA] sm:min-h-[280px]">
+
+              {form.image && !imageError ? (
+                <img
+                  src={form.image}
+                  alt={form.name || "Venue"}
+                  className="max-h-[350px] w-full object-contain"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-[#9AA6B2]">
+                  <ImageIcon size={38} />
+
+                  <p className="text-xs">
+                    {form.image
+                      ? "Gambar tidak dapat dimuat"
+                      : "Belum ada gambar venue"}
+                  </p>
+                </div>
+              )}
 
             </div>
 
-            <div className="md:col-span-2">
-
-              <label className="mb-2 block text-[10px] font-semibold text-[#53657D]">
-                Deskripsi
+            <div>
+              <label className="mb-2 block text-xs font-semibold text-[#53657D]">
+                URL Gambar
               </label>
 
-              <textarea
-                name="description"
-                value={form.description}
+              <input
+                type="url"
+                name="image"
+                value={form.image}
                 onChange={handleChange}
-                rows={4}
-                className="w-full resize-none rounded-xl border border-[#DCE2EA] px-3 py-3 text-[11px] text-[#112250] outline-none focus:border-[#8BA7CF]"
+                placeholder="https://example.com/venue.jpg"
+                className="h-11 w-full rounded-xl border border-[#DCE2EA] px-3 text-xs text-[#112250] outline-none transition placeholder:text-[#A0AAB7] focus:border-[#8BA7CF] focus:ring-4 focus:ring-[#8BA7CF]/10"
               />
 
+              <p className="mt-2 text-[10px] leading-5 text-[#8795A7]">
+                Masukkan URL gambar yang dapat diakses publik. Kosongkan
+                jika ingin menghapus gambar yang tersimpan.
+              </p>
             </div>
 
           </div>
+        </section>
 
-        </div>
+        {/* INFORMASI KAPASITAS */}
 
-        {/* FASILITAS */}
+        <section className="rounded-2xl border border-[#DDE3EB] bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#EEF3F9] text-[#3B507D]">
+              <Users size={19} />
+            </div>
 
-        <div className="rounded-2xl border border-[#DDE3EB] bg-white shadow-[0_8px_30px_rgba(17,34,80,0.035)]">
+            <div>
+              <h2 className="text-sm font-semibold text-[#112250]">
+                Ringkasan Kapasitas
+              </h2>
 
-          <div className="border-b border-[#E8ECF1] px-6 py-5">
+              <p className="mt-1 text-[11px] text-[#8795A7]">
+                Kapasitas venue yang akan disimpan.
+              </p>
+            </div>
+          </div>
 
-            <h2 className="text-[13px] font-semibold text-[#112250]">
-              Fasilitas
-            </h2>
-
-            <p className="mt-1 text-[10px] text-[#8795A7]">
-              Kelola fasilitas venue.
+          <div className="mt-5 rounded-xl bg-[#F5F7FA] p-5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#8795A7]">
+              Total kapasitas
             </p>
 
+            <p className="mt-2 text-3xl font-bold text-[#112250]">
+              {form.capacity
+                ? new Intl.NumberFormat("id-ID").format(
+                    Number(form.capacity)
+                  )
+                : "0"}
+            </p>
+
+            <p className="mt-1 text-xs text-[#8795A7]">
+              Orang
+            </p>
           </div>
-
-          <div className="p-6">
-
-            <div className="flex gap-2">
-
-              <input
-                value={facilityInput}
-                onChange={(e) =>
-                  setFacilityInput(e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    addFacility();
-                  }
-                }}
-                placeholder="Tambah fasilitas..."
-                className="h-10 flex-1 rounded-xl border border-[#DCE2EA] px-3 text-[11px] text-[#112250] outline-none focus:border-[#8BA7CF]"
-              />
-
-              <button
-                type="button"
-                onClick={addFacility}
-                className="flex h-10 items-center gap-2 rounded-xl bg-[#112250] px-4 text-[10px] font-semibold text-white"
-              >
-                <Plus size={14} />
-                Tambah
-              </button>
-
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-
-              {facilities.map((facility) => (
-                <div
-                  key={facility}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#F1F4F8] px-3 py-2 text-[10px] font-medium text-[#53657D]"
-                >
-
-                  {facility}
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeFacility(facility)
-                    }
-                    className="text-[#8795A7] hover:text-[#B45353]"
-                  >
-                    <X size={13} />
-                  </button>
-
-                </div>
-              ))}
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* STATUS */}
-
-        <div className="rounded-2xl border border-[#DDE3EB] bg-white p-6 shadow-[0_8px_30px_rgba(17,34,80,0.035)]">
-
-          <label className="mb-2 block text-[10px] font-semibold text-[#53657D]">
-            Status Venue
-          </label>
-
-          <select
-            name="status"
-            value={form.status}
-            onChange={handleChange}
-            className="h-11 w-full max-w-[400px] rounded-xl border border-[#DCE2EA] bg-white px-3 text-[11px] text-[#112250] outline-none focus:border-[#8BA7CF]"
-          >
-            <option value="Aktif">Aktif</option>
-            <option value="Tidak Aktif">
-              Tidak Aktif
-            </option>
-          </select>
-
-        </div>
+        </section>
 
         {/* ACTION */}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
 
           <button
             type="button"
+            disabled={saving}
             onClick={() =>
-              router.push(`/superadmin/venues/${params.id}`)
+              router.push(`/superadmin/venues/${venueId}`)
             }
-            className="h-10 rounded-xl border border-[#DCE2EA] bg-white px-5 text-[10px] font-semibold text-[#697F93] transition hover:bg-[#F5F7FA]"
+            className="h-11 rounded-xl border border-[#DCE2EA] bg-white px-5 text-xs font-semibold text-[#697F93] transition hover:bg-[#F5F7FA] disabled:opacity-50"
           >
             Batal
           </button>
@@ -459,21 +611,31 @@ export default function EditVenuePage() {
           <button
             type="submit"
             disabled={saving}
-            className="flex h-10 items-center gap-2 rounded-xl bg-[#112250] px-5 text-[10px] font-semibold text-white transition hover:bg-[#1B3560] disabled:opacity-50"
+            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#112250] px-6 text-xs font-semibold text-white transition hover:bg-[#1B3560] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Save size={14} />
-
-            {saving ? "Menyimpan..." : "Simpan Perubahan"}
-
+            {saving ? (
+              <>
+                <RefreshCw size={15} className="animate-spin" />
+                Menyimpan...
+              </>
+            ) : (
+              <>
+                <Save size={15} />
+                Simpan Perubahan
+              </>
+            )}
           </button>
 
         </div>
 
       </form>
-
     </div>
   );
 }
+
+// ========================================
+// INPUT COMPONENT
+// ========================================
 
 function InputField({
   label,
@@ -483,11 +645,11 @@ function InputField({
   placeholder,
   type = "text",
   required = false,
+  min,
 }) {
   return (
     <div>
-
-      <label className="mb-2 block text-[10px] font-semibold text-[#53657D]">
+      <label className="mb-2 block text-xs font-semibold text-[#53657D]">
         {label}
       </label>
 
@@ -498,9 +660,9 @@ function InputField({
         onChange={onChange}
         placeholder={placeholder}
         required={required}
-        className="h-11 w-full rounded-xl border border-[#DCE2EA] bg-white px-3 text-[11px] text-[#112250] outline-none placeholder:text-[#A0AAB7] focus:border-[#8BA7CF]"
+        min={min}
+        className="h-11 w-full rounded-xl border border-[#DCE2EA] bg-white px-3 text-xs text-[#112250] outline-none transition placeholder:text-[#A0AAB7] focus:border-[#8BA7CF] focus:ring-4 focus:ring-[#8BA7CF]/10"
       />
-
     </div>
   );
 }

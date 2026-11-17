@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -59,7 +60,13 @@ const STATUS_OPTIONS = [
   "Sold Out",
 ];
 
-const APPROVAL_OPTIONS = ["All", "Draft", "Pending", "Approved", "Rejected"];
+const APPROVAL_OPTIONS = [
+  "All",
+  "Draft",
+  "Pending",
+  "Approved",
+  "Rejected",
+];
 
 const STATUS_CONFIG = {
   "Coming Soon": {
@@ -109,46 +116,59 @@ const APPROVAL_CONFIG = {
 
 function getToken() {
   if (typeof window === "undefined") return "";
+
   return (
     localStorage.getItem("token") ||
     localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token") ||
+    localStorage.getItem("authToken") ||
+    localStorage.getItem("auth_token") ||
     ""
   );
 }
 
 async function parseResponse(response) {
   const text = await response.text();
+
   let data = {};
+
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    throw new Error(`Response backend tidak valid. HTTP ${response.status}.`);
-  }
-  if (!response.ok || data.success === false) {
     throw new Error(
-      data.message || data.error || `Permintaan gagal. HTTP ${response.status}.`
+      `Response backend tidak valid. HTTP ${response.status}.`
     );
   }
+
+  if (!response.ok || data.success === false) {
+    throw new Error(
+      data.message ||
+        data.error ||
+        `Permintaan gagal. HTTP ${response.status}.`
+    );
+  }
+
   return data;
 }
 
 async function apiRequest(endpoint, options = {}) {
   const token = getToken();
+
   const headers = {
     Accept: "application/json",
-    ...(options.body instanceof FormData
-      ? {}
-      : options.body
+    ...(options.body && !(options.body instanceof FormData)
       ? { "Content-Type": "application/json" }
       : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
     cache: "no-store",
   });
+
   return parseResponse(response);
 }
 
@@ -156,16 +176,27 @@ function getArray(data, key) {
   if (Array.isArray(data?.[key])) return data[key];
   if (Array.isArray(data?.data?.[key])) return data.data[key];
   if (Array.isArray(data?.data)) return data.data;
+
   return [];
 }
 
 function formatDateShort(value) {
   if (!value) return "-";
+
   const parts = String(value).slice(0, 10).split("-");
+
   if (parts.length !== 3) return "-";
+
   const [year, month, day] = parts;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
+
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day)
+  );
+
   if (Number.isNaN(date.getTime())) return "-";
+
   return new Intl.DateTimeFormat("id-ID", {
     day: "2-digit",
     month: "short",
@@ -180,7 +211,9 @@ function formatTime(value) {
 
 function formatRupiah(value) {
   const number = Number(value);
+
   if (!Number.isFinite(number)) return "Rp0";
+
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
@@ -190,6 +223,7 @@ function formatRupiah(value) {
 
 function formatNumber(value) {
   const number = Number(value);
+
   return new Intl.NumberFormat("id-ID").format(
     Number.isFinite(number) ? number : 0
   );
@@ -197,8 +231,11 @@ function formatNumber(value) {
 
 function getPosterUrl(poster) {
   if (!poster) return "";
+
   const value = String(poster).trim();
+
   if (/^https?:\/\//i.test(value)) return value;
+
   return `${API_ORIGIN}/${value.replace(/^\/+/, "")}`;
 }
 
@@ -226,17 +263,21 @@ function getTicketSummary(eventId, ticketCategories) {
   const tickets = ticketCategories.filter(
     (item) => Number(item.event_id) === Number(eventId)
   );
+
   const totalQuota = tickets.reduce(
     (sum, item) => sum + (Number(item.quota) || 0),
     0
   );
+
   const remaining = tickets.reduce(
     (sum, item) => sum + (Number(item.remaining_ticket) || 0),
     0
   );
+
   const prices = tickets
     .map((item) => Number(item.price))
     .filter(Number.isFinite);
+
   return {
     count: tickets.length,
     totalQuota,
@@ -277,12 +318,16 @@ export default function OrganizerEventsPage() {
       } else {
         setLoading(true);
       }
+
       setError("");
       setTicketWarning("");
 
       const token = getToken();
+
       if (!token) {
-        throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+        throw new Error(
+          "Sesi login tidak ditemukan. Silakan login kembali."
+        );
       }
 
       const [eventsResult, ticketsResult, statsResult] =
@@ -297,28 +342,51 @@ export default function OrganizerEventsPage() {
       }
 
       const eventsData = eventsResult.value;
+
+      // Backend mengirim daftar event melalui properti events.
       const eventList = getArray(eventsData, "events");
+
       setEvents(eventList);
 
       if (ticketsResult.status === "fulfilled") {
-        setTicketCategories(getArray(ticketsResult.value, "ticket_categories"));
+        // Backend mengirim kategori tiket melalui ticket_categories.
+        setTicketCategories(
+          getArray(ticketsResult.value, "ticket_categories")
+        );
       } else {
-        console.error("LOAD TICKET CATEGORIES ERROR:", ticketsResult.reason);
+        console.error(
+          "LOAD TICKET CATEGORIES ERROR:",
+          ticketsResult.reason
+        );
+
         setTicketCategories([]);
+
         setTicketWarning(
           "Kategori tiket belum dapat dimuat. Informasi kuota tiket sementara tidak tersedia."
         );
       }
 
       if (statsResult.status === "fulfilled") {
-        setOrganizerStats(statsResult.value.stats || null);
+        // Backend mengirim statistik melalui properti data.
+        setOrganizerStats(
+          statsResult.value.data ||
+            statsResult.value.stats ||
+            null
+        );
       } else {
-        console.error("LOAD ORGANIZER STATS ERROR:", statsResult.reason);
+        console.error(
+          "LOAD ORGANIZER STATS ERROR:",
+          statsResult.reason
+        );
+
         setOrganizerStats(null);
       }
     } catch (err) {
       console.error("FETCH ORGANIZER EVENTS ERROR:", err);
-      setError(err.message || "Gagal mengambil data event.");
+
+      setError(
+        err.message || "Gagal mengambil data event."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -332,12 +400,16 @@ export default function OrganizerEventsPage() {
   const enrichedEvents = useMemo(() => {
     return events.map((event) => ({
       ...event,
-      ticketSummary: getTicketSummary(event.id, ticketCategories),
+      ticketSummary: getTicketSummary(
+        event.id,
+        ticketCategories
+      ),
     }));
   }, [events, ticketCategories]);
 
   const filteredEvents = useMemo(() => {
     const keyword = search.trim().toLowerCase();
+
     return enrichedEvents.filter((event) => {
       const searchableText = [
         event.event_name,
@@ -351,57 +423,102 @@ export default function OrganizerEventsPage() {
         .join(" ")
         .toLowerCase();
 
-      const matchesSearch = !keyword || searchableText.includes(keyword);
+      const matchesSearch =
+        !keyword || searchableText.includes(keyword);
+
       const matchesStatus =
-        statusFilter === "All" || event.status === statusFilter;
+        statusFilter === "All" ||
+        event.status === statusFilter;
+
       const matchesApproval =
         approvalFilter === "All" ||
         (event.approval_status || "Draft") === approvalFilter;
 
-      return matchesSearch && matchesStatus && matchesApproval;
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesApproval
+      );
     });
-  }, [enrichedEvents, search, statusFilter, approvalFilter]);
+  }, [
+    enrichedEvents,
+    search,
+    statusFilter,
+    approvalFilter,
+  ]);
 
   const stats = useMemo(() => {
     const totalQuota = enrichedEvents.reduce(
-      (sum, event) => sum + event.ticketSummary.totalQuota,
+      (sum, event) =>
+        sum + event.ticketSummary.totalQuota,
       0
     );
+
     const remainingTickets = enrichedEvents.reduce(
-      (sum, event) => sum + event.ticketSummary.remaining,
+      (sum, event) =>
+        sum + event.ticketSummary.remaining,
       0
     );
 
     const localStats = {
       total: events.length,
-      available: events.filter((event) => event.status === "Available").length,
-      comingSoon: events.filter((event) => event.status === "Coming Soon")
-        .length,
-      limited: events.filter((event) => event.status === "Limited").length,
-      soldOut: events.filter((event) => event.status === "Sold Out").length,
+
+      available: events.filter(
+        (event) => event.status === "Available"
+      ).length,
+
+      comingSoon: events.filter(
+        (event) => event.status === "Coming Soon"
+      ).length,
+
+      limited: events.filter(
+        (event) => event.status === "Limited"
+      ).length,
+
+      soldOut: events.filter(
+        (event) => event.status === "Sold Out"
+      ).length,
+
       totalQuota,
       remainingTickets,
-      pending: events.filter((event) => event.approval_status === "Pending")
-        .length,
-      approved: events.filter((event) => event.approval_status === "Approved")
-        .length,
-      rejected: events.filter((event) => event.approval_status === "Rejected")
-        .length,
+
+      pending: events.filter(
+        (event) => event.approval_status === "Pending"
+      ).length,
+
+      approved: events.filter(
+        (event) => event.approval_status === "Approved"
+      ).length,
+
+      rejected: events.filter(
+        (event) => event.approval_status === "Rejected"
+      ).length,
     };
 
     return {
       ...localStats,
-      total: Number(organizerStats?.totalEvents ?? localStats.total),
+
+      // Nama field statistik dari backend adalah total_events.
+      total: Number(
+        organizerStats?.total_events ??
+          organizerStats?.totalEvents ??
+          localStats.total
+      ),
     };
   }, [events, enrichedEvents, organizerStats]);
 
   const handleSubmitApproval = async () => {
     const selectedEvent = submitModal;
+
     if (!selectedEvent?.id || submittingId) return;
 
-    const approvalStatus = selectedEvent.approval_status || "Draft";
+    const approvalStatus =
+      selectedEvent.approval_status || "Draft";
+
     if (!["Draft", "Rejected"].includes(approvalStatus)) {
-      setSubmitError("Event ini tidak dapat diajukan pada status sekarang.");
+      setSubmitError(
+        "Event ini tidak dapat diajukan pada status sekarang."
+      );
       return;
     }
 
@@ -409,7 +526,10 @@ export default function OrganizerEventsPage() {
       setSubmittingId(selectedEvent.id);
       setSubmitError("");
 
-      const summary = getTicketSummary(selectedEvent.id, ticketCategories);
+      const summary = getTicketSummary(
+        selectedEvent.id,
+        ticketCategories
+      );
 
       if (summary.count < 1) {
         throw new Error(
@@ -419,15 +539,14 @@ export default function OrganizerEventsPage() {
 
       const result = await apiRequest(
         API_ENDPOINTS.submitEvent(selectedEvent.id),
-        { method: "POST" }
+        {
+          method: "POST",
+        }
       );
-
-      if (result.success === false) {
-        throw new Error(result.message || "Pengajuan event gagal.");
-      }
 
       setSubmitModal(null);
       setSubmitError("");
+
       await fetchEvents(true);
 
       window.alert(
@@ -436,7 +555,10 @@ export default function OrganizerEventsPage() {
       );
     } catch (err) {
       console.error("SUBMIT EVENT ERROR:", err);
-      setSubmitError(err.message || "Gagal mengajukan persetujuan event.");
+
+      setSubmitError(
+        err.message || "Gagal mengajukan persetujuan event."
+      );
     } finally {
       setSubmittingId(null);
     }
@@ -445,40 +567,67 @@ export default function OrganizerEventsPage() {
   const handleDelete = async () => {
     if (!deleteModal?.id || deleting) return;
 
+    if (deleteModal.approval_status === "Approved") {
+      setDeleteError(
+        "Event yang sudah disetujui tidak dapat dihapus melalui fitur Organizer."
+      );
+      return;
+    }
+
     try {
       setDeleting(true);
       setDeleteError("");
 
       const result = await apiRequest(
         API_ENDPOINTS.deleteEvent(deleteModal.id),
-        { method: "DELETE" }
+        {
+          method: "DELETE",
+        }
       );
 
-      if (result.success === false) {
-        throw new Error(result.message || "Event gagal dihapus.");
-      }
-
       setEvents((previous) =>
-        previous.filter((event) => Number(event.id) !== Number(deleteModal.id))
+        previous.filter(
+          (event) =>
+            Number(event.id) !== Number(deleteModal.id)
+        )
       );
 
       setTicketCategories((previous) =>
-        previous.filter((item) => Number(item.event_id) !== Number(deleteModal.id))
+        previous.filter(
+          (item) =>
+            Number(item.event_id) !== Number(deleteModal.id)
+        )
       );
 
       setDeleteModal(null);
+
       await fetchEvents(true);
+
+      window.alert(
+        result.message || "Event berhasil dihapus."
+      );
     } catch (err) {
       console.error("DELETE EVENT ERROR:", err);
-      setDeleteError(err.message || "Gagal menghapus event.");
+
+      setDeleteError(
+        err.message || "Gagal menghapus event."
+      );
     } finally {
       setDeleting(false);
     }
   };
 
-  const goToEdit = (id) => router.push(`/organizer/event/edit/${id}`);
-  const goToDetail = (id) => router.push(`/organizer/event/${id}`);
-  const goToTickets = (id) => router.push(`/organizer/event/${id}/tiket`);
+  const goToEdit = (id) => {
+    router.push(`/organizer/event/edit/${id}`);
+  };
+
+  const goToDetail = (id) => {
+    router.push(`/organizer/event/${id}`);
+  };
+
+  const goToTickets = (id) => {
+    router.push(`/organizer/event/${id}/tiket`);
+  };
 
   const activeFilterCount =
     (search ? 1 : 0) +
@@ -489,7 +638,9 @@ export default function OrganizerEventsPage() {
     <div className="w-full min-w-0 text-[#0B1220]">
       <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/60 bg-gradient-to-br from-[#0B1220] via-[#1B2942] to-[#2F3F63] p-6 shadow-[0_8px_32px_rgba(11,18,32,0.18)] sm:p-8">
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
+
         <div className="pointer-events-none absolute -bottom-20 left-1/3 h-56 w-56 rounded-full bg-violet-400/15 blur-3xl" />
+
         <div className="pointer-events-none absolute right-1/4 top-1/2 h-32 w-32 rounded-full bg-emerald-300/10 blur-2xl" />
 
         <div
@@ -504,22 +655,33 @@ export default function OrganizerEventsPage() {
         <div className="relative">
           <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">
             <span>Organizer</span>
-            <ChevronRight size={12} className="text-white/30" />
-            <span className="text-white/90">Kelola Event</span>
+            <ChevronRight
+              size={12}
+              className="text-white/30"
+            />
+            <span className="text-white/90">
+              Kelola Event
+            </span>
           </div>
 
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur">
-                <Sparkles size={12} className="text-sky-300" />
+                <Sparkles
+                  size={12}
+                  className="text-sky-300"
+                />
                 Event Management Suite
               </div>
+
               <h1 className="mt-3 text-[26px] font-semibold leading-tight tracking-[-0.02em] text-white sm:text-[32px]">
                 Kelola Event Anda
               </h1>
+
               <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-white/60">
-                Pantau performa event, kelola tiket, dan ajukan persetujuan
-                penerbitan event kepada Super Admin dalam satu dashboard.
+                Pantau performa event, kelola tiket, dan ajukan
+                persetujuan penerbitan event kepada Super Admin
+                dalam satu dashboard.
               </p>
             </div>
 
@@ -532,9 +694,13 @@ export default function OrganizerEventsPage() {
               >
                 <RefreshCw
                   size={15}
-                  className={refreshing ? "animate-spin" : ""}
+                  className={
+                    refreshing ? "animate-spin" : ""
+                  }
                 />
-                <span className="hidden sm:inline">Refresh</span>
+                <span className="hidden sm:inline">
+                  Refresh
+                </span>
               </button>
 
               <Link
@@ -551,7 +717,10 @@ export default function OrganizerEventsPage() {
 
       {ticketWarning && !loading && (
         <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600" />
+          <AlertCircle
+            size={16}
+            className="mt-0.5 shrink-0 text-amber-600"
+          />
           <p className="text-[12.5px] leading-5 text-amber-800">
             {ticketWarning}
           </p>
@@ -561,14 +730,22 @@ export default function OrganizerEventsPage() {
       {error && !loading && (
         <div className="mb-5 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-600" />
+            <AlertCircle
+              size={16}
+              className="mt-0.5 shrink-0 text-red-600"
+            />
+
             <div>
               <p className="text-[13px] font-semibold text-red-800">
                 Gagal memuat data
               </p>
-              <p className="mt-0.5 text-[12.5px] text-red-600">{error}</p>
+
+              <p className="mt-0.5 text-[12.5px] text-red-600">
+                {error}
+              </p>
             </div>
           </div>
+
           <button
             type="button"
             onClick={() => fetchEvents()}
@@ -587,6 +764,7 @@ export default function OrganizerEventsPage() {
           icon={CalendarDays}
           accent="slate"
         />
+
         <StatCard
           label="Event Aktif"
           value={stats.available}
@@ -594,6 +772,7 @@ export default function OrganizerEventsPage() {
           icon={Zap}
           accent="sky"
         />
+
         <StatCard
           label="Menunggu Persetujuan"
           value={stats.pending}
@@ -601,6 +780,7 @@ export default function OrganizerEventsPage() {
           icon={Hourglass}
           accent="amber"
         />
+
         <StatCard
           label="Tiket Tersedia"
           value={stats.remainingTickets}
@@ -617,12 +797,14 @@ export default function OrganizerEventsPage() {
           icon={ShieldCheck}
           tone="emerald"
         />
+
         <MiniStat
           label="Event Ditolak"
           value={stats.rejected}
           icon={XCircle}
           tone="rose"
         />
+
         <MiniStat
           label="Event Sold Out"
           value={stats.soldOut}
@@ -639,10 +821,13 @@ export default function OrganizerEventsPage() {
                 <LayersIcon />
                 Daftar Event
               </h2>
+
               <p className="mt-0.5 text-[12.5px] text-slate-500">
                 {loading
                   ? "Memuat data event..."
-                  : `${formatNumber(filteredEvents.length)} dari ${formatNumber(
+                  : `${formatNumber(
+                      filteredEvents.length
+                    )} dari ${formatNumber(
                       events.length
                     )} event ditampilkan`}
               </p>
@@ -654,13 +839,17 @@ export default function OrganizerEventsPage() {
                   size={15}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
+
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) =>
+                    setSearch(e.target.value)
+                  }
                   placeholder="Cari event, artis, venue..."
                   className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-9 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
                 />
+
                 {search && (
                   <button
                     type="button"
@@ -677,14 +866,19 @@ export default function OrganizerEventsPage() {
                   size={14}
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
+
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value)
+                  }
                   className="h-9 w-full min-w-[150px] appearance-none rounded-lg border border-slate-200 bg-white pl-9 pr-8 text-[13px] font-medium text-slate-700 outline-none transition focus:border-[#0B1220]/40"
                 >
                   {STATUS_OPTIONS.map((status) => (
                     <option key={status} value={status}>
-                      {status === "All" ? "Semua Status" : status}
+                      {status === "All"
+                        ? "Semua Status"
+                        : status}
                     </option>
                   ))}
                 </select>
@@ -692,7 +886,9 @@ export default function OrganizerEventsPage() {
 
               <select
                 value={approvalFilter}
-                onChange={(e) => setApprovalFilter(e.target.value)}
+                onChange={(e) =>
+                  setApprovalFilter(e.target.value)
+                }
                 className="h-9 min-w-[160px] rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-[#0B1220]/40"
               >
                 {APPROVAL_OPTIONS.map((status) => (
@@ -732,14 +928,20 @@ export default function OrganizerEventsPage() {
           <div className="flex min-h-[420px] flex-col items-center justify-center gap-4">
             <div className="relative">
               <div className="absolute inset-0 animate-ping rounded-xl bg-[#0B1220]/10" />
+
               <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-[#0B1220]/[0.06]">
-                <Loader2 size={22} className="animate-spin text-[#0B1220]" />
+                <Loader2
+                  size={22}
+                  className="animate-spin text-[#0B1220]"
+                />
               </div>
             </div>
+
             <div className="text-center">
               <p className="text-[13.5px] font-semibold text-slate-800">
                 Memuat data event...
               </p>
+
               <p className="mt-0.5 text-[12px] text-slate-400">
                 Mengambil data event dan kategori tiket
               </p>
@@ -747,66 +949,78 @@ export default function OrganizerEventsPage() {
           </div>
         )}
 
-        {!loading && !error && filteredEvents.length === 0 && (
-          <div className="flex min-h-[420px] flex-col items-center justify-center px-6 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#0B1220]/[0.04] text-[#0B1220]">
-              {events.length === 0 ? (
-                <Sparkles size={22} />
-              ) : (
-                <Search size={22} />
+        {!loading &&
+          !error &&
+          filteredEvents.length === 0 && (
+            <div className="flex min-h-[420px] flex-col items-center justify-center px-6 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#0B1220]/[0.04] text-[#0B1220]">
+                {events.length === 0 ? (
+                  <Sparkles size={22} />
+                ) : (
+                  <Search size={22} />
+                )}
+              </div>
+
+              <h3 className="mt-4 text-[15px] font-semibold text-slate-900">
+                {events.length === 0
+                  ? "Belum ada event"
+                  : "Event tidak ditemukan"}
+              </h3>
+
+              <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-slate-500">
+                {events.length === 0
+                  ? "Mulai dengan membuat event pertamamu. Anda dapat mengatur tiket, jadwal, dan mengajukan persetujuan penerbitan."
+                  : "Coba ubah kata kunci pencarian atau filter yang digunakan."}
+              </p>
+
+              {events.length === 0 && (
+                <Link
+                  href="/organizer/event/tambah"
+                  className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942]"
+                >
+                  <Plus size={15} />
+                  Buat Event Pertama
+                </Link>
               )}
             </div>
-            <h3 className="mt-4 text-[15px] font-semibold text-slate-900">
-              {events.length === 0
-                ? "Belum ada event"
-                : "Event tidak ditemukan"}
-            </h3>
-            <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-slate-500">
-              {events.length === 0
-                ? "Mulai dengan membuat event pertamamu. Anda dapat mengatur tiket, jadwal, dan mengajukan persetujuan penerbitan."
-                : "Coba ubah kata kunci pencarian atau filter yang digunakan."}
-            </p>
-            {events.length === 0 && (
-              <Link
-                href="/organizer/event/tambah"
-                className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942]"
-              >
-                <Plus size={15} />
-                Buat Event Pertama
-              </Link>
-            )}
-          </div>
-        )}
+          )}
 
-        {!loading && !error && filteredEvents.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 p-4 sm:p-5 xl:grid-cols-2 2xl:grid-cols-3">
-            {filteredEvents.map((event) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                submitting={submittingId === event.id}
-                onSubmit={() => {
-                  setSubmitError("");
-                  setSubmitModal(event);
-                }}
-                onDelete={() => {
-                  setDeleteError("");
-                  setDeleteModal(event);
-                }}
-                onEdit={() => goToEdit(event.id)}
-                onDetail={() => goToDetail(event.id)}
-                onManageTickets={() => goToTickets(event.id)}
-              />
-            ))}
-          </div>
-        )}
+        {!loading &&
+          !error &&
+          filteredEvents.length > 0 && (
+            <div className="grid grid-cols-1 gap-6 p-4 sm:p-5 xl:grid-cols-2 2xl:grid-cols-3">
+              {filteredEvents.map((event) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  submitting={submittingId === event.id}
+                  onSubmit={() => {
+                    setSubmitError("");
+                    setSubmitModal(event);
+                  }}
+                  onDelete={() => {
+                    setDeleteError("");
+                    setDeleteModal(event);
+                  }}
+                  onEdit={() => goToEdit(event.id)}
+                  onDetail={() => goToDetail(event.id)}
+                  onManageTickets={() =>
+                    goToTickets(event.id)
+                  }
+                />
+              ))}
+            </div>
+          )}
       </div>
 
       {submitModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !submittingId) {
+            if (
+              event.target === event.currentTarget &&
+              !submittingId
+            ) {
               setSubmitModal(null);
               setSubmitError("");
             }
@@ -817,9 +1031,11 @@ export default function OrganizerEventsPage() {
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-700">
                 <Send size={18} />
               </div>
+
               <h2 className="mt-4 text-[16px] font-semibold tracking-[-0.01em] text-slate-900">
                 Ajukan Persetujuan Event?
               </h2>
+
               <p className="mt-2 text-[13px] leading-relaxed text-slate-500">
                 Event{" "}
                 <strong className="text-slate-800">
@@ -827,31 +1043,36 @@ export default function OrganizerEventsPage() {
                 </strong>{" "}
                 akan dikirim kepada Super Admin untuk diperiksa.
               </p>
+
               <div className="mt-4 rounded-xl border border-sky-100 bg-sky-50/70 p-3">
                 <div className="flex items-start gap-2">
                   <ShieldCheck
                     size={15}
                     className="mt-0.5 shrink-0 text-sky-700"
                   />
+
                   <p className="text-[12px] leading-5 text-sky-800">
-                    Setelah diajukan, status event menjadi Pending. Event belum
-                    akan tampil di halaman publik sampai disetujui oleh Super
-                    Admin.
+                    Setelah diajukan, status event menjadi
+                    Pending. Event belum akan tampil di halaman
+                    publik sampai disetujui oleh Super Admin.
                   </p>
                 </div>
               </div>
+
               {submitError && (
                 <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3">
                   <AlertCircle
                     size={15}
                     className="mt-0.5 shrink-0 text-red-600"
                   />
+
                   <p className="text-[12px] leading-5 text-red-700">
                     {submitError}
                   </p>
                 </div>
               )}
             </div>
+
             <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -864,6 +1085,7 @@ export default function OrganizerEventsPage() {
               >
                 Batal
               </button>
+
               <button
                 type="button"
                 onClick={handleSubmitApproval}
@@ -872,7 +1094,10 @@ export default function OrganizerEventsPage() {
               >
                 {submittingId ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2
+                      size={14}
+                      className="animate-spin"
+                    />
                     Mengajukan...
                   </>
                 ) : (
@@ -891,7 +1116,10 @@ export default function OrganizerEventsPage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !deleting) {
+            if (
+              event.target === event.currentTarget &&
+              !deleting
+            ) {
               setDeleteModal(null);
               setDeleteError("");
             }
@@ -902,28 +1130,34 @@ export default function OrganizerEventsPage() {
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-50 text-red-600">
                 <Trash2 size={18} />
               </div>
+
               <h2 className="mt-4 text-[16px] font-semibold tracking-[-0.01em] text-slate-900">
                 Hapus Event?
               </h2>
+
               <p className="mt-2 text-[13px] leading-relaxed text-slate-500">
                 Event{" "}
                 <strong className="text-slate-700">
                   {deleteModal.event_name}
                 </strong>{" "}
-                akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+                akan dihapus permanen. Tindakan ini tidak dapat
+                dibatalkan.
               </p>
+
               {deleteError && (
                 <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3">
                   <AlertCircle
                     size={15}
                     className="mt-0.5 shrink-0 text-red-600"
                   />
+
                   <p className="text-[12px] leading-5 text-red-700">
                     {deleteError}
                   </p>
                 </div>
               )}
             </div>
+
             <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -936,6 +1170,7 @@ export default function OrganizerEventsPage() {
               >
                 Batal
               </button>
+
               <button
                 type="button"
                 onClick={handleDelete}
@@ -944,7 +1179,10 @@ export default function OrganizerEventsPage() {
               >
                 {deleting ? (
                   <>
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2
+                      size={14}
+                      className="animate-spin"
+                    />
                     Menghapus...
                   </>
                 ) : (
@@ -983,7 +1221,13 @@ function LayersIcon() {
   );
 }
 
-function StatCard({ label, value, hint, icon: Icon, accent = "slate" }) {
+function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  accent = "slate",
+}) {
   const accents = {
     slate: {
       iconWrap: "bg-[#0B1220]/[0.06] text-[#0B1220]",
@@ -1006,6 +1250,7 @@ function StatCard({ label, value, hint, icon: Icon, accent = "slate" }) {
       glow: "bg-emerald-300/40",
     },
   };
+
   const a = accents[accent] || accents.slate;
 
   return (
@@ -1013,24 +1258,29 @@ function StatCard({ label, value, hint, icon: Icon, accent = "slate" }) {
       <div
         className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full ${a.glow} opacity-0 blur-2xl transition duration-500 group-hover:opacity-100`}
       />
+
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-400">
             {label}
           </p>
+
           <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.02em] text-[#0B1220]">
             {formatNumber(value)}
           </p>
+
           <p className="mt-1.5 text-[12px] font-medium text-slate-500">
             {hint}
           </p>
         </div>
+
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${a.iconWrap} transition group-hover:scale-110`}
         >
           <Icon size={18} />
         </div>
       </div>
+
       <div
         className={`absolute bottom-0 left-0 h-[2.5px] w-full bg-gradient-to-r ${a.bar} opacity-0 transition group-hover:opacity-100`}
       />
@@ -1038,13 +1288,21 @@ function StatCard({ label, value, hint, icon: Icon, accent = "slate" }) {
   );
 }
 
-function MiniStat({ label, value, icon: Icon, tone = "slate" }) {
+function MiniStat({
+  label,
+  value,
+  icon: Icon,
+  tone = "slate",
+}) {
   const tones = {
-    emerald: "border-emerald-100 bg-emerald-50/60 text-emerald-700",
+    emerald:
+      "border-emerald-100 bg-emerald-50/60 text-emerald-700",
     rose: "border-rose-100 bg-rose-50/60 text-rose-700",
-    violet: "border-violet-100 bg-violet-50/60 text-violet-700",
+    violet:
+      "border-violet-100 bg-violet-50/60 text-violet-700",
     slate: "border-slate-200 bg-slate-50 text-slate-700",
   };
+
   const cls = tones[tone] || tones.slate;
 
   return (
@@ -1053,8 +1311,11 @@ function MiniStat({ label, value, icon: Icon, tone = "slate" }) {
     >
       <div className="flex items-center gap-2.5">
         <Icon size={15} />
-        <span className="text-[12px] font-semibold">{label}</span>
+        <span className="text-[12px] font-semibold">
+          {label}
+        </span>
       </div>
+
       <span className="text-[16px] font-semibold tracking-[-0.01em]">
         {formatNumber(value)}
       </span>
@@ -1073,7 +1334,10 @@ function EventCard({
 }) {
   const posterUrl = getPosterUrl(event.poster);
   const status = getStatusConfig(event.status);
-  const approvalStatus = event.approval_status || "Draft";
+
+  const approvalStatus =
+    event.approval_status || "Draft";
+
   const approval = getApprovalConfig(approvalStatus);
   const ApprovalIcon = approval.icon;
 
@@ -1086,10 +1350,21 @@ function EventCard({
   } = event.ticketSummary || {};
 
   const soldPercentage =
-    totalQuota > 0 ? Math.min(Math.round((sold / totalQuota) * 100), 100) : 0;
+    totalQuota > 0
+      ? Math.min(
+          Math.round((sold / totalQuota) * 100),
+          100
+        )
+      : 0;
 
-  const canSubmit = ["Draft", "Rejected"].includes(approvalStatus);
-  const canEdit = ["Draft", "Rejected"].includes(approvalStatus);
+  const canSubmit = ["Draft", "Rejected"].includes(
+    approvalStatus
+  );
+
+  const canEdit = ["Draft", "Rejected"].includes(
+    approvalStatus
+  );
+
   const isPending = approvalStatus === "Pending";
   const isApproved = approvalStatus === "Approved";
   const isRejected = approvalStatus === "Rejected";
@@ -1115,6 +1390,7 @@ function EventCard({
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/[0.08] text-blue-200">
                   <Music2 size={22} />
                 </div>
+
                 <p className="mt-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-100/80">
                   TICKETVERSE
                 </p>
@@ -1130,7 +1406,9 @@ function EventCard({
             <span
               className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px] font-semibold shadow-sm backdrop-blur ${status.className}`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${status.dot}`} />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${status.dot}`}
+              />
               {status.label}
             </span>
           </div>
@@ -1148,6 +1426,7 @@ function EventCard({
               <p className="text-[8.5px] font-medium uppercase tracking-[0.1em] text-slate-300">
                 Mulai dari
               </p>
+
               <p className="text-[12.5px] font-bold leading-tight">
                 {formatRupiah(startingPrice)}
               </p>
@@ -1157,7 +1436,9 @@ function EventCard({
 
         <div className="relative h-0">
           <div className="absolute -left-3 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full border border-slate-200 bg-[#f7f8fb] shadow-inner" />
+
           <div className="absolute -right-3 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full border border-slate-200 bg-[#f7f8fb] shadow-inner" />
+
           <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 border-t-2 border-dashed border-slate-200" />
         </div>
 
@@ -1166,10 +1447,16 @@ function EventCard({
             <h3 className="line-clamp-2 text-[14.5px] font-semibold leading-5 tracking-[-0.01em] text-[#0B1220]">
               {event.event_name || "Untitled Event"}
             </h3>
+
             {event.artist_name && (
               <div className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                <Music2 size={12} className="shrink-0 text-slate-400" />
-                <span className="truncate">{event.artist_name}</span>
+                <Music2
+                  size={12}
+                  className="shrink-0 text-slate-400"
+                />
+                <span className="truncate">
+                  {event.artist_name}
+                </span>
               </div>
             )}
           </div>
@@ -1190,14 +1477,18 @@ function EventCard({
 
             {isApproved && (
               <p className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/70 px-2.5 py-2 text-[11px] leading-5 text-emerald-800">
-                Event telah disetujui dan siap ditampilkan ke publik.
+                Event telah disetujui dan siap ditampilkan ke
+                publik.
               </p>
             )}
 
             {isRejected && (
               <div className="mt-2 rounded-lg border border-rose-100 bg-rose-50/70 px-2.5 py-2 text-[11px] leading-5 text-rose-700">
-                <strong className="font-semibold">Alasan:</strong>{" "}
-                {event.rejection_reason || "Tidak ada alasan yang diberikan."}
+                <strong className="font-semibold">
+                  Alasan:
+                </strong>{" "}
+                {event.rejection_reason ||
+                  "Tidak ada alasan yang diberikan."}
               </div>
             )}
           </div>
@@ -1208,17 +1499,24 @@ function EventCard({
               label="Tanggal"
               value={formatDateShort(event.event_date)}
             />
+
             <InfoTile
               icon={Clock3}
               label="Waktu"
               value={formatTime(event.event_time)}
             />
+
             <InfoTile
               icon={Building2}
               label="Venue"
               value={event.venue_name || "-"}
             />
-            <InfoTile icon={MapPin} label="Kota" value={event.city || "-"} />
+
+            <InfoTile
+              icon={MapPin}
+              label="Kota"
+              value={event.city || "-"}
+            />
           </div>
 
           <div className="mt-3 rounded-lg border border-slate-100 bg-gradient-to-br from-slate-50/80 to-white p-3">
@@ -1227,19 +1525,23 @@ function EventCard({
                 <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-[#0B1220] shadow-sm ring-1 ring-slate-100">
                   <Ticket size={13} />
                 </div>
+
                 <div>
                   <p className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                     Tiket
                   </p>
+
                   <p className="text-[11.5px] font-semibold text-slate-800">
                     {formatNumber(ticketCount)} kategori
                   </p>
                 </div>
               </div>
+
               <div className="text-right">
                 <p className="text-[9.5px] font-medium uppercase tracking-[0.08em] text-slate-400">
                   Tersisa
                 </p>
+
                 <p className="text-[13px] font-bold text-[#0B1220]">
                   {formatNumber(remaining)}
                 </p>
@@ -1248,20 +1550,32 @@ function EventCard({
 
             <div className="mt-2.5">
               <div className="mb-1.5 flex items-center justify-between text-[10px]">
-                <span className="font-medium text-slate-500">Terjual</span>
+                <span className="font-medium text-slate-500">
+                  Terjual
+                </span>
+
                 <span className="font-semibold text-slate-700">
                   {soldPercentage}%
                 </span>
               </div>
+
               <div className="relative h-1.5 overflow-hidden rounded-full bg-slate-200">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-[#0B1220] to-[#2F3F63] transition-all duration-700"
-                  style={{ width: `${soldPercentage}%` }}
+                  style={{
+                    width: `${soldPercentage}%`,
+                  }}
                 />
               </div>
+
               <div className="mt-1.5 flex justify-between text-[10px] text-slate-400">
-                <span>{formatNumber(sold)} terjual</span>
-                <span>Kuota {formatNumber(totalQuota)}</span>
+                <span>
+                  {formatNumber(sold)} terjual
+                </span>
+
+                <span>
+                  Kuota {formatNumber(totalQuota)}
+                </span>
               </div>
             </div>
           </div>
@@ -1275,10 +1589,14 @@ function EventCard({
                 className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-[#0B1220] px-2.5 text-[11.5px] font-semibold text-white transition hover:bg-[#1B2942] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2
+                    size={12}
+                    className="animate-spin"
+                  />
                 ) : (
                   <Send size={12} />
                 )}
+
                 {submitting
                   ? "Mengajukan..."
                   : approvalStatus === "Rejected"
@@ -1330,14 +1648,16 @@ function EventCard({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={onDelete}
-              title="Hapus event"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-500 transition hover:bg-rose-50"
-            >
-              <Trash2 size={13} />
-            </button>
+            {!isApproved && (
+              <button
+                type="button"
+                onClick={onDelete}
+                title="Hapus event"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-500 transition hover:bg-rose-50"
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
 
             <button
               type="button"
@@ -1358,11 +1678,16 @@ function InfoTile({ icon: Icon, label, value }) {
   return (
     <div className="min-w-0 rounded-md border border-slate-100 bg-white px-2.5 py-2">
       <div className="flex items-center gap-1.5">
-        <Icon size={12} className="shrink-0 text-slate-400" />
+        <Icon
+          size={12}
+          className="shrink-0 text-slate-400"
+        />
+
         <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-400">
           {label}
         </p>
       </div>
+
       <p
         title={String(value)}
         className="mt-0.5 truncate text-[11.5px] font-semibold text-slate-700"

@@ -22,7 +22,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Mengizinkan request tanpa origin, misalnya dari Postman
+      // Mengizinkan request tanpa origin, misalnya Postman
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
@@ -44,20 +44,24 @@ const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const organizerRoutes = require("./routes/organizerRoutes");
 const sadminRoutes = require("./routes/sadminRoutes");
+
 const categoryRoutes = require("./routes/categoryRoutes");
 const artistRoutes = require("./routes/artistRoutes");
 const venueRoutes = require("./routes/venueRoutes");
 const eventRoutes = require("./routes/eventRoutes");
 const ticketCategoryRoutes = require("./routes/ticketCategoryRoutes");
+
 const orderRoutes = require("./routes/orderRoutes");
 const orderDetailRoutes = require("./routes/orderDetailRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
+
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const contactMessageRoutes = require("./routes/contactMessageRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const profileRoutes = require("./routes/profileRoutes");
+
 const uploadRoutes = require("./routes/uploadRoutes");
 const midtransRoutes = require("./routes/midtransRoutes");
 const seatRoutes = require("./routes/seatRoutes");
@@ -68,7 +72,8 @@ const bannerRoutes = require("./routes/bannerRoutes");
 // ======================================================
 
 app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);app.use("/api/organizer", organizerRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/organizer", organizerRoutes);
 app.use("/api/sadmin", sadminRoutes);
 
 app.use("/api/categories", categoryRoutes);
@@ -139,6 +144,14 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error("SERVER ERROR:", err);
 
+  // Error CORS
+  if (err.message && err.message.startsWith("CORS blocked:")) {
+    return res.status(403).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
   res.status(500).json({
     success: false,
     message: "Terjadi kesalahan pada server.",
@@ -158,7 +171,10 @@ app.listen(PORT, () => {
   console.log("========================================");
   console.log(`Server : http://localhost:${PORT}`);
   console.log(`Auth   : http://localhost:${PORT}/api/auth`);
+  console.log(`Organizer : http://localhost:${PORT}/api/organizer`);
+  console.log(`Super Admin : http://localhost:${PORT}/api/sadmin`);
   console.log("========================================");
+
   console.log("AUTH ENDPOINTS:");
   console.log("POST /api/auth/register");
   console.log("POST /api/auth/login");
@@ -167,6 +183,7 @@ app.listen(PORT, () => {
   console.log("POST /api/auth/forgot-password");
   console.log("POST /api/auth/verify-reset-otp");
   console.log("POST /api/auth/reset-password");
+
   console.log("========================================");
   console.log("");
 });

@@ -625,19 +625,7 @@ export default function SuperAdminBannersPage() {
         )}
       </section>
 
-      <div className="flex items-start gap-3 rounded-xl border border-[#e0e8f0]/60 bg-white p-4 shadow-sm">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#112250]/[0.05] text-[#112250]">
-          <ImageIcon size={16} />
-        </div>
-        <p className="text-[12.5px] leading-relaxed text-gray-500">
-          Dashboard customer mengambil data dari{" "}
-          <code className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[11.5px] font-semibold text-[#112250]">
-            GET /api/banners/home
-          </code>
-          . Pastikan route publik backend mengembalikan data banner aktif agar
-          dapat tampil di halaman customer.
-        </p>
-      </div>
+    
 
       {modalOpen && (
         <div
