@@ -15,10 +15,8 @@ const {
   deletePayment,
 } = require("../controllers/paymentController");
 
-// Webhook Midtrans
 router.post("/notification", midtransNotification);
 
-// Status transaksi milik pengguna yang login
 router.get(
   "/midtrans-status/:orderId",
   verifyToken,

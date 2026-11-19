@@ -1,17 +1,6 @@
 const crypto = require("crypto");
 const db = require("../config/db");
 
-// =====================================================
-// GENERATE TICKET
-// =====================================================
-
-
-
-
-// =====================================================
-// GENERATE TICKET
-// =====================================================
-
 const generateTicketsForOrder = async (orderId) => {
   const connection = await db.getConnection();
 
@@ -63,7 +52,6 @@ const generateTicketsForOrder = async (orderId) => {
             .toString("hex")
             .toUpperCase()}`;
 
-        // Token QR acak, terpisah dari kode tiket.
         const qrCode = crypto.randomBytes(32).toString("hex");
 
         await connection.query(
@@ -98,11 +86,6 @@ const generateTicketsForOrder = async (orderId) => {
   }
 };
 
-
-// =====================================================
-// MIDTRANS NOTIFICATION
-// =====================================================
-
 const handleMidtransNotification = async (req, res) => {
   try {
     const notification = req.body;
@@ -125,10 +108,6 @@ const handleMidtransNotification = async (req, res) => {
       signature_key,
     } = notification;
 
-    // =================================================
-    // VALIDASI DATA
-    // =================================================
-
     if (
       !order_id ||
       !transaction_status ||
@@ -141,10 +120,6 @@ const handleMidtransNotification = async (req, res) => {
         message: "Data notification Midtrans tidak lengkap",
       });
     }
-
-    // =================================================
-    // VERIFY SIGNATURE
-    // =================================================
 
     const serverKey =
       process.env.MIDTRANS_SERVER_KEY;
@@ -184,10 +159,6 @@ const handleMidtransNotification = async (req, res) => {
       });
     }
 
-    // =================================================
-    // CARI ORDER
-    // =================================================
-
     const [orders] = await db.query(
       `
       SELECT
@@ -217,10 +188,6 @@ const handleMidtransNotification = async (req, res) => {
 
     const order = orders[0];
 
-    // =================================================
-    // VALIDASI NOMINAL
-    // =================================================
-
     const databaseAmount =
       Number(order.total_price);
 
@@ -247,10 +214,6 @@ const handleMidtransNotification = async (req, res) => {
       });
     }
 
-    // =================================================
-    // TENTUKAN STATUS
-    // =================================================
-
     const isSuccess =
       transaction_status === "settlement" ||
       (
@@ -272,12 +235,7 @@ const handleMidtransNotification = async (req, res) => {
     const isExpired =
       transaction_status === "expire";
 
-    // =================================================
-    // SUCCESS
-    // =================================================
-
     if (isSuccess) {
-      // Update order menjadi Paid
       await db.query(
         `
         UPDATE orders
@@ -287,7 +245,6 @@ const handleMidtransNotification = async (req, res) => {
         [order.id]
       );
 
-      // Generate tiket otomatis
       const createdCount =
         await generateTicketsForOrder(order.id);
 
@@ -307,10 +264,6 @@ const handleMidtransNotification = async (req, res) => {
         tickets_created: createdCount,
       });
     }
-
-    // =================================================
-    // PENDING
-    // =================================================
 
     if (isPending) {
       await db.query(
@@ -334,10 +287,6 @@ const handleMidtransNotification = async (req, res) => {
       });
     }
 
-    // =================================================
-    // EXPIRED
-    // =================================================
-
     if (isExpired) {
       await db.query(
         `
@@ -360,10 +309,6 @@ const handleMidtransNotification = async (req, res) => {
       });
     }
 
-    // =================================================
-    // CANCEL / DENY / FAILURE
-    // =================================================
-
     if (isCancelled) {
       await db.query(
         `
@@ -385,10 +330,6 @@ const handleMidtransNotification = async (req, res) => {
         payment_status: "Cancelled",
       });
     }
-
-    // =================================================
-    // STATUS LAIN
-    // =================================================
 
     console.log(
       `ℹ️ Status Midtrans belum diproses: ${transaction_status}`

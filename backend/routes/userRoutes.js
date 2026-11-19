@@ -15,7 +15,6 @@ const {
   getPromos,
 } = require("../controllers/userController");
 
-// PROFILE
 router.get("/profile", verifyToken, getProfile);
 
 router.put(
@@ -25,7 +24,6 @@ router.put(
   updateProfile
 );
 
-// USER DATA
 router.get("/stats", verifyToken, getTicketStats);
 router.get("/tickets/active", verifyToken, getActiveTickets);
 router.get("/bookings", verifyToken, getBookingHistory);

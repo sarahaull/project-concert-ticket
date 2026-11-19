@@ -1,9 +1,4 @@
-
 const db = require("../config/db");
-
-// ============================================================
-// HELPER
-// ============================================================
 
 const getOrganizerId = (req) => {
   return req.user?.id || req.user?.userId || req.user?.user_id;
@@ -17,10 +12,6 @@ const sendServerError = (res, error, message) => {
     message,
   });
 };
-
-// ============================================================
-// FIND ORGANIZER
-// ============================================================
 
 const findOrganizer = async (organizerId) => {
   const [rows] = await db.query(
@@ -47,11 +38,6 @@ const findOrganizer = async (organizerId) => {
 
   return rows[0] || null;
 };
-
-// ============================================================
-// GET PROFILE
-// GET /api/organizer/profile
-// ============================================================
 
 const getProfile = async (req, res) => {
   try {
@@ -90,11 +76,6 @@ const getProfile = async (req, res) => {
   }
 };
 
-// ============================================================
-// UPDATE PROFILE
-// PUT /api/organizer/profile
-// ============================================================
-
 const updateProfile = async (req, res) => {
   try {
     const organizerId = getOrganizerId(req);
@@ -115,6 +96,8 @@ const updateProfile = async (req, res) => {
       });
     }
 
+    const body = req.body || {};
+
     const {
       fullname,
       phone,
@@ -122,7 +105,7 @@ const updateProfile = async (req, res) => {
       birth_date,
       photo,
       avatar,
-    } = req.body;
+    } = body;
 
     const updatedFullname =
       fullname !== undefined
@@ -144,8 +127,9 @@ const updateProfile = async (req, res) => {
         ? birth_date || null
         : organizer.birth_date;
 
-    const updatedPhoto =
-      photo !== undefined
+    const updatedPhoto = req.file
+      ? `/uploads/profiles/${req.file.filename}`
+      : photo !== undefined
         ? photo
         : avatar !== undefined
           ? avatar
@@ -208,11 +192,6 @@ const updateProfile = async (req, res) => {
     );
   }
 };
-
-// ============================================================
-// GET EVENT STATS
-// GET /api/organizer/stats
-// ============================================================
 
 const getEventStats = async (req, res) => {
   try {
@@ -314,17 +293,6 @@ const getEventStats = async (req, res) => {
   }
 };
 
-// ============================================================
-// GET MY EVENTS
-// GET /api/organizer/events
-// ============================================================
-
-
-// ============================================================
-// GET MY EVENTS
-// GET /api/organizer/events
-// ============================================================
-
 const getMyEvents = async (req, res) => {
   try {
     const organizerId = getOrganizerId(req);
@@ -419,12 +387,6 @@ const getMyEvents = async (req, res) => {
     );
   }
 };
-
-
-// ============================================================
-// GET EVENT BOOKINGS
-// GET /api/organizer/bookings
-// ============================================================
 
 const getEventBookings = async (req, res) => {
   try {
@@ -521,17 +483,6 @@ const getEventBookings = async (req, res) => {
     );
   }
 };
-
-// ============================================================
-// EXPORT
-// ============================================================
-
-
-
-// ============================================================
-// PENGAJUAN EVENT ORGANIZER
-// Semua fungsi lama di atas tetap dipertahankan.
-// ============================================================
 
 const getOrganizerApplication = async (req, res) => {
   try {
@@ -751,16 +702,13 @@ const reviewOrganizerApplication = async (req, res) => {
   }
 };
 
-
 module.exports = {
-  // Controller organizer lama
   getProfile,
   updateProfile,
   getEventStats,
   getMyEvents,
   getEventBookings,
 
-  // Pengajuan dan pemeriksaan organizer
   getOrganizerApplication,
   submitOrganizerApplication,
   getOrganizerApplications,

@@ -31,14 +31,9 @@ import {
   AtSign,
   Armchair,
   Rows3,
-  MapPinned,
   RefreshCw,
   ImageOff,
 } from "lucide-react";
-
-// ============================================================
-// API CONFIGURATION
-// ============================================================
 
 const API_BASE = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -48,16 +43,26 @@ const API_BASE = (
 
 const TICKET_DETAIL_ENDPOINT = `${API_BASE}/api/tickets`;
 
-// ============================================================
-// HELPERS
-// ============================================================
+const isPaymentSuccessful = (status) =>
+  ["paid", "success", "settlement"].includes(
+    String(status || "").trim().toLowerCase()
+  );
 
 const formatRupiah = (amount) => {
+  if (amount === null || amount === undefined || amount === "") {
+    return "-";
+  }
+
+  const number = Number(amount);
+
+  if (!Number.isFinite(number)) return "-";
+
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
     currency: "IDR",
     minimumFractionDigits: 0,
-  }).format(Number(amount || 0));
+    maximumFractionDigits: 0,
+  }).format(number);
 };
 
 const formatDate = (date) => {
@@ -101,12 +106,11 @@ const formatTime = (time) => {
 };
 
 const getPaymentStatus = (status) => {
-  const normalized = String(status || "").toLowerCase();
+  const normalized = String(status || "").trim().toLowerCase();
 
   if (["paid", "success", "settlement"].includes(normalized)) {
     return {
       label: "Pembayaran Berhasil",
-      value: status,
       className: "bg-emerald-50 text-emerald-700 border-emerald-200",
       icon: CheckCircle2,
     };
@@ -115,7 +119,6 @@ const getPaymentStatus = (status) => {
   if (normalized === "pending") {
     return {
       label: "Menunggu Pembayaran",
-      value: status,
       className: "bg-amber-50 text-amber-700 border-amber-200",
       icon: AlertCircle,
     };
@@ -124,7 +127,6 @@ const getPaymentStatus = (status) => {
   if (["cancelled", "canceled", "deny", "failed"].includes(normalized)) {
     return {
       label: "Pembayaran Gagal / Dibatalkan",
-      value: status,
       className: "bg-rose-50 text-rose-700 border-rose-200",
       icon: AlertCircle,
     };
@@ -133,7 +135,6 @@ const getPaymentStatus = (status) => {
   if (normalized === "expired") {
     return {
       label: "Pesanan Kedaluwarsa",
-      value: status,
       className: "bg-gray-100 text-gray-600 border-gray-200",
       icon: AlertCircle,
     };
@@ -141,14 +142,13 @@ const getPaymentStatus = (status) => {
 
   return {
     label: status || "Tidak diketahui",
-    value: status || "-",
     className: "bg-gray-100 text-gray-600 border-gray-200",
     icon: AlertCircle,
   };
 };
 
 const getCheckInStatus = (status) => {
-  const checkedIn = String(status || "").toLowerCase() === "sudah";
+  const checkedIn = String(status || "").trim().toLowerCase() === "sudah";
 
   if (checkedIn) {
     return {
@@ -223,10 +223,6 @@ const getSeatInformation = (ticket) => {
   };
 };
 
-// ============================================================
-// SMALL COMPONENTS
-// ============================================================
-
 const StatusBadge = ({ status, children }) => {
   return (
     <span
@@ -265,7 +261,9 @@ const InfoItem = ({
             mono ? "font-mono" : ""
           }`}
         >
-          {value || "-"}
+          {value !== null && value !== undefined && value !== ""
+            ? value
+            : "-"}
         </p>
       </div>
     </div>
@@ -284,17 +282,11 @@ const SectionHeading = ({ icon: Icon, title, description }) => {
           {title}
         </h2>
 
-        <p className="text-xs text-[#9B907F]">
-          {description}
-        </p>
+        <p className="text-xs text-[#9B907F]">{description}</p>
       </div>
     </div>
   );
 };
-
-// ============================================================
-// CUSTOMER PHOTO
-// ============================================================
 
 const CustomerAvatar = ({ customer }) => {
   const [imageError, setImageError] = useState(false);
@@ -318,10 +310,6 @@ const CustomerAvatar = ({ customer }) => {
     />
   );
 };
-
-// ============================================================
-// EVENT POSTER
-// ============================================================
 
 const EventPoster = ({ ticket }) => {
   const [imageError, setImageError] = useState(false);
@@ -352,17 +340,15 @@ const EventPoster = ({ ticket }) => {
   );
 };
 
-// ============================================================
-// QR CODE
-// ============================================================
-
-const QRCodeBox = ({ value }) => {
-  if (!value) {
+const QRCodeBox = ({ value, disabled = false }) => {
+  if (!value || disabled) {
     return (
       <div className="flex h-60 w-60 flex-col items-center justify-center rounded-2xl border border-dashed border-[#D8D0C4] bg-[#F7F8FA] text-center">
         <QrCode className="h-10 w-10 text-[#9B907F]" />
-        <p className="mt-3 text-xs text-[#9B907F]">
-          QR Code belum tersedia
+        <p className="mt-3 px-5 text-xs text-[#9B907F]">
+          {!value
+            ? "QR Code belum tersedia"
+            : "QR Code tersedia setelah pembayaran berhasil"}
         </p>
       </div>
     );
@@ -391,10 +377,6 @@ const QRCodeBox = ({ value }) => {
     </div>
   );
 };
-
-// ============================================================
-// SEAT INFORMATION
-// ============================================================
 
 const SeatInformation = ({ ticket }) => {
   const seat = getSeatInformation(ticket);
@@ -465,8 +447,8 @@ const SeatInformation = ({ ticket }) => {
               </div>
 
               <p className="mt-2 text-xs leading-5 text-[#9B907F]">
-                Tiket ini menggunakan area umum. Ikuti petunjuk
-                section dan pengaturan tempat dari penyelenggara event.
+                Tiket ini menggunakan area umum. Ikuti petunjuk section dan
+                pengaturan tempat dari penyelenggara event.
               </p>
             </div>
           )}
@@ -474,18 +456,14 @@ const SeatInformation = ({ ticket }) => {
 
         {ticket?.seat_id && !ticket?.seat_number && (
           <p className="mt-3 text-xs leading-5 text-amber-700">
-            ID kursi tercatat, tetapi detail baris atau nomor kursi
-            belum tersedia pada data backend.
+            ID kursi tercatat, tetapi detail baris atau nomor kursi belum
+            tersedia pada data backend.
           </p>
         )}
       </div>
     </section>
   );
 };
-
-// ============================================================
-// MAIN PAGE
-// ============================================================
 
 export default function TicketDetailPage() {
   const params = useParams();
@@ -498,10 +476,6 @@ export default function TicketDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-
-  // ----------------------------------------------------------
-  // FETCH DETAIL TIKET
-  // ----------------------------------------------------------
 
   const fetchTicket = useCallback(
     async (showLoading = true) => {
@@ -520,7 +494,9 @@ export default function TicketDetailPage() {
 
         setError("");
 
-        const token = localStorage.getItem("token");
+        const token =
+          localStorage.getItem("token") ||
+          localStorage.getItem("accessToken");
 
         if (!token) {
           router.replace("/login");
@@ -551,6 +527,7 @@ export default function TicketDetailPage() {
 
         if (response.status === 401) {
           localStorage.removeItem("token");
+          localStorage.removeItem("accessToken");
           localStorage.removeItem("user");
           router.replace("/login");
           return;
@@ -569,9 +546,7 @@ export default function TicketDetailPage() {
         }
 
         if (!response.ok || !data?.success || !data?.ticket) {
-          throw new Error(
-            data?.message || "Gagal mengambil detail tiket."
-          );
+          throw new Error(data?.message || "Gagal mengambil detail tiket.");
         }
 
         setTicket(data.ticket);
@@ -579,8 +554,7 @@ export default function TicketDetailPage() {
         console.error("GET DETAIL TICKET ERROR:", err);
 
         setError(
-          err?.message ||
-            "Terjadi kesalahan saat mengambil detail tiket."
+          err?.message || "Terjadi kesalahan saat mengambil detail tiket."
         );
       } finally {
         setLoading(false);
@@ -593,10 +567,6 @@ export default function TicketDetailPage() {
   useEffect(() => {
     fetchTicket(true);
   }, [fetchTicket]);
-
-  // ----------------------------------------------------------
-  // STATUS
-  // ----------------------------------------------------------
 
   const paymentStatus = useMemo(
     () => getPaymentStatus(ticket?.payment_status),
@@ -611,23 +581,30 @@ export default function TicketDetailPage() {
   const PaymentIcon = paymentStatus.icon;
   const CheckInIcon = checkInStatus.icon;
 
-  const ticketPrice = Number(ticket?.price || 0);
+  const paymentIsSuccessful = isPaymentSuccessful(ticket?.payment_status);
+
+  const qrCode = paymentIsSuccessful
+    ? String(ticket?.qr_code || "").trim()
+    : "";
+
+  const ticketPrice = ticket?.price;
   const orderQuantity = Number(ticket?.order_quantity || 1);
-  const subtotal = Number(ticket?.subtotal || ticketPrice * orderQuantity);
+
+  const subtotal =
+    ticket?.subtotal !== null && ticket?.subtotal !== undefined
+      ? ticket.subtotal
+      : ticketPrice !== null && ticketPrice !== undefined
+        ? Number(ticketPrice) * orderQuantity
+        : null;
 
   const ticketCreatedAt = formatDateTime(ticket?.ticket_created_at);
   const orderDate = formatDateTime(ticket?.order_date);
-
-  // ----------------------------------------------------------
-  // COPY TICKET CODE
-  // ----------------------------------------------------------
 
   const handleCopy = async () => {
     if (!ticket?.ticket_code) return;
 
     try {
       await navigator.clipboard.writeText(ticket.ticket_code);
-
       setCopied(true);
 
       window.setTimeout(() => {
@@ -639,19 +616,15 @@ export default function TicketDetailPage() {
     }
   };
 
-  // ----------------------------------------------------------
-  // DOWNLOAD QR
-  // ----------------------------------------------------------
-
   const handleDownloadQR = async () => {
-    if (!ticket?.qr_code) {
-      alert("QR Code belum tersedia.");
+    if (!qrCode) {
+      alert("QR Code belum tersedia. Pastikan pembayaran tiket berhasil.");
       return;
     }
 
     const qrUrl =
       "https://api.qrserver.com/v1/create-qr-code/" +
-      `?size=600x600&data=${encodeURIComponent(ticket.qr_code)}`;
+      `?size=600x600&data=${encodeURIComponent(qrCode)}`;
 
     try {
       const response = await fetch(qrUrl);
@@ -679,17 +652,9 @@ export default function TicketDetailPage() {
     }
   };
 
-  // ----------------------------------------------------------
-  // PRINT
-  // ----------------------------------------------------------
-
   const handlePrint = () => {
     window.print();
   };
-
-  // ==========================================================
-  // LOADING
-  // ==========================================================
 
   if (loading) {
     return (
@@ -711,10 +676,6 @@ export default function TicketDetailPage() {
       </div>
     );
   }
-
-  // ==========================================================
-  // ERROR
-  // ==========================================================
 
   if (error || !ticket) {
     return (
@@ -765,14 +726,8 @@ export default function TicketDetailPage() {
     );
   }
 
-  // ==========================================================
-  // MAIN RENDER
-  // ==========================================================
-
   return (
     <div className="w-full min-w-0">
-      {/* BREADCRUMB */}
-
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <button
           type="button"
@@ -790,13 +745,9 @@ export default function TicketDetailPage() {
 
           <ChevronRight className="h-4 w-4" />
 
-          <span className="font-semibold text-[#112250]">
-            Detail Tiket
-          </span>
+          <span className="font-semibold text-[#112250]">Detail Tiket</span>
         </div>
       </div>
-
-      {/* EVENT HEADER */}
 
       <section className="mb-6 overflow-hidden rounded-3xl bg-gradient-to-br from-[#112250] via-[#243B68] to-[#3B507D] shadow-2xl">
         <div className="relative px-5 py-7 sm:px-8 sm:py-9 lg:px-10">
@@ -813,7 +764,7 @@ export default function TicketDetailPage() {
 
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-bold ${
-                    ticket.check_in === "Sudah"
+                    String(ticket.check_in || "").toLowerCase() === "sudah"
                       ? "border-emerald-300/30 bg-emerald-400/20 text-emerald-100"
                       : "border-amber-300/30 bg-amber-400/20 text-amber-100"
                   }`}
@@ -871,8 +822,6 @@ export default function TicketDetailPage() {
         </div>
       </section>
 
-      {/* STATUS CARDS */}
-
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="rounded-2xl border border-[#D8D0C4]/30 bg-white p-4 shadow-lg sm:p-5">
           <div className="flex items-center gap-3">
@@ -921,14 +870,8 @@ export default function TicketDetailPage() {
         </div>
       </div>
 
-      {/* MAIN GRID */}
-
       <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-3">
-        {/* LEFT COLUMN */}
-
         <div className="min-w-0 space-y-6 xl:col-span-2">
-          {/* CUSTOMER INFORMATION */}
-
           <section className="overflow-hidden rounded-3xl border border-[#D8D0C4]/30 bg-white shadow-xl">
             <div className="border-b border-[#D8D0C4]/30 px-5 py-5 sm:px-6">
               <SectionHeading
@@ -992,8 +935,6 @@ export default function TicketDetailPage() {
               </div>
             </div>
           </section>
-
-          {/* EVENT INFORMATION */}
 
           <section className="overflow-hidden rounded-3xl border border-[#D8D0C4]/30 bg-white shadow-xl">
             <div className="border-b border-[#D8D0C4]/30 px-5 py-5 sm:px-6">
@@ -1068,11 +1009,7 @@ export default function TicketDetailPage() {
             </div>
           </section>
 
-          {/* SEAT INFORMATION */}
-
           <SeatInformation ticket={ticket} />
-
-          {/* TICKET AND ORDER INFORMATION */}
 
           <section className="overflow-hidden rounded-3xl border border-[#D8D0C4]/30 bg-white shadow-xl">
             <div className="border-b border-[#D8D0C4]/30 px-5 py-5 sm:px-6">
@@ -1195,14 +1132,12 @@ export default function TicketDetailPage() {
                 </div>
 
                 <p className="mt-2 text-[10px] leading-5 text-[#9B907F]">
-                  Total pesanan merupakan nilai keseluruhan order dan
-                  dapat mencakup biaya layanan atau kategori tiket lain.
+                  Total pesanan merupakan nilai keseluruhan order dan dapat
+                  mencakup biaya layanan atau kategori tiket lain.
                 </p>
               </div>
             </div>
           </section>
-
-          {/* IMPORTANT INFORMATION */}
 
           <section className="rounded-3xl border border-[#D8D0C4]/30 bg-white p-5 shadow-xl sm:p-6">
             <div className="flex items-start gap-3">
@@ -1217,35 +1152,27 @@ export default function TicketDetailPage() {
 
                 <ul className="mt-3 space-y-2 text-xs leading-relaxed text-gray-500 sm:text-sm">
                   <li>
-                    Tunjukkan QR Code tiket kepada petugas saat memasuki
-                    area event.
+                    Tunjukkan QR Code tiket kepada petugas saat memasuki area
+                    event.
                   </li>
                   <li>
-                    Pastikan nama event, kategori, dan posisi kursi
-                    sesuai dengan tiket.
+                    Pastikan nama event, kategori, dan posisi kursi sesuai
+                    dengan tiket.
                   </li>
                   <li>
-                    Satu tiket hanya dapat digunakan untuk satu kali
-                    proses check-in.
+                    Satu tiket hanya dapat digunakan untuk satu kali proses
+                    check-in.
                   </li>
-                  <li>
-                    Jangan membagikan QR Code kepada orang lain.
-                  </li>
-                  <li>
-                    Simpan kode tiket sampai proses check-in selesai.
-                  </li>
+                  <li>Jangan membagikan QR Code kepada orang lain.</li>
+                  <li>Simpan kode tiket sampai proses check-in selesai.</li>
                 </ul>
               </div>
             </div>
           </section>
         </div>
 
-        {/* RIGHT COLUMN: QR AND SUMMARY */}
-
         <div className="min-w-0 xl:col-span-1">
           <div className="space-y-5 xl:sticky xl:top-24">
-            {/* QR CARD */}
-
             <section className="overflow-hidden rounded-3xl border border-[#D8D0C4]/30 bg-white shadow-2xl">
               <div className="relative overflow-hidden bg-gradient-to-br from-[#112250] to-[#3B507D] px-5 py-6 text-center">
                 <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-white/5 blur-2xl" />
@@ -1267,7 +1194,10 @@ export default function TicketDetailPage() {
               </div>
 
               <div className="p-5 sm:p-6">
-                <QRCodeBox value={ticket.qr_code} />
+                <QRCodeBox
+                  value={qrCode}
+                  disabled={!paymentIsSuccessful}
+                />
 
                 <div
                   className={`mt-5 flex items-center gap-3 rounded-2xl border p-4 ${checkInStatus.className}`}
@@ -1275,9 +1205,7 @@ export default function TicketDetailPage() {
                   <CheckInIcon className="h-5 w-5 flex-shrink-0" />
 
                   <div className="min-w-0">
-                    <p className="text-xs font-bold">
-                      {checkInStatus.label}
-                    </p>
+                    <p className="text-xs font-bold">{checkInStatus.label}</p>
 
                     <p className="mt-0.5 text-[10px] opacity-70">
                       Status tiket dari server
@@ -1289,7 +1217,7 @@ export default function TicketDetailPage() {
                   <button
                     type="button"
                     onClick={handleDownloadQR}
-                    disabled={!ticket.qr_code}
+                    disabled={!qrCode}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#112250] to-[#3B507D] px-4 py-3 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Download className="h-4 w-4" />
@@ -1324,8 +1252,6 @@ export default function TicketDetailPage() {
                 </div>
               </div>
             </section>
-
-            {/* CUSTOMER SUMMARY */}
 
             <section className="rounded-2xl border border-[#D8D0C4]/30 bg-white p-5 shadow-lg">
               <div className="flex items-center gap-3">
@@ -1375,8 +1301,6 @@ export default function TicketDetailPage() {
               </div>
             </section>
 
-            {/* REFRESH */}
-
             <button
               type="button"
               onClick={() => fetchTicket(false)}
@@ -1400,8 +1324,6 @@ export default function TicketDetailPage() {
           </div>
         </div>
       </div>
-
-      {/* PRINT STYLE */}
 
       <style jsx global>{`
         @media print {

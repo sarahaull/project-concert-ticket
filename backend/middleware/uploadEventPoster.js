@@ -8,7 +8,6 @@ const uploadDir = path.join(
     "events"
 );
 
-// Buat folder otomatis kalau belum ada
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, {
         recursive: true,

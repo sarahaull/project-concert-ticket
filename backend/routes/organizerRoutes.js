@@ -16,6 +16,7 @@ const {
 
 // Middleware autentikasi
 const verifyToken = require("../middleware/auth");
+const uploadProfile = require("../middleware/uploadProfile");
 
 if (typeof verifyToken !== "function") {
   throw new Error("Middleware verifyToken tidak valid.");
@@ -39,8 +40,11 @@ const onlySuperAdmin = (req, res, next) => {
 // ROUTE ORGANIZER LAMA - TETAP DIPERTAHANKAN
 // ============================================================
 router.get("/profile", getProfile);
-router.put("/profile", updateProfile);
-router.get("/stats", getEventStats);
+router.put(
+  "/profile",
+  uploadProfile.single("avatar"),
+  updateProfile
+);router.get("/stats", getEventStats);
 router.get("/events", getMyEvents);
 router.get("/bookings", getEventBookings);
 

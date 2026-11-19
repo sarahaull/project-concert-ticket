@@ -1,6 +1,5 @@
 const db = require("../config/db");
 
-// GET semua pesan
 const getAllContactMessages = async (req, res) => {
     try {
         const [rows] = await db.query(`
@@ -30,7 +29,6 @@ const getAllContactMessages = async (req, res) => {
     }
 };
 
-// GET pesan berdasarkan ID
 const getContactMessageById = async (req, res) => {
     try {
         const { id } = req.params;

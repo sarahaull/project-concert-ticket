@@ -1,8 +1,6 @@
 const db = require("../config/db");
 
-// ======================================================
-// GET SEMUA KATEGORI TIKET
-// ======================================================
+
 
 const getTicketCategories = async (req, res) => {
   try {
@@ -39,9 +37,7 @@ const getTicketCategories = async (req, res) => {
   }
 };
 
-// ======================================================
-// GET KATEGORI TIKET BERDASARKAN EVENT
-// ======================================================
+
 
 const getTicketCategoriesByEvent = async (req, res) => {
   try {
@@ -108,9 +104,7 @@ const getTicketCategoriesByEvent = async (req, res) => {
   }
 };
 
-// ======================================================
-// GET DETAIL KATEGORI TIKET
-// ======================================================
+
 
 const getTicketCategoryById = async (req, res) => {
   try {
@@ -157,9 +151,7 @@ const getTicketCategoryById = async (req, res) => {
   }
 };
 
-// ======================================================
-// CREATE KATEGORI TIKET
-// ======================================================
+
 
 const createTicketCategory = async (req, res) => {
   try {
@@ -281,9 +273,7 @@ const createTicketCategory = async (req, res) => {
   }
 };
 
-// ======================================================
-// UPDATE KATEGORI TIKET
-// ======================================================
+
 
 const updateTicketCategory = async (req, res) => {
   try {
@@ -420,9 +410,7 @@ const updateTicketCategory = async (req, res) => {
   }
 };
 
-// ======================================================
-// DELETE KATEGORI TIKET
-// ======================================================
+
 
 const deleteTicketCategory = async (req, res) => {
   try {
@@ -462,9 +450,7 @@ const deleteTicketCategory = async (req, res) => {
   }
 };
 
-// ======================================================
-// EXPORT
-// ======================================================
+
 
 module.exports = {
   getTicketCategories,

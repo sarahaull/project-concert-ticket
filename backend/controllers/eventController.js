@@ -1,9 +1,4 @@
-
 const db = require("../config/db");
-
-// ============================================================
-// HELPER
-// ============================================================
 
 const getUser = (req) => ({
   id: req.user?.id,
@@ -49,11 +44,6 @@ const eventSelect = `
   LEFT JOIN users u ON e.organizer_id = u.id
 `;
 
-// ============================================================
-// 1. EVENT PUBLIK
-// Hanya event Approved yang boleh dilihat.
-// ============================================================
-
 const getEvents = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -76,16 +66,10 @@ const getEvents = async (req, res) => {
   }
 };
 
-
-// ============================================================
-// 2. DETAIL EVENT PUBLIK
-// ============================================================
-
 const getEventById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Validasi ID event
     if (!id || !Number.isInteger(Number(id)) || Number(id) <= 0) {
       return res.status(400).json({
         success: false,
@@ -93,7 +77,6 @@ const getEventById = async (req, res) => {
       });
     }
 
-    // Ambil detail event
     const [rows] = await db.query(
       `SELECT
         e.id,
@@ -150,7 +133,6 @@ const getEventById = async (req, res) => {
 
     const event = rows[0];
 
-    // Ambil kategori tiket
     const [ticketCategories] = await db.query(
       `SELECT
         id,
@@ -165,7 +147,6 @@ const getEventById = async (req, res) => {
       [Number(id)]
     );
 
-    // Ambil section / area konser
     const [sections] = await db.query(
       `SELECT
         es.id,
@@ -189,7 +170,6 @@ const getEventById = async (req, res) => {
       [Number(id)]
     );
 
-    // Ambil data kursi
     const [seats] = await db.query(
       `SELECT
         s.id,
@@ -215,7 +195,6 @@ const getEventById = async (req, res) => {
       [Number(id)]
     );
 
-    // Format kategori tiket
     const formattedCategories = ticketCategories.map((ticket) => ({
       ...ticket,
       price: Number(ticket.price) || 0,
@@ -223,7 +202,6 @@ const getEventById = async (req, res) => {
       remaining_ticket: Number(ticket.remaining_ticket) || 0,
     }));
 
-    // Format section
     const formattedSections = sections.map((section) => ({
       ...section,
       ticket_price: Number(section.ticket_price) || 0,
@@ -233,7 +211,6 @@ const getEventById = async (req, res) => {
           : section.map_position,
     }));
 
-    // Format kursi
     const formattedSeats = seats.map((seat) => ({
       ...seat,
       position_x: Number(seat.position_x),
@@ -268,12 +245,6 @@ const getEventById = async (req, res) => {
   }
 };
 
-
-
-// ============================================================
-// 3. EVENT MILIK ORGANIZER
-// ============================================================
-
 const getOrganizerEvents = async (req, res) => {
   try {
     const { id, role } = getUser(req);
@@ -305,10 +276,6 @@ const getOrganizerEvents = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// 4. DETAIL EVENT MILIK ORGANIZER
-// ============================================================
 
 const getOrganizerEventById = async (req, res) => {
   try {
@@ -350,11 +317,6 @@ const getOrganizerEventById = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// 5. TAMBAH EVENT
-// Event baru selalu Draft.
-// ============================================================
 
 const createEvent = async (req, res) => {
   try {
@@ -521,11 +483,6 @@ const createEvent = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// 6. UPDATE EVENT
-// Hanya Draft atau Rejected yang dapat diedit.
-// ============================================================
 
 const updateEvent = async (req, res) => {
   try {
@@ -715,11 +672,6 @@ const updateEvent = async (req, res) => {
   }
 };
 
-// ============================================================
-// 7. AJUKAN EVENT KE SUPER ADMIN
-// Draft / Rejected -> Pending
-// ============================================================
-
 const submitEvent = async (req, res) => {
   try {
     const { id: organizerId, role } = getUser(req);
@@ -754,7 +706,6 @@ const submitEvent = async (req, res) => {
       });
     }
 
-    // Pastikan event sudah memiliki kategori tiket.
     const [tickets] = await db.query(
       `SELECT id
        FROM ticket_categories
@@ -803,10 +754,6 @@ const submitEvent = async (req, res) => {
   }
 };
 
-// ============================================================
-// 8. DAFTAR PENGAJUAN UNTUK SUPER ADMIN
-// ============================================================
-
 const getPendingEvents = async (req, res) => {
   try {
     const { id, role } = getUser(req);
@@ -838,10 +785,6 @@ const getPendingEvents = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// 9. APPROVE EVENT
-// ============================================================
 
 const approveEvent = async (req, res) => {
   try {
@@ -886,10 +829,6 @@ const approveEvent = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// 10. REJECT EVENT
-// ============================================================
 
 const rejectEvent = async (req, res) => {
   try {
@@ -944,38 +883,64 @@ const rejectEvent = async (req, res) => {
   }
 };
 
-// ============================================================
-// 11. HAPUS EVENT ORGANIZER
-// ============================================================
-
 const deleteEvent = async (req, res) => {
   try {
-    const { id: organizerId, role } = getUser(req);
+    const { id: userId, role } = getUser(req);
     const { id } = req.params;
 
-    if (!organizerId || !isOrganizer(role)) {
-      return res.status(403).json({
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        message: "Akses hanya untuk event organizer.",
+        message: "Token login tidak valid.",
       });
     }
 
-    const [rows] = await db.query(
-      `SELECT id, event_name, approval_status
-       FROM events
-       WHERE id = ? AND organizer_id = ?
-       LIMIT 1`,
-      [id, organizerId]
-    );
+    if (!isOrganizer(role) && !isSuperAdmin(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Akses hanya untuk Event Organizer atau Super Admin.",
+      });
+    }
+
+    if (!id || !Number.isInteger(Number(id)) || Number(id) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "ID event tidak valid.",
+      });
+    }
+
+    let query = `
+      SELECT id, organizer_id, event_name, approval_status
+      FROM events
+      WHERE id = ?
+    `;
+
+    const params = [Number(id)];
+
+    if (isOrganizer(role)) {
+      query += " AND organizer_id = ?";
+      params.push(userId);
+    }
+
+    query += " LIMIT 1";
+
+    const [rows] = await db.query(query, params);
 
     if (!rows.length) {
       return res.status(404).json({
         success: false,
-        message: "Event tidak ditemukan atau bukan milik Anda.",
+        message: isSuperAdmin(role)
+          ? "Event tidak ditemukan."
+          : "Event tidak ditemukan atau bukan milik Anda.",
       });
     }
 
-    if (rows[0].approval_status === "Approved") {
+    const event = rows[0];
+
+    if (
+      isOrganizer(role) &&
+      event.approval_status === "Approved"
+    ) {
       return res.status(400).json({
         success: false,
         message: "Event yang sudah disetujui tidak dapat dihapus melalui fitur Organizer.",
@@ -983,16 +948,16 @@ const deleteEvent = async (req, res) => {
     }
 
     await db.query(
-      `DELETE FROM events
-       WHERE id = ? AND organizer_id = ?`,
-      [id, organizerId]
+      "DELETE FROM events WHERE id = ?",
+      [Number(id)]
     );
 
     return res.status(200).json({
       success: true,
       message: "Event berhasil dihapus.",
-      deleted_event: rows[0],
+      deleted_event: event,
     });
+
   } catch (error) {
     console.error("DELETE EVENT ERROR:", error);
 
@@ -1002,7 +967,7 @@ const deleteEvent = async (req, res) => {
     ) {
       return res.status(409).json({
         success: false,
-        message: "Event tidak dapat dihapus karena masih memiliki transaksi atau tiket.",
+        message: "Event tidak dapat dihapus karena masih memiliki transaksi atau tiket yang terhubung.",
       });
     }
 

@@ -1,11 +1,6 @@
-
 const db = require("../config/db");
 const snap = require("../config/midtrans");
 const crypto = require("crypto");
-
-// ============================================================
-// HELPER: NORMALISASI METODE PEMBAYARAN
-// ============================================================
 
 const normalizePaymentMethod = (paymentType) => {
   const type = String(paymentType || "").toLowerCase();
@@ -44,10 +39,6 @@ const normalizePaymentMethod = (paymentType) => {
   return "Transfer";
 };
 
-// ============================================================
-// HELPER: FORMAT TANGGAL UNTUK MYSQL
-// ============================================================
-
 const toMySQLDateTime = (value) => {
   const date = value ? new Date(value) : new Date();
 
@@ -58,20 +49,12 @@ const toMySQLDateTime = (value) => {
   return date.toISOString().slice(0, 19).replace("T", " ");
 };
 
-// ============================================================
-// HELPER: GENERATE KODE TIKET
-// ============================================================
-
 const generateTicketCode = () => {
   return `TV-${Date.now()}-${crypto
     .randomBytes(4)
     .toString("hex")
     .toUpperCase()}`;
 };
-
-// ============================================================
-// HELPER: TERBITKAN TIKET TANPA DUPLIKASI
-// ============================================================
 
 const createTicketsForOrder = async (connection, orderId) => {
   const [details] = await connection.query(
@@ -122,6 +105,7 @@ const createTicketsForOrder = async (connection, orderId) => {
 
     for (let i = 0; i < remaining; i++) {
       const ticketCode = generateTicketCode();
+      const qrCode = crypto.randomBytes(32).toString("hex");
       const seatId = usesNumberedSeats ? orderSeats[i]?.id : null;
       if (usesNumberedSeats && !seatId) {
         throw new Error("Kursi pesanan tidak lengkap untuk penerbitan tiket.");
@@ -129,7 +113,7 @@ const createTicketsForOrder = async (connection, orderId) => {
       await connection.query(
         `INSERT INTO tickets (order_detail_id, qr_code, ticket_code, check_in, seat_id)
          VALUES (?, ?, ?, 'Belum', ?)`,
-        [detail.id, ticketCode, ticketCode, seatId]
+        [detail.id, qrCode, ticketCode, seatId]
       );
     }
 
@@ -144,10 +128,6 @@ const createTicketsForOrder = async (connection, orderId) => {
     }
   }
 };
-
-// ============================================================
-// HELPER: SINKRONISASI STATUS PEMBAYARAN MIDTRANS
-// ============================================================
 
 const syncPaymentStatus = async (orderCode, statusResponse) => {
   const connection = await db.getConnection();
@@ -171,7 +151,6 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
 
     const order = orders[0];
 
-    // Pastikan nominal dari Midtrans sesuai dengan pesanan.
     const grossAmount = Number(statusResponse.gross_amount);
     const orderAmount = Number(order.total_price);
 
@@ -196,8 +175,6 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
     let paymentStatus = "Pending";
     let orderStatus = "Pending";
 
-    // settlement = pembayaran berhasil.
-    // capture dianggap berhasil jika fraud_status = accept.
     if (
       transactionStatus === "settlement" ||
       (transactionStatus === "capture" && fraudStatus === "accept")
@@ -215,7 +192,6 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
       orderStatus = "Expired";
     }
 
-    // Pesanan yang sudah dibayar tidak boleh diturunkan statusnya.
     if (order.payment_status === "Paid") {
       paymentStatus = "Success";
       orderStatus = "Paid";
@@ -234,7 +210,6 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
           )
         : null;
 
-    // Periksa apakah data pembayaran sudah tersedia.
     const [existingPayments] = await connection.query(
       `SELECT id
        FROM payments
@@ -274,8 +249,6 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
       );
     }
 
-    // Status orders harus mengikuti ENUM di database:
-    // Pending, Paid, Cancelled, Expired.
     await connection.query(
       `UPDATE orders
        SET payment_status = ?
@@ -283,7 +256,6 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
       [orderStatus, order.id]
     );
 
-    // Tiket hanya diterbitkan ketika pembayaran terverifikasi sukses.
     if (orderStatus === "Paid") {
       await createTicketsForOrder(connection, order.id);
     }
@@ -314,10 +286,6 @@ const syncPaymentStatus = async (orderCode, statusResponse) => {
     connection.release();
   }
 };
-
-// ============================================================
-// GET SEMUA PEMBAYARAN
-// ============================================================
 
 const getAllPayments = async (req, res) => {
   try {
@@ -353,10 +321,6 @@ const getAllPayments = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// GET PEMBAYARAN BERDASARKAN ID
-// ============================================================
 
 const getPaymentById = async (req, res) => {
   try {
@@ -404,10 +368,6 @@ const getPaymentById = async (req, res) => {
   }
 };
 
-// ============================================================
-// WEBHOOK NOTIFIKASI MIDTRANS
-// ============================================================
-
 const midtransNotification = async (req, res) => {
   try {
     const {
@@ -435,7 +395,6 @@ const midtransNotification = async (req, res) => {
       throw new Error("MIDTRANS_SERVER_KEY belum dikonfigurasi.");
     }
 
-    // Validasi signature notifikasi.
     const expectedSignature = crypto
       .createHash("sha512")
       .update(
@@ -456,8 +415,6 @@ const midtransNotification = async (req, res) => {
       });
     }
 
-    // Jangan hanya percaya payload notifikasi.
-    // Verifikasi status transaksi langsung ke Midtrans.
     const statusResponse = await snap.transaction.status(order_id);
 
     const result = await syncPaymentStatus(order_id, statusResponse);
@@ -494,10 +451,6 @@ const midtransNotification = async (req, res) => {
   }
 };
 
-// ============================================================
-// CEK STATUS TRANSAKSI MIDTRANS
-// ============================================================
-
 const checkMidtransStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -510,12 +463,19 @@ const checkMidtransStatus = async (req, res) => {
       });
     }
 
-    // Pastikan pesanan benar-benar milik pengguna yang login.
     const [orders] = await db.query(
-      `SELECT id, order_code
-       FROM orders
-       WHERE order_code = ?
-         AND user_id = ?
+      `SELECT
+        o.id,
+        o.order_code,
+        o.total_price,
+        o.payment_status,
+        p.payment_method,
+        p.payment_status AS payment_record_status,
+        p.payment_date
+       FROM orders o
+       LEFT JOIN payments p ON p.order_id = o.id
+       WHERE o.order_code = ?
+         AND o.user_id = ?
        LIMIT 1`,
       [orderId, userId]
     );
@@ -527,13 +487,49 @@ const checkMidtransStatus = async (req, res) => {
       });
     }
 
-    // Ambil status aktual dari Midtrans.
-    const statusResponse = await snap.transaction.status(
-      orders[0].order_code
-    );
+    const order = orders[0];
+
+    if (order.payment_status === "Paid") {
+      return res.json({
+        success: true,
+        message: "Pembayaran sudah berhasil dikonfirmasi.",
+        data: {
+          order_id: order.id,
+          order_code: order.order_code,
+          payment_status: order.payment_status,
+          payment_record_status: order.payment_record_status,
+          payment_method: order.payment_method,
+          payment_date: order.payment_date,
+          amount: Number(order.total_price),
+        },
+      });
+    }
+
+    let statusResponse;
+
+    try {
+      statusResponse = await snap.transaction.status(order.order_code);
+    } catch (midtransError) {
+      const statusCode = String(
+        midtransError.ApiResponse?.status_code || ""
+      );
+
+      if (statusCode === "404") {
+        return res.status(409).json({
+          success: false,
+          code: "MIDTRANS_TRANSACTION_NOT_FOUND",
+          message:
+            "Transaksi belum ditemukan di Midtrans. Silakan periksa kembali pembayaran atau tunggu notifikasi pembayaran.",
+          order_code: order.order_code,
+          payment_status: order.payment_status,
+        });
+      }
+
+      throw midtransError;
+    }
 
     const result = await syncPaymentStatus(
-      orders[0].order_code,
+      order.order_code,
       statusResponse
     );
 
@@ -547,7 +543,7 @@ const checkMidtransStatus = async (req, res) => {
     return res.json({
       success: true,
       message: "Status transaksi berhasil diperiksa.",
-      ...result,
+      data: result,
     });
   } catch (error) {
     console.error(
@@ -558,14 +554,9 @@ const checkMidtransStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Gagal memeriksa transaksi Midtrans.",
-      error: error.message || "Kesalahan tidak diketahui.",
     });
   }
 };
-
-// ============================================================
-// TES KONEKSI MIDTRANS
-// ============================================================
 
 const testMidtrans = async (req, res) => {
   try {
@@ -607,20 +598,12 @@ const testMidtrans = async (req, res) => {
   }
 };
 
-// ============================================================
-// BLOKIR PERUBAHAN PEMBAYARAN MANUAL
-// ============================================================
-
 const blockedPaymentMutation = async (req, res) => {
   return res.status(403).json({
     success: false,
     message: "Pembayaran harus diverifikasi melalui Midtrans.",
   });
 };
-
-// ============================================================
-// EXPORTS
-// ============================================================
 
 module.exports = {
   getAllPayments,

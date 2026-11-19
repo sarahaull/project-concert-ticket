@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Save,
@@ -18,6 +19,12 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Sparkles,
+  Info,
+  ChevronRight,
+  CircleCheck,
+  FileText,
+  Lightbulb,
 } from "lucide-react";
 
 const RAW_API_URL =
@@ -47,6 +54,22 @@ const INITIAL_FORM = {
   ticket_sale_end: "",
 };
 
+const easePremium = [0.22, 1, 0.36, 1];
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (i = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, delay: i * 0.05, ease: easePremium },
+  }),
+};
+
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.05, delayChildren: 0.05 } },
+};
+
 const getToken = () => {
   if (typeof window === "undefined") return "";
   return (
@@ -56,19 +79,31 @@ const getToken = () => {
   );
 };
 
+const getLocalDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getInitialEventStatus = (saleStart, saleEnd) => {
+  const today = getLocalDate();
+  if (today < saleStart) return "Coming Soon";
+  if (today >= saleStart && today <= saleEnd) return "Available";
+  return "Coming Soon";
+};
+
 const parseResponse = async (response) => {
   const data = await response.json().catch(() => null);
-
   if (!data) {
     throw new Error(`Response backend tidak valid. HTTP ${response.status}`);
   }
-
   if (!response.ok || data.success === false) {
     throw new Error(
       data.message || data.error || `Request gagal. HTTP ${response.status}`
     );
   }
-
   return data;
 };
 
@@ -82,11 +117,21 @@ const getList = (data, key) => {
 const getErrorMessage = (error) =>
   error?.message || "Terjadi kesalahan pada server.";
 
+const formatDateShort = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
 export default function TambahEventPage() {
   const router = useRouter();
 
   const [form, setForm] = useState(INITIAL_FORM);
-
   const [categories, setCategories] = useState([]);
   const [artists, setArtists] = useState([]);
   const [venues, setVenues] = useState([]);
@@ -109,20 +154,16 @@ export default function TambahEventPage() {
     const loadMasterData = async () => {
       try {
         setLoadingData(true);
+        const token = getToken();
+        const headers = {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
 
         const responses = await Promise.all([
-          fetch(API.categories, {
-            headers: { Accept: "application/json" },
-            cache: "no-store",
-          }),
-          fetch(API.artists, {
-            headers: { Accept: "application/json" },
-            cache: "no-store",
-          }),
-          fetch(API.venues, {
-            headers: { Accept: "application/json" },
-            cache: "no-store",
-          }),
+          fetch(API.categories, { headers, cache: "no-store" }),
+          fetch(API.artists, { headers, cache: "no-store" }),
+          fetch(API.venues, { headers, cache: "no-store" }),
         ]);
 
         const [categoryData, artistData, venueData] = await Promise.all(
@@ -154,38 +195,26 @@ export default function TambahEventPage() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (posterPreview) URL.revokeObjectURL(posterPreview);
+    };
+  }, [posterPreview]);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-    setNotification({
-      type: "",
-      message: "",
-    });
+    setForm((previous) => ({ ...previous, [name]: value }));
+    setNotification({ type: "", message: "" });
   };
 
   const handlePosterMode = (mode) => {
     if (loading) return;
-
-    if (posterPreview) {
-      URL.revokeObjectURL(posterPreview);
-    }
-
+    if (posterPreview) URL.revokeObjectURL(posterPreview);
     setPosterMode(mode);
     setSelectedFile(null);
     setPosterPreview("");
-
-    setForm((previous) => ({
-      ...previous,
-      poster: "",
-    }));
-
-    setNotification({
-      type: "",
-      message: "",
-    });
+    setForm((previous) => ({ ...previous, poster: "" }));
+    setNotification({ type: "", message: "" });
   };
 
   const handleFileChange = (event) => {
@@ -212,35 +241,20 @@ export default function TambahEventPage() {
       return;
     }
 
-    if (posterPreview) {
-      URL.revokeObjectURL(posterPreview);
-    }
+    if (posterPreview) URL.revokeObjectURL(posterPreview);
 
     setSelectedFile(file);
     setPosterPreview(URL.createObjectURL(file));
-
-    setNotification({
-      type: "",
-      message: "",
-    });
-
+    setNotification({ type: "", message: "" });
     event.target.value = "";
   };
 
   const removePoster = () => {
     if (loading) return;
-
-    if (posterPreview) {
-      URL.revokeObjectURL(posterPreview);
-    }
-
+    if (posterPreview) URL.revokeObjectURL(posterPreview);
     setSelectedFile(null);
     setPosterPreview("");
-
-    setForm((previous) => ({
-      ...previous,
-      poster: "",
-    }));
+    setForm((previous) => ({ ...previous, poster: "" }));
   };
 
   const validateForm = () => {
@@ -257,11 +271,18 @@ export default function TambahEventPage() {
     if (!form.ticket_sale_end)
       return "Tanggal akhir penjualan tiket wajib diisi.";
 
+    const today = getLocalDate();
+
     if (form.ticket_sale_start > form.ticket_sale_end)
       return "Tanggal akhir penjualan harus setelah tanggal mulai.";
-
+    if (form.ticket_sale_start > form.event_date)
+      return "Penjualan tiket tidak boleh dimulai setelah tanggal event.";
     if (form.ticket_sale_end > form.event_date)
       return "Penjualan tiket tidak boleh berakhir setelah tanggal event.";
+    if (form.event_date < today)
+      return "Tanggal event tidak boleh menggunakan tanggal yang sudah lewat.";
+    if (form.ticket_sale_end < today)
+      return "Periode penjualan tiket sudah berakhir. Silakan pilih tanggal penjualan yang masih berlaku.";
 
     if (posterMode === "file" && !selectedFile)
       return "Silakan pilih poster event.";
@@ -281,6 +302,11 @@ export default function TambahEventPage() {
   };
 
   const createEvent = async (token) => {
+    const status = getInitialEventStatus(
+      form.ticket_sale_start,
+      form.ticket_sale_end
+    );
+
     const payload = {
       category_id: Number(form.category_id),
       artist_id: Number(form.artist_id),
@@ -293,7 +319,7 @@ export default function TambahEventPage() {
       event_time: form.event_time,
       ticket_sale_start: form.ticket_sale_start,
       ticket_sale_end: form.ticket_sale_end,
-      status: "Coming Soon",
+      status,
     };
 
     const response = await fetch(API.events, {
@@ -309,10 +335,15 @@ export default function TambahEventPage() {
     const data = await parseResponse(response);
 
     const eventId =
-      data?.event?.id ?? data?.data?.event?.id ?? data?.data?.id;
+      data?.event?.id ??
+      data?.data?.event?.id ??
+      data?.data?.id ??
+      data?.id;
 
     if (!eventId) {
-      throw new Error("ID event tidak ditemukan pada response backend.");
+      throw new Error(
+        "Event berhasil dikirim, tetapi ID event tidak ditemukan pada response backend."
+      );
     }
 
     return Number(eventId);
@@ -336,17 +367,15 @@ export default function TambahEventPage() {
     });
 
     const data = await parseResponse(response);
+    const posterPath =
+      data?.poster ?? data?.data?.poster ?? data?.event?.poster;
 
-    if (!data.poster) {
-      throw new Error("Backend tidak mengembalikan path poster.");
-    }
-
-    return data.poster;
+    if (!posterPath) throw new Error("Backend tidak mengembalikan path poster.");
+    return posterPath;
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     if (loading || loadingData) return;
 
     setNotification({ type: "", message: "" });
@@ -368,7 +397,6 @@ export default function TambahEventPage() {
 
     try {
       setLoading(true);
-
       setNotification({
         type: "info",
         message: "Sedang menyimpan informasi event...",
@@ -389,422 +417,576 @@ export default function TambahEventPage() {
         message: "Event berhasil disimpan. Mengalihkan ke halaman tiket...",
       });
 
-      if (posterPreview) {
-        URL.revokeObjectURL(posterPreview);
-      }
+      if (posterPreview) URL.revokeObjectURL(posterPreview);
 
       setTimeout(() => {
         router.push(`/organizer/event/${eventId}/tiket`);
       }, 1000);
-
     } catch (error) {
       console.error("CREATE EVENT ERROR:", error);
-      setNotification({
-        type: "error",
-        message: getErrorMessage(error),
-      });
+      setNotification({ type: "error", message: getErrorMessage(error) });
       setLoading(false);
     }
   };
 
-  const inputClass =
-    "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#112250] focus:ring-4 focus:ring-[#112250]/10 disabled:bg-slate-50 disabled:text-slate-400";
-
-  const labelClass =
-    "mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500";
-
   const isLocked = loading;
+  const today = getLocalDate();
+
+  const previewStatus =
+    form.ticket_sale_start && form.ticket_sale_end
+      ? getInitialEventStatus(form.ticket_sale_start, form.ticket_sale_end)
+      : "Coming Soon";
+
+  const selectedCategory = categories.find(
+    (c) => String(c.id) === String(form.category_id)
+  );
+  const selectedArtist = artists.find(
+    (a) => String(a.id) === String(form.artist_id)
+  );
+  const selectedVenue = venues.find(
+    (v) => String(v.id) === String(form.venue_id)
+  );
+
+  const posterImageSrc =
+    posterMode === "file" ? posterPreview : form.poster || "";
+
+  const completeness = [
+    form.event_name.trim(),
+    form.category_id,
+    form.artist_id,
+    form.venue_id,
+    form.event_date,
+    form.event_time,
+    form.ticket_sale_start,
+    form.ticket_sale_end,
+    posterImageSrc,
+  ].filter(Boolean).length;
+
+  const completenessPercent = Math.round((completeness / 9) * 100);
 
   return (
-    <div className="w-full min-w-0 text-[#0F172A]">
-      <div className="mx-auto w-full max-w-7xl">
-        <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div className="flex items-start gap-4">
-            <Link
-              href="/organizer/event"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-[#112250]/30 hover:bg-[#112250]/5 hover:text-[#112250]"
-            >
-              <ArrowLeft size={19} />
-            </Link>
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={staggerContainer}
+      className="w-full min-w-0 space-y-6"
+    >
+      {/* HEADER */}
+      <motion.div
+        variants={fadeUp}
+        className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end"
+      >
+        <div className="flex items-start gap-3">
+          <Link
+            href="/organizer/event"
+            className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+          >
+            <ArrowLeft size={16} />
+          </Link>
 
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
-                Tambah Event
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Buat event baru untuk TicketVerse.
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-2 rounded-full border border-[#112250]/15 bg-[#112250]/5 px-4 py-2 text-xs font-bold text-[#112250] sm:flex">
-            <Music size={14} />
-            Organizer
-          </div>
-        </div>
-
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          <AlertCircle size={19} className="mt-0.5 shrink-0" />
           <div>
-            <p className="font-bold">Informasi penyimpanan event</p>
-            <p className="mt-1 text-xs leading-5">
-              Event baru akan disimpan sebagai Draft. Setelah kategori tiket
-              selesai ditambahkan, kamu dapat mengajukan event kepada Super
-              Admin untuk mendapatkan persetujuan.
+            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-400">
+              <span>Organizer</span>
+              <span className="text-slate-300">/</span>
+              <span>Event</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-sky-600">Tambah Event</span>
+            </div>
+
+            <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-slate-900 sm:text-[30px]">
+              Tambah Event
+            </h1>
+
+            <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-slate-500">
+              Buat event baru untuk TicketVerse. Lengkapi informasi dan poster
+              agar siap dipublikasikan ke pengunjung.
             </p>
           </div>
         </div>
 
-        {notification.message && (
-          <div className="mb-6">
-            <div
-              className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm ${
-                notification.type === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : notification.type === "info"
-                  ? "border-blue-200 bg-blue-50 text-blue-700"
-                  : "border-red-200 bg-red-50 text-red-700"
-              }`}
-            >
-              {notification.type === "success" ? (
-                <CheckCircle2 size={19} />
-              ) : notification.type === "info" ? (
-                <Loader2 size={19} className="animate-spin" />
-              ) : (
-                <AlertCircle size={19} />
-              )}
-
-              <span className="flex-1">{notification.message}</span>
-
-              {!loading && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setNotification({
-                      type: "",
-                      message: "",
-                    })
-                  }
-                  className="opacity-60 transition hover:opacity-100"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 rounded-xl border border-sky-200 bg-sky-50 px-3.5 py-2 text-[11.5px] font-semibold text-sky-700">
+            <Sparkles size={13} />
+            Organizer Suite
           </div>
-        )}
+        </div>
+      </motion.div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <div className="space-y-6 xl:col-span-2">
-              <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                <div className="border-b border-slate-100 px-6 py-5">
-                  <h2 className="text-base font-bold">Informasi Event</h2>
-                  <p className="mt-1 text-xs text-slate-500">
+      {/* INFO BANNER */}
+      <motion.div
+        variants={fadeUp}
+        className="flex items-start gap-3 rounded-2xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-[12.5px] text-sky-900"
+      >
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-sky-600 ring-1 ring-sky-100">
+          <Info size={14} />
+        </div>
+        <div>
+          <p className="font-semibold">Informasi penyimpanan event</p>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-sky-900/75">
+            Event baru disimpan sesuai periode penjualan tiket. Jika penjualan
+            sudah dimulai, status otomatis menjadi <strong>Available</strong>.
+            Jika belum, menjadi <strong>Coming Soon</strong>. Persetujuan event
+            tetap dikelola oleh Super Admin secara terpisah.
+          </p>
+        </div>
+      </motion.div>
+
+      {/* NOTIFICATION */}
+      <AnimatePresence>
+        {notification.message && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: "auto" }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            className={`flex items-start gap-3 overflow-hidden rounded-xl border px-4 py-3 text-[12.5px] ${
+              notification.type === "success"
+                ? "border-sky-200 bg-sky-50/70 text-sky-700"
+                : notification.type === "info"
+                ? "border-slate-200 bg-slate-50 text-slate-700"
+                : "border-rose-200 bg-rose-50/70 text-rose-700"
+            }`}
+          >
+            {notification.type === "success" ? (
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+            ) : notification.type === "info" ? (
+              <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin" />
+            ) : (
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            )}
+
+            <span className="flex-1">{notification.message}</span>
+
+            {!loading && (
+              <button
+                type="button"
+                onClick={() => setNotification({ type: "", message: "" })}
+                className="opacity-60 transition hover:opacity-100"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          {/* LEFT COLUMN */}
+          <div className="space-y-6">
+            {/* EVENT INFO */}
+            <motion.section
+              variants={fadeUp}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+                <div>
+                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-slate-900">
+                    Informasi Event
+                  </h2>
+                  <p className="mt-0.5 text-[11.5px] text-slate-400">
                     Informasi dasar mengenai event yang akan dibuat.
                   </p>
                 </div>
-
-                <div className="grid gap-5 p-6 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>
-                      Nama Event <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="event_name"
-                      value={form.event_name}
-                      onChange={handleChange}
-                      maxLength={150}
-                      required
-                      disabled={isLocked}
-                      placeholder="Contoh: GIGI Live Concert"
-                      className={inputClass}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>
-                      Kategori <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Tag
-                        size={17}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                      />
-                      <select
-                        name="category_id"
-                        value={form.category_id}
-                        onChange={handleChange}
-                        disabled={loadingData || isLocked}
-                        required
-                        className={`${inputClass} appearance-none pl-11`}
-                      >
-                        <option value="">
-                          {loadingData ? "Memuat kategori..." : "Pilih kategori"}
-                        </option>
-                        {categories.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.category_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {!loadingData && categories.length === 0 && (
-                      <p className="mt-2 text-xs text-amber-600">
-                        Belum ada kategori event.
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>
-                      Artis <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Music
-                        size={17}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                      />
-                      <select
-                        name="artist_id"
-                        value={form.artist_id}
-                        onChange={handleChange}
-                        disabled={loadingData || isLocked}
-                        required
-                        className={`${inputClass} appearance-none pl-11`}
-                      >
-                        <option value="">
-                          {loadingData ? "Memuat artis..." : "Pilih artis"}
-                        </option>
-                        {artists.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.artist_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {!loadingData && artists.length === 0 && (
-                      <p className="mt-2 text-xs text-amber-600">
-                        Belum ada data artis.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>
-                      Venue <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <MapPin
-                        size={17}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                      />
-                      <select
-                        name="venue_id"
-                        value={form.venue_id}
-                        onChange={handleChange}
-                        disabled={loadingData || isLocked}
-                        required
-                        className={`${inputClass} appearance-none pl-11`}
-                      >
-                        <option value="">
-                          {loadingData ? "Memuat venue..." : "Pilih venue"}
-                        </option>
-                        {venues.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.venue_name}
-                            {item.city ? ` — ${item.city}` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {!loadingData && venues.length === 0 && (
-                      <p className="mt-2 text-xs text-amber-600">
-                        Belum ada data venue.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Deskripsi Event</label>
-                    <textarea
-                      name="description"
-                      value={form.description}
-                      onChange={handleChange}
-                      rows={5}
-                      maxLength={5000}
-                      disabled={isLocked}
-                      placeholder="Masukkan deskripsi lengkap mengenai event..."
-                      className={`${inputClass} resize-none`}
-                    />
-                    <p className="mt-1 text-right text-xs text-slate-400">
-                      {form.description.length}/5000 karakter
-                    </p>
-                  </div>
+                <div className="hidden items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-600 ring-1 ring-slate-100 sm:inline-flex">
+                  <FileText size={11} />
+                  Wajib diisi
                 </div>
-              </section>
+              </div>
 
-              <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                <div className="border-b border-slate-100 px-6 py-5">
-                  <h2 className="text-base font-bold">Jadwal Event</h2>
-                  <p className="mt-1 text-xs text-slate-500">
+              <div className="grid gap-4 p-5 sm:p-6 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <FieldLabel required>Nama Event</FieldLabel>
+                  <input
+                    type="text"
+                    name="event_name"
+                    value={form.event_name}
+                    onChange={handleChange}
+                    maxLength={150}
+                    required
+                    disabled={isLocked}
+                    placeholder="Contoh: GIGI Live Concert"
+                    className={inputClass}
+                  />
+                  <p className="mt-1 text-right text-[10.5px] text-slate-400">
+                    {form.event_name.length}/150 karakter
+                  </p>
+                </div>
+
+                <div>
+                  <FieldLabel required>Kategori</FieldLabel>
+                  <div className="relative">
+                    <Tag
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <select
+                      name="category_id"
+                      value={form.category_id}
+                      onChange={handleChange}
+                      disabled={loadingData || isLocked}
+                      required
+                      className={`${inputClass} appearance-none pl-9 pr-9`}
+                    >
+                      <option value="">
+                        {loadingData ? "Memuat kategori..." : "Pilih kategori"}
+                      </option>
+                      {categories.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.category_name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronRight
+                      size={14}
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-slate-400"
+                    />
+                  </div>
+                  {!loadingData && categories.length === 0 && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Belum ada kategori event.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <FieldLabel required>Artis</FieldLabel>
+                  <div className="relative">
+                    <Music
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <select
+                      name="artist_id"
+                      value={form.artist_id}
+                      onChange={handleChange}
+                      disabled={loadingData || isLocked}
+                      required
+                      className={`${inputClass} appearance-none pl-9 pr-9`}
+                    >
+                      <option value="">
+                        {loadingData ? "Memuat artis..." : "Pilih artis"}
+                      </option>
+                      {artists.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.artist_name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronRight
+                      size={14}
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-slate-400"
+                    />
+                  </div>
+                  {!loadingData && artists.length === 0 && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Belum ada data artis.
+                    </p>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <FieldLabel required>Venue</FieldLabel>
+                  <div className="relative">
+                    <MapPin
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <select
+                      name="venue_id"
+                      value={form.venue_id}
+                      onChange={handleChange}
+                      disabled={loadingData || isLocked}
+                      required
+                      className={`${inputClass} appearance-none pl-9 pr-9`}
+                    >
+                      <option value="">
+                        {loadingData ? "Memuat venue..." : "Pilih venue"}
+                      </option>
+                      {venues.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.venue_name}
+                          {item.city ? ` — ${item.city}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronRight
+                      size={14}
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rotate-90 text-slate-400"
+                    />
+                  </div>
+                  {!loadingData && venues.length === 0 && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Belum ada data venue.
+                    </p>
+                  )}
+                </div>
+
+                <div className="md:col-span-2">
+                  <FieldLabel>Deskripsi Event</FieldLabel>
+                  <textarea
+                    name="description"
+                    value={form.description}
+                    onChange={handleChange}
+                    rows={5}
+                    maxLength={5000}
+                    disabled={isLocked}
+                    placeholder="Masukkan deskripsi lengkap mengenai event..."
+                    className={`${inputClass} resize-none`}
+                  />
+                  <p className="mt-1 text-right text-[10.5px] text-slate-400">
+                    {form.description.length}/5000 karakter
+                  </p>
+                </div>
+              </div>
+            </motion.section>
+
+            {/* SCHEDULE */}
+            <motion.section
+              variants={fadeUp}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+                <div>
+                  <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-slate-900">
+                    Jadwal Event
+                  </h2>
+                  <p className="mt-0.5 text-[11.5px] text-slate-400">
                     Tentukan jadwal event dan periode penjualan tiket.
                   </p>
                 </div>
+                <div
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10.5px] font-semibold ring-1 ${
+                    previewStatus === "Available"
+                      ? "bg-sky-50 text-sky-700 ring-sky-100"
+                      : "bg-slate-100 text-slate-600 ring-slate-200"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      previewStatus === "Available"
+                        ? "bg-sky-500"
+                        : "bg-slate-400"
+                    }`}
+                  />
+                  {previewStatus}
+                </div>
+              </div>
 
-                <div className="grid gap-5 p-6 md:grid-cols-2">
-                  <div>
-                    <label className={labelClass}>
-                      Tanggal Event <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <CalendarDays
-                        size={17}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                      />
-                      <input
-                        type="date"
-                        name="event_date"
-                        value={form.event_date}
-                        onChange={handleChange}
-                        required
-                        disabled={isLocked}
-                        className={`${inputClass} pl-11`}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>
-                      Waktu Event <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <Clock3
-                        size={17}
-                        className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                      />
-                      <input
-                        type="time"
-                        name="event_time"
-                        value={form.event_time}
-                        onChange={handleChange}
-                        required
-                        disabled={isLocked}
-                        className={`${inputClass} pl-11`}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>
-                      Mulai Penjualan Tiket{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
+              <div className="grid gap-4 p-5 sm:p-6 md:grid-cols-2">
+                <div>
+                  <FieldLabel required>Tanggal Event</FieldLabel>
+                  <div className="relative">
+                    <CalendarDays
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
                     <input
                       type="date"
-                      name="ticket_sale_start"
-                      value={form.ticket_sale_start}
+                      name="event_date"
+                      value={form.event_date}
+                      onChange={handleChange}
+                      min={today}
+                      required
+                      disabled={isLocked}
+                      className={`${inputClass} pl-9`}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <FieldLabel required>Waktu Event</FieldLabel>
+                  <div className="relative">
+                    <Clock3
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <input
+                      type="time"
+                      name="event_time"
+                      value={form.event_time}
                       onChange={handleChange}
                       required
                       disabled={isLocked}
-                      max={form.ticket_sale_end || form.event_date || undefined}
-                      className={inputClass}
+                      className={`${inputClass} pl-9`}
                     />
                   </div>
+                </div>
 
-                  <div>
-                    <label className={labelClass}>
-                      Akhir Penjualan Tiket{" "}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      name="ticket_sale_end"
-                      value={form.ticket_sale_end}
-                      onChange={handleChange}
-                      required
-                      disabled={isLocked}
-                      min={form.ticket_sale_start || undefined}
-                      max={form.event_date || undefined}
-                      className={inputClass}
-                    />
-                  </div>
+                <div>
+                  <FieldLabel required>Mulai Penjualan Tiket</FieldLabel>
+                  <input
+                    type="date"
+                    name="ticket_sale_start"
+                    value={form.ticket_sale_start}
+                    onChange={handleChange}
+                    required
+                    disabled={isLocked}
+                    max={
+                      form.ticket_sale_end || form.event_date || undefined
+                    }
+                    className={inputClass}
+                  />
+                </div>
 
-                  <div className="md:col-span-2">
-                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 size={17} className="text-blue-600" />
-                        <p className="text-sm font-bold text-blue-900">
-                          Status awal: Coming Soon
-                        </p>
-                      </div>
-                      <p className="mt-1 text-xs leading-5 text-blue-700">
-                        Status ketersediaan tiket akan diatur sesuai kondisi
-                        penjualan. Persetujuan event dikelola secara terpisah
-                        oleh Super Admin.
+                <div>
+                  <FieldLabel required>Akhir Penjualan Tiket</FieldLabel>
+                  <input
+                    type="date"
+                    name="ticket_sale_end"
+                    value={form.ticket_sale_end}
+                    onChange={handleChange}
+                    required
+                    disabled={isLocked}
+                    min={form.ticket_sale_start || undefined}
+                    max={form.event_date || undefined}
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-sky-600 ring-1 ring-slate-100">
+                      <CircleCheck size={15} />
+                    </div>
+                    <div>
+                      <p className="text-[12px] font-semibold text-slate-800">
+                        Status penjualan: {previewStatus}
+                      </p>
+                      <p className="mt-1 text-[11.5px] leading-relaxed text-slate-500">
+                        {previewStatus === "Available"
+                          ? "Periode penjualan sudah dimulai. Event akan dikirim dengan status Available."
+                          : "Periode penjualan belum dimulai. Event akan dikirim dengan status Coming Soon."}{" "}
+                        Persetujuan event oleh Super Admin tetap proses
+                        terpisah.
                       </p>
                     </div>
                   </div>
                 </div>
-              </section>
-            </div>
+              </div>
+            </motion.section>
 
-            <div className="space-y-6">
-              <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-                <div className="border-b border-slate-100 px-6 py-5">
-                  <h2 className="text-base font-bold">Poster Event</h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Gunakan gambar dari komputer atau link gambar.
+            {/* ACTION BUTTONS */}
+            <motion.div
+              variants={fadeUp}
+              className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+            >
+              <Link
+                href="/organizer/event"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[12.5px] font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                Batal
+              </Link>
+
+              <motion.button
+                whileHover={{ y: -1 }}
+                whileTap={{ scale: 0.98 }}
+                type="submit"
+                disabled={loading || loadingData}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    Menyimpan...
+                  </>
+                ) : (
+                  <>
+                    <Save size={15} />
+                    Simpan Event
+                  </>
+                )}
+              </motion.button>
+            </motion.div>
+          </div>
+
+          {/* RIGHT COLUMN */}
+          <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+            {/* COMPLETENESS */}
+            <motion.div
+              variants={fadeUp}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+                    Kelengkapan Form
+                  </p>
+                  <p className="mt-1 text-[13px] font-semibold text-slate-900">
+                    {completeness} / 9 field
                   </p>
                 </div>
+                <span className="text-[18px] font-bold text-sky-700">
+                  {completenessPercent}%
+                </span>
+              </div>
 
-                <div className="p-6">
-                  <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
-                    <button
-                      type="button"
-                      onClick={() => handlePosterMode("file")}
-                      disabled={isLocked}
-                      className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
-                        posterMode === "file"
-                          ? "bg-white text-[#112250] shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      <Upload size={16} />
-                      Dari Folder
-                    </button>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${completenessPercent}%` }}
+                  transition={{ duration: 0.6, ease: easePremium }}
+                  className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-600"
+                />
+              </div>
+            </motion.div>
 
-                    <button
-                      type="button"
-                      onClick={() => handlePosterMode("url")}
-                      disabled={isLocked}
-                      className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
-                        posterMode === "url"
-                          ? "bg-white text-[#112250] shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      <LinkIcon size={16} />
-                      Dari Link
-                    </button>
-                  </div>
+            {/* POSTER CARD */}
+            <motion.section
+              variants={fadeUp}
+              className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+            >
+              <div className="border-b border-slate-100 px-5 py-4">
+                <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-slate-900">
+                  Poster Event
+                </h2>
+                <p className="mt-0.5 text-[11.5px] text-slate-400">
+                  Upload dari folder atau gunakan link gambar.
+                </p>
+              </div>
 
+              <div className="p-5">
+                <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => handlePosterMode("file")}
+                    disabled={isLocked}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition ${
+                      posterMode === "file"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    <Upload size={13} />
+                    Dari Folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePosterMode("url")}
+                    disabled={isLocked}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition ${
+                      posterMode === "url"
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    <LinkIcon size={13} />
+                    Dari Link
+                  </button>
+                </div>
+
+                <div className="mt-4">
                   {posterMode === "file" && (
-                    <div className="mt-5">
+                    <>
                       {!posterPreview ? (
-                        <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center transition hover:border-[#112250]/30 hover:bg-[#112250]/5">
-                          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm transition group-hover:text-[#112250]">
-                            <Upload size={24} />
+                        <label className="group flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center transition hover:border-sky-300 hover:bg-sky-50/40">
+                          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm ring-1 ring-slate-100 transition group-hover:text-sky-600 group-hover:ring-sky-200">
+                            <Upload size={20} />
                           </div>
-                          <p className="text-sm font-bold text-slate-700">
+                          <p className="text-[12.5px] font-semibold text-slate-700">
                             Pilih gambar dari folder
                           </p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            JPG, JPEG, PNG atau WEBP
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            Maksimal 5 MB
+                          <p className="mt-1 text-[10.5px] text-slate-400">
+                            JPG, PNG, WEBP · Maks. 5 MB
                           </p>
                           <input
                             type="file"
@@ -826,16 +1008,16 @@ export default function TambahEventPage() {
                               type="button"
                               onClick={removePoster}
                               disabled={isLocked}
-                              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-lg transition hover:bg-red-50 hover:text-red-600"
+                              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-slate-700 shadow-md transition hover:bg-rose-50 hover:text-rose-600"
                             >
-                              <X size={17} />
+                              <X size={14} />
                             </button>
                           </div>
-                          <div className="p-4">
-                            <p className="truncate text-sm font-bold text-slate-700">
+                          <div className="p-3">
+                            <p className="truncate text-[12px] font-semibold text-slate-700">
                               {selectedFile?.name}
                             </p>
-                            <p className="mt-1 text-xs text-slate-400">
+                            <p className="mt-0.5 text-[10.5px] text-slate-400">
                               {selectedFile
                                 ? `${(selectedFile.size / 1024 / 1024).toFixed(
                                     2
@@ -845,16 +1027,16 @@ export default function TambahEventPage() {
                           </div>
                         </div>
                       )}
-                    </div>
+                    </>
                   )}
 
                   {posterMode === "url" && (
-                    <div className="mt-5">
-                      <label className={labelClass}>Link Poster</label>
+                    <>
+                      <FieldLabel>Link Poster</FieldLabel>
                       <div className="relative">
                         <LinkIcon
-                          size={17}
-                          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                          size={15}
+                          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                         />
                         <input
                           type="url"
@@ -863,98 +1045,164 @@ export default function TambahEventPage() {
                           onChange={handleChange}
                           disabled={isLocked}
                           placeholder="https://example.com/poster.jpg"
-                          className={`${inputClass} pl-11`}
+                          className={`${inputClass} pl-9`}
                         />
                       </div>
-                      <p className="mt-2 text-xs leading-5 text-slate-400">
+
+                      <p className="mt-1.5 text-[10.5px] leading-relaxed text-slate-400">
                         Masukkan URL langsung menuju gambar poster.
                       </p>
-                    </div>
-                  )}
 
-                  {posterMode === "url" && form.poster && (
-                    <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-                        <span className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                          <ImageIcon size={16} />
-                          Preview
-                        </span>
-                        <button
-                          type="button"
-                          onClick={removePoster}
-                          disabled={isLocked}
-                          className="text-slate-400 transition hover:text-red-500"
-                        >
-                          <X size={17} />
-                        </button>
-                      </div>
-                      <div className="aspect-[4/5] bg-slate-100">
-                        <img
-                          src={form.poster}
-                          alt="Preview poster"
-                          className="h-full w-full object-cover"
-                          onError={() =>
-                            setNotification({
-                              type: "error",
-                              message:
-                                "Gambar tidak dapat dimuat. Periksa URL poster.",
-                            })
-                          }
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-[#112250]/15 bg-[#112250]/5 p-5">
-                <div className="flex gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#112250] text-white">
-                    <ImageIcon size={17} />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800">
-                      Penyimpanan Poster
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      Poster dari folder akan diupload setelah event berhasil
-                      dibuat. Backend akan menyimpan path poster berdasarkan ID
-                      event.
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <div className="flex flex-col gap-3 sm:flex-row xl:flex-col">
-                <Link
-                  href="/organizer/event"
-                  className="flex flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
-                >
-                  Batal
-                </Link>
-
-                <button
-                  type="submit"
-                  disabled={loading || loadingData}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#112250] px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#1A326A] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      Menyimpan...
-                    </>
-                  ) : (
-                    <>
-                      <Save size={18} />
-                      Simpan Event
+                      {form.poster && (
+                        <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+                            <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-700">
+                              <ImageIcon size={12} />
+                              Preview
+                            </span>
+                            <button
+                              type="button"
+                              onClick={removePoster}
+                              disabled={isLocked}
+                              className="text-slate-400 transition hover:text-rose-500"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="aspect-[4/5] bg-slate-100">
+                            <img
+                              src={form.poster}
+                              alt="Preview poster"
+                              className="h-full w-full object-cover"
+                              onError={() =>
+                                setNotification({
+                                  type: "error",
+                                  message:
+                                    "Gambar tidak dapat dimuat. Periksa URL poster.",
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
-                </button>
+                </div>
               </div>
-            </div>
+            </motion.section>
+
+            {/* SUMMARY PREVIEW */}
+            <motion.div
+              variants={fadeUp}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-sky-100">
+                  <Sparkles size={13} />
+                </div>
+                <p className="text-[12.5px] font-semibold text-slate-900">
+                  Ringkasan Event
+                </p>
+              </div>
+
+              <div className="space-y-2.5 text-[11.5px]">
+                <SummaryRow
+                  label="Nama"
+                  value={form.event_name.trim() || "Belum diisi"}
+                  empty={!form.event_name.trim()}
+                />
+                <SummaryRow
+                  label="Kategori"
+                  value={
+                    selectedCategory?.category_name || "Belum dipilih"
+                  }
+                  empty={!selectedCategory}
+                />
+                <SummaryRow
+                  label="Artis"
+                  value={selectedArtist?.artist_name || "Belum dipilih"}
+                  empty={!selectedArtist}
+                />
+                <SummaryRow
+                  label="Venue"
+                  value={selectedVenue?.venue_name || "Belum dipilih"}
+                  empty={!selectedVenue}
+                />
+                <SummaryRow
+                  label="Tanggal"
+                  value={formatDateShort(form.event_date) || "Belum diisi"}
+                  empty={!form.event_date}
+                />
+                <SummaryRow
+                  label="Waktu"
+                  value={form.event_time || "Belum diisi"}
+                  empty={!form.event_time}
+                />
+              </div>
+
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    previewStatus === "Available"
+                      ? "bg-sky-500"
+                      : "bg-slate-400"
+                  }`}
+                />
+                <p className="text-[11px] font-semibold text-slate-700">
+                  Status: {previewStatus}
+                </p>
+              </div>
+            </motion.div>
+
+            {/* TIPS */}
+            <motion.div
+              variants={fadeUp}
+              className="flex items-start gap-2.5 rounded-2xl border border-sky-100 bg-sky-50/60 p-4"
+            >
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-sky-600 ring-1 ring-sky-100">
+                <Lightbulb size={13} />
+              </div>
+              <div>
+                <p className="text-[11.5px] font-semibold text-sky-900">
+                  Tips cepat
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-sky-900/75">
+                  Poster dari folder akan diupload setelah event berhasil
+                  dibuat. Backend menyimpan path poster berdasarkan ID event
+                  yang baru dibuat.
+                </p>
+              </div>
+            </motion.div>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
+    </motion.div>
+  );
+}
+
+const inputClass =
+  "w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-3 text-[12.5px] font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-400";
+
+function FieldLabel({ children, required = false }) {
+  return (
+    <label className="mb-1.5 block text-[11.5px] font-semibold text-slate-700">
+      {children}
+      {required && <span className="ml-0.5 text-rose-500">*</span>}
+    </label>
+  );
+}
+
+function SummaryRow({ label, value, empty = false }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="shrink-0 text-slate-500">{label}</span>
+      <span
+        className={`truncate text-right font-semibold ${
+          empty ? "text-slate-400" : "text-slate-800"
+        }`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

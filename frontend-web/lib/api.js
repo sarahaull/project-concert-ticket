@@ -1,4 +1,3 @@
-// app/(user)/dashboard/page.js
 import { getDashboardStats, getUpcomingEvents, getUserProfile } from '@/lib/api';
 import { formatRupiah, formatDate } from '@/lib/format';
 

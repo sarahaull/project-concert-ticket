@@ -1,8 +1,6 @@
 const db = require("../config/db");
 
-// ===============================
-// GET PROFILE USER
-// ===============================
+
 const getProfile = async (req, res) => {
     try {
         const { userId } = req.params;
@@ -49,9 +47,7 @@ const getProfile = async (req, res) => {
 };
 
 
-// ===============================
-// UPDATE PROFILE USER
-// ===============================
+
 const updateProfile = async (req, res) => {
     try {
         const { userId } = req.params;

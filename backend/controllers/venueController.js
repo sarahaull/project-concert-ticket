@@ -1,6 +1,5 @@
 const db = require("../config/db");
 
-// ===== Ambil Semua Venue =====
 const getVenues = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -30,7 +29,6 @@ const getVenues = async (req, res) => {
   }
 };
 
-// ===== Ambil Venue Berdasarkan ID =====
 const getVenueById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -70,7 +68,6 @@ const getVenueById = async (req, res) => {
   }
 };
 
-// ===== Tambah Venue =====
 const createVenue = async (req, res) => {
   try {
     const {
@@ -158,7 +155,6 @@ const createVenue = async (req, res) => {
   }
 };
 
-// ===== Update Venue =====
 const updateVenue = async (req, res) => {
   try {
     const { id } = req.params;
@@ -260,7 +256,6 @@ const updateVenue = async (req, res) => {
   }
 };
 
-// ===== Hapus Venue =====
 const deleteVenue = async (req, res) => {
   try {
     const { id } = req.params;

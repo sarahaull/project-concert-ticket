@@ -12,7 +12,6 @@ const {
 
 const verifyToken = require("../middleware/auth");
 
-// Semua route yang membutuhkan identitas pengguna
 router.get("/", verifyToken, getAllOrders);
 router.get("/:id", verifyToken, getOrderById);
 

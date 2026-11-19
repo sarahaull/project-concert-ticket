@@ -1,9 +1,7 @@
 
 const db = require("../config/db");
 
-// ======================================================
-// GET PROFILE USER LOGIN
-// ======================================================
+
 const getProfile = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -47,9 +45,7 @@ const getProfile = async (req, res) => {
   }
 };
 
-// ======================================================
-// UPDATE PROFILE USER LOGIN
-// ======================================================
+
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -171,9 +167,7 @@ const updateProfile = async (req, res) => {
   }
 };
 
-// ======================================================
-// STATISTIK TIKET
-// ======================================================
+
 const getTicketStats = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -232,9 +226,7 @@ const getTicketStats = async (req, res) => {
   }
 };
 
-// ======================================================
-// TIKET AKTIF
-// ======================================================
+
 const getActiveTickets = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -271,9 +263,7 @@ const getActiveTickets = async (req, res) => {
   }
 };
 
-// ======================================================
-// RIWAYAT PEMESANAN
-// ======================================================
+
 const getBookingHistory = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -305,9 +295,9 @@ const getBookingHistory = async (req, res) => {
   }
 };
 
-// ======================================================
-// REKOMENDASI EVENT
-// ======================================================
+
+
+
 const getRecommendations = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -332,9 +322,7 @@ const getRecommendations = async (req, res) => {
   }
 };
 
-// ======================================================
-// PROMO
-// ======================================================
+
 const getPromos = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -365,9 +353,7 @@ const getPromos = async (req, res) => {
   }
 };
 
-// ======================================================
-// EXPORT
-// ======================================================
+
 module.exports = {
   getProfile,
   updateProfile,

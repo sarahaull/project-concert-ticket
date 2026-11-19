@@ -1,6 +1,5 @@
 const db = require("../config/db");
 
-// ===== Ambil Semua Kategori =====
 const getCategories = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -27,7 +26,6 @@ const getCategories = async (req, res) => {
   }
 };
 
-// ===== Ambil Kategori Berdasarkan ID =====
 const getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -64,7 +62,6 @@ const getCategoryById = async (req, res) => {
   }
 };
 
-// ===== Tambah Kategori =====
 const createCategory = async (req, res) => {
   try {
     const { category_name, icon } = req.body;
@@ -114,7 +111,6 @@ const createCategory = async (req, res) => {
   }
 };
 
-// ===== Update Kategori =====
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
@@ -175,7 +171,6 @@ const updateCategory = async (req, res) => {
   }
 };
 
-// ===== Hapus Kategori =====
 const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;

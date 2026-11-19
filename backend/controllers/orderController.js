@@ -1,13 +1,5 @@
-
 const db = require("../config/db");
 const snap = require("../config/midtrans");
-
-// ============================================================
-// GET SEMUA ORDERS
-// ============================================================
-
-
-
 
 const getAllOrders = async (req, res) => {
   try {
@@ -22,10 +14,6 @@ const getAllOrders = async (req, res) => {
         message: "Token login tidak valid.",
       });
     }
-
-    // ========================================================
-    // CUSTOMER: HANYA PESANAN MILIK SENDIRI
-    // ========================================================
 
     if (role === "customer") {
       const [rows] = await db.query(
@@ -72,9 +60,6 @@ const getAllOrders = async (req, res) => {
         ORDER BY o.order_date DESC, o.id DESC`,
         [userId]
       );
-
-      // Gabungkan detail agar satu order hanya menjadi
-      // satu pesanan pada halaman Customer.
 
       const orderMap = new Map();
 
@@ -132,10 +117,6 @@ const getAllOrders = async (req, res) => {
       });
     }
 
-    // ========================================================
-    // EVENT ORGANIZER: PENJUALAN EVENT MILIK SENDIRI
-    // ========================================================
-
     if (role === "event_organizer") {
       const [orders] = await db.query(
         `SELECT
@@ -190,10 +171,6 @@ const getAllOrders = async (req, res) => {
       });
     }
 
-    // ========================================================
-    // ROLE TIDAK DIIZINKAN
-    // ========================================================
-
     return res.status(403).json({
       success: false,
       message: "Anda tidak memiliki akses ke data pesanan.",
@@ -208,13 +185,6 @@ const getAllOrders = async (req, res) => {
     });
   }
 };
-
-
-
-
-// ============================================================
-// GET ORDER BERDASARKAN ID
-// ============================================================
 
 const getOrderById = async (req, res) => {
   try {
@@ -257,17 +227,11 @@ const getOrderById = async (req, res) => {
   }
 };
 
-
-
-
 const createOrder = async (req, res) => {
   let connection;
   let transactionStarted = false;
 
   try {
-    // =========================================================
-    // 1. VALIDASI LOGIN DAN INPUT
-    // =========================================================
     const userId = req.user?.id;
     const { order_code, ticket_category_id, quantity, seat_ids } = req.body;
 
@@ -317,9 +281,6 @@ const createOrder = async (req, res) => {
     await connection.beginTransaction();
     transactionStarted = true;
 
-    // =========================================================
-    // 2. AMBIL DATA PENGGUNA
-    // =========================================================
     const [users] = await connection.query(
       `SELECT id, fullname, email, role
        FROM users
@@ -351,9 +312,6 @@ const createOrder = async (req, res) => {
       );
     }
 
-    // =========================================================
-    // 3. CEK KODE PESANAN DUPLIKAT
-    // =========================================================
     const [existingOrders] = await connection.query(
       `SELECT id
        FROM orders
@@ -368,7 +326,6 @@ const createOrder = async (req, res) => {
       );
     }
 
-  
 const [categories] = await connection.query(
   `SELECT
      tc.id,
@@ -388,15 +345,12 @@ const [categories] = await connection.query(
   [categoryId]
 );
 
-
     const category = categories[0];
 
     if (!category) {
       throw new Error("Kategori tiket tidak ditemukan.");
     }
 
-
-    // Seat selection is optional: when omitted, the existing GENERAL flow remains unchanged.
     const selectedSeatIds = seat_ids === undefined || seat_ids === null
       ? []
       : [...new Set((Array.isArray(seat_ids) ? seat_ids : []).map(Number))];
@@ -461,7 +415,6 @@ const [categories] = await connection.query(
       lockedSeats = seatRows;
     }
 
-  
 const eventStatus = String(category.event_status || "")
   .trim()
   .toLowerCase()
@@ -492,9 +445,6 @@ if (!allowedPurchaseStatuses.includes(eventStatus)) {
   );
 }
 
-// Validasi periode penjualan tiket.
-// Menggunakan waktu MySQL agar konsisten dengan database.
-
 const [salePeriod] = await connection.query(
   `SELECT
      NOW() AS server_now,
@@ -519,7 +469,6 @@ console.log("Penjualan Berakhir:", period.ticket_sale_end);
 console.log("Tanggal Acara:", period.event_date);
 console.log("========================================");
 
-// Validasi periode penjualan tiket.
 if (
   period.ticket_sale_start &&
   new Date(period.server_now) < new Date(period.ticket_sale_start)
@@ -533,7 +482,6 @@ if (
 ) {
   throw new Error("Penjualan tiket sudah berakhir.");
 }
-
 
 if (
   period.ticket_sale_start &&
@@ -549,9 +497,6 @@ if (
   throw new Error("Penjualan tiket sudah berakhir.");
 }
 
-    // =========================================================
-    // 6. VALIDASI HARGA DAN STOK
-    // =========================================================
     const ticketPrice = Number(category.price);
     const remainingTicket = Number(category.remaining_ticket);
 
@@ -575,9 +520,6 @@ if (
       );
     }
 
-    // =========================================================
-    // 7. HITUNG TOTAL
-    // =========================================================
     const subtotal = ticketPrice * qty;
     const serviceFee = 5000;
     const totalPrice = subtotal + serviceFee;
@@ -590,9 +532,6 @@ if (
       throw new Error("Total pembayaran tidak valid.");
     }
 
-    // =========================================================
-    // 8. BUAT ORDER
-    // =========================================================
     const [orderResult] = await connection.query(
       `INSERT INTO orders
          (user_id, order_code, total_price, payment_status)
@@ -602,9 +541,6 @@ if (
 
     const orderId = orderResult.insertId;
 
-    // =========================================================
-    // 9. BUAT DETAIL ORDER
-    // =========================================================
     const [detailResult] = await connection.query(
       `INSERT INTO order_details
          (order_id, ticket_category_id, quantity, subtotal)
@@ -612,8 +548,6 @@ if (
       [orderId, categoryId, qty, subtotal]
     );
 
-
-    // Lock numbered seats for 10 minutes. The reservation is tied to this order.
     if (selectedSeatIds.length) {
       const seatPlaceholders = selectedSeatIds.map(() => "?").join(",");
       const [reserveResult] = await connection.query(
@@ -630,9 +564,6 @@ if (
       }
     }
 
-    // =========================================================
-    // 10. KURANGI STOK SECARA AMAN
-    // =========================================================
     const [stockResult] = await connection.query(
       `UPDATE ticket_categories
        SET remaining_ticket = remaining_ticket - ?
@@ -647,9 +578,6 @@ if (
       );
     }
 
-    // =========================================================
-    // 11. BUAT TRANSAKSI MIDTRANS
-    // =========================================================
     const frontendUrl = (
       process.env.FRONTEND_URL || "http://localhost:3000"
     ).replace(/\/+$/, "");
@@ -693,9 +621,6 @@ if (
       );
     }
 
-    // =========================================================
-    // 12. SIMPAN PEMBAYARAN
-    // =========================================================
     await connection.query(
       `INSERT INTO payments
          (order_id, payment_method, payment_date, amount, payment_status)
@@ -703,15 +628,9 @@ if (
       [orderId, totalPrice]
     );
 
-    // =========================================================
-    // 13. COMMIT TRANSAKSI DATABASE
-    // =========================================================
     await connection.commit();
     transactionStarted = false;
 
-    // =========================================================
-    // 14. RESPONS KE FRONTEND
-    // =========================================================
     return res.status(201).json({
       success: true,
       message: "Order berhasil dibuat dan siap dibayar.",
@@ -745,9 +664,6 @@ if (
       },
     });
   } catch (error) {
-    // =========================================================
-    // 15. ROLLBACK
-    // =========================================================
     if (connection && transactionStarted) {
       try {
         await connection.rollback();
@@ -759,9 +675,6 @@ if (
       }
     }
 
-    // =========================================================
-    // 16. LOG ERROR
-    // =========================================================
     console.error("========== CREATE ORDER ERROR ==========");
     console.error("Message:", error.message);
     console.error("Code:", error.code);
@@ -813,13 +726,6 @@ if (
   }
 };
 
-
-
-
-// ============================================================
-// UPDATE ORDER
-// ============================================================
-
 const updateOrder = async (req, res) => {
   try {
     const { id } = req.params;
@@ -843,7 +749,6 @@ const updateOrder = async (req, res) => {
       });
     }
 
-    // Status pembayaran tidak boleh diubah lewat endpoint umum.
     if (
       payment_status &&
       payment_status !== orders[0].payment_status
@@ -890,10 +795,6 @@ const updateOrder = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// DELETE ORDER
-// ============================================================
 
 const deleteOrder = async (req, res) => {
   try {

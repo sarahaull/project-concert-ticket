@@ -2,9 +2,7 @@
 const crypto = require("crypto");
 const db = require("../config/db");
 
-// ============================================================
-// HELPER
-// ============================================================
+
 
 const getUserId = (req) => Number(req.user?.id);
 
@@ -24,9 +22,7 @@ const getQrFingerprint = (qrCode) => {
     .digest("hex");
 };
 
-// ============================================================
-// GET SEMUA TIKET MILIK USER
-// ============================================================
+
 
 const getAllTickets = async (req, res) => {
   try {
@@ -126,9 +122,7 @@ const getAllTickets = async (req, res) => {
   }
 };
 
-// ============================================================
-// GET TIKET BERDASARKAN ID
-// ============================================================
+
 
 const getTicketById = async (req, res) => {
   try {
@@ -267,13 +261,11 @@ const getTicketById = async (req, res) => {
   }
 };
 
-// ============================================================
-// CHECK-IN TICKET
-// ============================================================
+
 
 const checkInTicket = async (req, res) => {
   const userId = getUserId(req);
-  const role = req.user?.role;
+  const role = String(req.user?.role || "").toLowerCase();
 
   // ----------------------------------------------------------
   // VALIDASI ROLE
@@ -299,7 +291,9 @@ const checkInTicket = async (req, res) => {
 
   const qrCode = String(req.body?.qr_code || "").trim();
 
-  if (!qrCode || qrCode.length !== 64) {
+  // Mendukung token QR baru (64 karakter hex) dan QR tiket lama
+  // yang sebelumnya menggunakan ticket_code sebagai qr_code.
+  if (!qrCode || qrCode.length > 512) {
     return res.status(400).json({
       success: false,
       message: "QR Code tidak valid.",
@@ -614,10 +608,7 @@ const checkInTicket = async (req, res) => {
   }
 };
 
-// ============================================================
-// CREATE TICKET MANUAL - DINONAKTIFKAN
-// Tiket dibuat otomatis melalui Midtrans setelah pembayaran.
-// ============================================================
+
 
 const createTicket = async (req, res) => {
   return res.status(403).json({
@@ -626,10 +617,7 @@ const createTicket = async (req, res) => {
   });
 };
 
-// ============================================================
-// UPDATE TICKET - DINONAKTIFKAN
-// Status check-in hanya boleh diubah melalui proses scan.
-// ============================================================
+
 
 const updateTicket = async (req, res) => {
   return res.status(403).json({
@@ -638,9 +626,7 @@ const updateTicket = async (req, res) => {
   });
 };
 
-// ============================================================
-// DELETE TICKET - DINONAKTIFKAN
-// ============================================================
+
 
 const deleteTicket = async (req, res) => {
   return res.status(403).json({
@@ -650,16 +636,13 @@ const deleteTicket = async (req, res) => {
 };
 
 
-// ============================================================
-// GET RIWAYAT CHECK-IN
-// ============================================================
+
 
 const getCheckInHistory = async (req, res) => {
   try {
     const userId = getUserId(req);
-    const role = req.user?.role;
+    const role = String(req.user?.role || "").toLowerCase();
 
-    // Validasi login
     if (!userId) {
       return res.status(401).json({
         success: false,

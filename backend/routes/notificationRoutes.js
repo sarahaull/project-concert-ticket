@@ -21,17 +21,13 @@ const {
   midtransNotification,
 } = require("../controllers/paymentController");
 
-// WEBHOOK MIDTRANS: TETAP PUBLIC
 router.post("/midtrans", midtransNotification);
 
-// SEMUA ROUTE APLIKASI WAJIB LOGIN
 router.use(verifyToken);
 
-// NOTIFIKASI CUSTOMER
 router.get("/user/:userId", getNotificationsByUser);
 router.patch("/:id/read", markAsRead);
 
-// PENGELOLAAN KHUSUS SUPER ADMIN
 router.get("/", requireSuperAdmin, getAllNotifications);
 router.get("/recipients", requireSuperAdmin, getNotificationRecipients);
 router.get("/:id", requireSuperAdmin, getNotificationById);

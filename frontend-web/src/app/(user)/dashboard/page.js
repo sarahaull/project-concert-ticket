@@ -20,6 +20,7 @@ const formatRupiah = (amount) =>
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(Number(amount) || 0);
 
 const formatDate = (date) => {
@@ -43,8 +44,6 @@ const getMediaUrl = (path) => {
 
   const value = String(path).trim();
 
-  if (!value) return '';
-
   if (
     value.startsWith('data:') ||
     value.startsWith('blob:') ||
@@ -53,11 +52,9 @@ const getMediaUrl = (path) => {
     return value;
   }
 
-  if (value.startsWith('/')) {
-    return `${API_BASE}${value}`;
-  }
-
-  return `${API_BASE}/${value}`;
+  return value.startsWith('/')
+    ? `${API_BASE}${value}`
+    : `${API_BASE}/${value}`;
 };
 
 const getEventPoster = (event) => {
@@ -96,8 +93,13 @@ const extractList = (response, keys = []) => {
 };
 
 const isPaid = (value) => {
-  return ['paid', 'success', 'completed', 'berhasil', 'lunas']
-    .includes(String(value || '').toLowerCase());
+  return [
+    'paid',
+    'success',
+    'completed',
+    'berhasil',
+    'lunas',
+  ].includes(String(value || '').toLowerCase());
 };
 
 const getDaysLeft = (date, time = '00:00:00') => {
@@ -120,6 +122,45 @@ const getDaysLeft = (date, time = '00:00:00') => {
     0,
     Math.ceil((eventDate.getTime() - Date.now()) / 86400000)
   );
+};
+
+const getStartingPrice = (event) => {
+  if (!event) return null;
+
+  const categories =
+    event.ticket_categories ||
+    event.ticketCategories ||
+    [];
+
+  const categoryPrices = Array.isArray(categories)
+    ? categories
+        .map((ticket) => Number(ticket.price))
+        .filter((price) => Number.isFinite(price) && price > 0)
+    : [];
+
+  const directPrices = [
+    event.min_price,
+    event.starting_price,
+    event.ticket_price,
+    event.price,
+  ]
+    .map((price) => {
+      if (price === null || price === undefined || price === '') {
+        return null;
+      }
+
+      return Number(price);
+    })
+    .filter((price) => Number.isFinite(price) && price > 0);
+
+  const allPrices = [
+    ...categoryPrices,
+    ...directPrices,
+  ];
+
+  return allPrices.length
+    ? Math.min(...allPrices)
+    : null;
 };
 
 const ImagePlaceholder = ({ className = '' }) => (
@@ -147,8 +188,7 @@ const StatsCard = ({ title, value, icon, subtitle, trendLabel }) => {
     heart: 'bg-cyan-50 text-cyan-600 bg-cyan-500',
   };
 
-  const accent = accents[icon] || accents.ticket;
-  const [iconBg, iconColor, bar] = accent.split(' ');
+  const [iconBg, iconColor, bar] = (accents[icon] || accents.ticket).split(' ');
 
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-5 shadow-sm shadow-blue-900/5 transition-all hover:-translate-y-1 hover:shadow-md hover:shadow-blue-900/10">
@@ -207,11 +247,11 @@ const TicketCard = ({ event }) => {
           <div className="absolute inset-0 bg-gradient-to-t from-[#112250]/90 via-[#112250]/30 to-transparent" />
 
           <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-            <span className="rounded-md bg-white/20 backdrop-blur-md px-2.5 py-1 text-[9px] font-bold text-white shadow-sm">
+            <span className="rounded-md bg-white/20 px-2.5 py-1 text-[9px] font-bold text-white backdrop-blur-md">
               {event.category || 'Event'}
             </span>
 
-            <span className="rounded-md bg-blue-500 px-2.5 py-1 text-[9px] font-bold text-white shadow-sm">
+            <span className="rounded-md bg-blue-500 px-2.5 py-1 text-[9px] font-bold text-white">
               Aktif
             </span>
           </div>
@@ -252,7 +292,9 @@ const TicketCard = ({ event }) => {
 
               <div className="flex items-center gap-1.5 font-medium">
                 <Ticket className="h-3.5 w-3.5 text-blue-500" />
-                {event.seat === 'General' ? 'General Admission' : `Kursi ${event.seat}`}
+                {event.seat === 'General'
+                  ? 'General Admission'
+                  : `Kursi ${event.seat}`}
               </div>
             </div>
           </div>
@@ -262,8 +304,11 @@ const TicketCard = ({ event }) => {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Harga
               </p>
+
               <p className="text-base font-black text-[#112250]">
-                {formatRupiah(event.price)}
+                {event.price > 0
+                  ? formatRupiah(event.price)
+                  : 'Harga belum tersedia'}
               </p>
             </div>
 
@@ -277,8 +322,15 @@ const TicketCard = ({ event }) => {
   );
 };
 
-const RecommendationCard = ({ event, userId, onWishlistChange }) => {
-  const [isWishlisted, setIsWishlisted] = useState(Boolean(event.isWishlisted));
+const RecommendationCard = ({
+  event,
+  userId,
+  onWishlistChange,
+}) => {
+  const [isWishlisted, setIsWishlisted] = useState(
+    Boolean(event.isWishlisted)
+  );
+
   const [wishlistLoading, setWishlistLoading] = useState(false);
 
   useEffect(() => {
@@ -298,16 +350,10 @@ const RecommendationCard = ({ event, userId, onWishlistChange }) => {
       return;
     }
 
-    const currentUserId = userId;
     const currentEventId = event?.id ?? event?.event_id;
 
-    if (!currentUserId) {
-      window.alert('ID pengguna tidak ditemukan. Silakan login kembali.');
-      return;
-    }
-
-    if (!currentEventId) {
-      window.alert('ID event tidak ditemukan.');
+    if (!userId || !currentEventId) {
+      window.alert('Data pengguna atau event tidak ditemukan.');
       return;
     }
 
@@ -347,7 +393,7 @@ const RecommendationCard = ({ event, userId, onWishlistChange }) => {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            user_id: currentUserId,
+            user_id: userId,
             event_id: currentEventId,
           }),
         });
@@ -359,6 +405,7 @@ const RecommendationCard = ({ event, userId, onWishlistChange }) => {
         }
 
         setIsWishlisted(true);
+
         onWishlistChange?.(
           currentEventId,
           true,
@@ -413,7 +460,7 @@ const RecommendationCard = ({ event, userId, onWishlistChange }) => {
           )}
         </button>
 
-        <span className="absolute left-2.5 top-2.5 rounded-md bg-white/20 backdrop-blur-md px-2 py-1 text-[9px] font-bold text-white">
+        <span className="absolute left-2.5 top-2.5 rounded-md bg-white/20 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-md">
           {event.category || 'Event'}
         </span>
       </div>
@@ -426,7 +473,9 @@ const RecommendationCard = ({ event, userId, onWishlistChange }) => {
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-medium text-slate-500">
           <Calendar className="h-3 w-3 text-blue-500" />
           {formatDate(event.date)}
+
           <span className="text-blue-200">|</span>
+
           <Clock className="h-3 w-3 text-blue-500" />
           {formatTime(event.time)}
         </div>
@@ -441,8 +490,11 @@ const RecommendationCard = ({ event, userId, onWishlistChange }) => {
             <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
               Mulai dari
             </p>
+
             <p className="truncate text-sm font-black text-[#112250]">
-              {formatRupiah(event.price)}
+              {event.price > 0
+                ? formatRupiah(event.price)
+                : 'Harga belum tersedia'}
             </p>
           </div>
 
@@ -460,64 +512,83 @@ const RecommendationCard = ({ event, userId, onWishlistChange }) => {
 
 const Banner = ({ banners = [] }) => {
   const router = useRouter();
+  const containerRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [progressKey, setProgressKey] = useState(0);
+  const [pointer, setPointer] = useState({ x: 50, y: 50 });
+  const [isPointerInside, setIsPointerInside] = useState(false);
   const touchStartX = useRef(0);
+  const AUTOPLAY_MS = 7000;
 
-  const activeBanners = banners;
+  const particles = useMemo(
+    () =>
+      Array.from({ length: 18 }).map((_, i) => ({
+        id: i,
+        left: Math.random() * 100,
+        delay: Math.random() * 6,
+        duration: 6 + Math.random() * 6,
+        size: 2 + Math.random() * 4,
+        opacity: 0.15 + Math.random() * 0.4,
+      })),
+    []
+  );
 
   useEffect(() => {
     setActiveIndex(0);
+    setProgressKey((k) => k + 1);
   }, [banners]);
 
   useEffect(() => {
-    if (activeBanners.length <= 1) return;
-
+    if (banners.length <= 1 || isPaused) return;
     const timer = setInterval(() => {
-      setActiveIndex((current) => (current + 1) % activeBanners.length);
-    }, 5000);
-
+      setActiveIndex((current) => (current + 1) % banners.length);
+      setProgressKey((k) => k + 1);
+    }, AUTOPLAY_MS);
     return () => clearInterval(timer);
-  }, [activeBanners.length]);
+  }, [banners.length, isPaused]);
 
-  const currentBanner = activeBanners[activeIndex];
+  const currentBanner = banners[activeIndex];
 
   const navigateTo = (path) => {
     if (!path) return;
-
     if (/^https?:\/\//i.test(path)) {
       window.location.href = path;
       return;
     }
-
     router.push(path.startsWith('/') ? path : `/${path}`);
   };
 
   const changeSlide = (direction) => {
-    if (!activeBanners.length) return;
+    if (!banners.length) return;
+    setActiveIndex((current) => (current + direction + banners.length) % banners.length);
+    setProgressKey((k) => k + 1);
+  };
 
-    setActiveIndex((current) =>
-      (current + direction + activeBanners.length) % activeBanners.length
-    );
+  const goToSlide = (index) => {
+    setActiveIndex(index);
+    setProgressKey((k) => k + 1);
+  };
+
+  const handlePointerMove = (e) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPointer({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    });
   };
 
   if (!currentBanner) {
     return (
-      <div className="mb-6 flex min-h-[220px] items-center justify-center rounded-3xl bg-gradient-to-br from-[#112250] to-blue-900 px-6 text-center shadow-lg shadow-blue-900/20 sm:mb-8 sm:min-h-[280px]">
-        <div>
-          <Sparkles className="mx-auto h-10 w-10 text-blue-300" />
-
-          <h2 className="mt-4 text-2xl font-black text-white">
-            Selamat Datang di TicketVerse
-          </h2>
-
-          <p className="mt-2 text-sm font-medium text-blue-100/80">
-            Temukan dan nikmati event favoritmu.
-          </p>
-
-          <Link
-            href="/events"
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-blue-400"
-          >
+      <div className="banner-empty relative mb-6 flex min-h-[220px] items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-br from-[#112250] to-blue-900 px-6 text-center shadow-lg shadow-blue-900/20 sm:mb-8 sm:min-h-[280px]">
+        <div className="banner-float absolute -left-10 -top-10 h-40 w-40 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="banner-float-delayed absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-blue-400/20 blur-3xl" />
+        <div className="relative z-10">
+          <Sparkles className="banner-icon-pulse mx-auto h-10 w-10 text-blue-300" />
+          <h2 className="mt-4 text-2xl font-black text-white">Selamat Datang di TicketVerse</h2>
+          <p className="mt-2 text-sm font-medium text-blue-100/80">Temukan dan nikmati event favoritmu.</p>
+          <Link href="/events" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-sm font-bold text-white shadow-md transition hover:bg-blue-400 hover:scale-105 active:scale-95">
             Jelajahi Event <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -526,83 +597,117 @@ const Banner = ({ banners = [] }) => {
   }
 
   return (
-    <div className="relative mb-6 overflow-hidden rounded-3xl shadow-lg shadow-blue-900/10 sm:mb-8">
+    <div
+      ref={containerRef}
+      className="banner-premium group relative mb-6 overflow-hidden rounded-3xl shadow-lg shadow-blue-900/10 sm:mb-8"
+      onMouseEnter={() => { setIsPaused(true); setIsPointerInside(true); }}
+      onMouseLeave={() => { setIsPaused(false); setIsPointerInside(false); }}
+      onMouseMove={handlePointerMove}
+    >
       <div
         className="relative h-64 overflow-hidden rounded-3xl sm:h-72 md:h-80 lg:h-96"
-        onTouchStart={(e) => {
-          touchStartX.current = e.changedTouches[0].screenX;
-        }}
+        onTouchStart={(e) => { touchStartX.current = e.changedTouches[0].screenX; }}
         onTouchEnd={(e) => {
-          const difference =
-            touchStartX.current - e.changedTouches[0].screenX;
-
-          if (Math.abs(difference) > 50) {
-            changeSlide(difference > 0 ? 1 : -1);
-          }
+          const diff = touchStartX.current - e.changedTouches[0].screenX;
+          if (Math.abs(diff) > 50) changeSlide(diff > 0 ? 1 : -1);
         }}
       >
-        {activeBanners.map((banner, index) => (
-          <div
-            key={banner.id}
-            className="absolute inset-0"
-            style={{
-              transform: `translateX(${
-                index === activeIndex
-                  ? '0%'
-                  : index < activeIndex
-                    ? '-100%'
-                    : '100%'
-              })`,
-              transition: 'transform 0.7s cubic-bezier(0.25, 1, 0.5, 1)',
-            }}
-          >
-            {banner.image && (
-              <img
-                src={banner.image}
-                alt={banner.title}
-                className="absolute inset-0 h-full w-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            )}
-          </div>
-        ))}
+        {banners.map((banner, index) => {
+          const isActive = index === activeIndex;
+          return (
+            <div
+              key={banner.id}
+              className="banner-slide-layer absolute inset-0"
+              style={{
+                transform: isActive
+                  ? 'translateX(0) scale(1)'
+                  : `translateX(${index < activeIndex ? '-8%' : '8%'}) scale(1.06)`,
+                opacity: isActive ? 1 : 0,
+                transition: 'transform 1s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.9s ease',
+                zIndex: isActive ? 2 : 1,
+              }}
+            >
+              {banner.image && (
+                <img
+                  src={banner.image}
+                  alt={banner.title}
+                  className={`absolute inset-0 h-full w-full object-cover ${
+                    isActive ? 'banner-kenburns' : ''
+                  }`}
+                  style={{
+                    transform: isPointerInside
+                      ? `scale(1.1) translate(${(pointer.x - 50) * -0.03}%, ${(pointer.y - 50) * -0.03}%)`
+                      : undefined,
+                  }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              )}
+              <div className="banner-vignette absolute inset-0" />
+            </div>
+          );
+        })}
 
-        <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-r from-[#112250]/95 via-[#112250]/70 to-transparent" />
+        <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-r from-[#112250]/95 via-[#112250]/65 to-transparent" />
+        <div className="banner-aurora pointer-events-none absolute inset-0 z-10" />
+
+        <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
+          {particles.map((p) => (
+            <span
+              key={p.id}
+              className="banner-particle"
+              style={{
+                left: `${p.left}%`,
+                bottom: '-10px',
+                width: `${p.size}px`,
+                height: `${p.size}px`,
+                opacity: p.opacity,
+                animationDelay: `${p.delay}s`,
+                animationDuration: `${p.duration}s`,
+              }}
+            />
+          ))}
+        </div>
+
+        {isPointerInside && (
+          <div
+            className="banner-cursor-glow pointer-events-none absolute z-10"
+            style={{ left: `${pointer.x}%`, top: `${pointer.y}%` }}
+          />
+        )}
 
         <div
           key={currentBanner.id}
           className="relative z-20 flex h-full max-w-2xl flex-col justify-center px-5 sm:px-8 md:px-12"
         >
-          <span className="mb-3 w-fit rounded-md border border-blue-400/30 bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-100 backdrop-blur-sm">
+          <span className="banner-anim banner-anim-1 mb-3 w-fit rounded-md border border-blue-400/30 bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-100 backdrop-blur-sm">
             {currentBanner.subtitle}
           </span>
 
-          <h2 className="text-2xl font-black leading-tight text-white sm:text-3xl md:text-4xl lg:text-5xl drop-shadow-md">
-            {currentBanner.title}
+          <h2 className="banner-anim banner-anim-2 banner-title-reveal text-2xl font-black leading-tight text-white sm:text-3xl md:text-4xl lg:text-5xl">
+            <span>{currentBanner.title}</span>
           </h2>
 
-          <p className="mt-3 max-w-lg text-xs font-medium leading-relaxed text-blue-100/90 sm:text-sm md:text-base drop-shadow-sm">
+          <p className="banner-anim banner-anim-3 mt-3 max-w-lg text-xs font-medium leading-relaxed text-blue-100/90 drop-shadow-sm sm:text-sm md:text-base">
             {currentBanner.description}
           </p>
 
           {currentBanner.button_text && (
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="banner-anim banner-anim-4 mt-6 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => navigateTo(currentBanner.button_link)}
-                className="flex items-center gap-2 rounded-xl bg-blue-500 px-6 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-400 hover:shadow-lg sm:text-sm"
+                className="group/btn relative flex items-center gap-2 overflow-hidden rounded-xl bg-blue-500 px-6 py-3 text-xs font-bold text-white shadow-md transition hover:bg-blue-400 hover:shadow-lg sm:text-sm active:scale-95"
               >
-                {currentBanner.button_text}
-                <ArrowRight className="h-4 w-4" />
+                <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 group-hover/btn:translate-x-full" />
+                <span className="relative">{currentBanner.button_text}</span>
+                <ArrowRight className="relative h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
               </button>
 
               {currentBanner.secondary_button_text && (
                 <button
                   type="button"
                   onClick={() => navigateTo(currentBanner.secondary_button_link)}
-                  className="rounded-xl border border-white/20 bg-white/10 px-6 py-3 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/20 sm:text-sm"
+                  className="rounded-xl border border-white/20 bg-white/10 px-6 py-3 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/20 hover:scale-105 active:scale-95 sm:text-sm"
                 >
                   {currentBanner.secondary_button_text}
                 </button>
@@ -611,13 +716,13 @@ const Banner = ({ banners = [] }) => {
           )}
         </div>
 
-        {activeBanners.length > 1 && (
+        {banners.length > 1 && (
           <>
             <button
               type="button"
               onClick={() => changeSlide(-1)}
               aria-label="Banner sebelumnya"
-              className="absolute left-4 top-1/2 z-30 hidden -translate-y-1/2 rounded-full bg-black/20 p-2.5 text-white backdrop-blur-sm transition hover:bg-black/40 sm:block"
+              className="absolute left-4 top-1/2 z-30 hidden -translate-y-1/2 rounded-full bg-black/20 p-2.5 text-white backdrop-blur-sm transition hover:bg-black/40 hover:scale-110 active:scale-95 sm:block"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -626,56 +731,216 @@ const Banner = ({ banners = [] }) => {
               type="button"
               onClick={() => changeSlide(1)}
               aria-label="Banner selanjutnya"
-              className="absolute right-4 top-1/2 z-30 hidden -translate-y-1/2 rounded-full bg-black/20 p-2.5 text-white backdrop-blur-sm transition hover:bg-black/40 sm:block"
+              className="absolute right-4 top-1/2 z-30 hidden -translate-y-1/2 rounded-full bg-black/20 p-2.5 text-white backdrop-blur-sm transition hover:bg-black/40 hover:scale-110 active:scale-95 sm:block"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
 
-            <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 gap-2">
-              {activeBanners.map((banner, index) => (
-                <button
-                  key={banner.id}
-                  type="button"
-                  onClick={() => setActiveIndex(index)}
-                  aria-label={`Pilih banner ${index + 1}`}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    index === activeIndex
-                      ? 'w-8 bg-blue-400'
-                      : 'w-2 bg-white/40 hover:bg-white/60'
-                  }`}
-                />
-              ))}
+            <div className="absolute bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2.5">
+              {banners.map((banner, index) => {
+                const isActive = index === activeIndex;
+                return (
+                  <button
+                    key={banner.id}
+                    type="button"
+                    onClick={() => goToSlide(index)}
+                    aria-label={`Pilih banner ${index + 1}`}
+                    className="banner-dot relative flex h-3.5 w-3.5 items-center justify-center"
+                  >
+                    <svg viewBox="0 0 36 36" className="h-3.5 w-3.5 -rotate-90">
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="15"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.25)"
+                        strokeWidth="4"
+                      />
+                      {isActive && (
+                        <circle
+                          key={progressKey}
+                          cx="18"
+                          cy="18"
+                          r="15"
+                          fill="none"
+                          stroke="#60a5fa"
+                          strokeWidth="4"
+                          strokeLinecap="round"
+                          strokeDasharray="94.2"
+                          className="banner-ring-progress"
+                          style={{
+                            animationDuration: `${AUTOPLAY_MS}ms`,
+                            animationPlayState: isPaused ? 'paused' : 'running',
+                          }}
+                        />
+                      )}
+                    </svg>
+                  </button>
+                );
+              })}
             </div>
           </>
         )}
       </div>
+
+      <style jsx global>{`
+        .banner-premium {
+          isolation: isolate;
+        }
+
+        @keyframes bannerFadeUp {
+          0%   { opacity: 0; transform: translateY(28px) scale(0.98); filter: blur(6px); }
+          100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        .banner-anim {
+          opacity: 0;
+          animation: bannerFadeUp 1s cubic-bezier(0.22, 1.2, 0.36, 1) forwards;
+        }
+        .banner-anim-1 { animation-delay: 0.15s; }
+        .banner-anim-2 { animation-delay: 0.30s; }
+        .banner-anim-3 { animation-delay: 0.50s; }
+        .banner-anim-4 { animation-delay: 0.70s; }
+
+        @keyframes bannerTitleReveal {
+          0%   { clip-path: inset(0 100% 0 0); transform: translateY(8px); }
+          100% { clip-path: inset(0 0 0 0); transform: translateY(0); }
+        }
+        .banner-title-reveal > span {
+          display: inline-block;
+          background: linear-gradient(90deg, #ffffff 0%, #dbeafe 50%, #ffffff 100%);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          animation: bannerTitleReveal 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.3s forwards,
+                     bannerTitleShine 4s linear 1.5s infinite;
+        }
+        @keyframes bannerTitleShine {
+          0%   { background-position: 0% center; }
+          100% { background-position: 200% center; }
+        }
+
+        @keyframes bannerKenburns {
+          0%   { transform: scale(1); }
+          100% { transform: scale(1.14); }
+        }
+        .banner-kenburns {
+          animation: bannerKenburns 9s ease-out forwards;
+          transition: transform 0.6s ease-out;
+        }
+
+        @keyframes bannerAurora {
+          0%   { background-position: 0% 50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .banner-aurora {
+          background:
+            radial-gradient(circle at 20% 30%, rgba(96, 165, 250, 0.18), transparent 40%),
+            radial-gradient(circle at 80% 70%, rgba(37, 99, 235, 0.16), transparent 45%);
+          background-size: 200% 200%;
+          animation: bannerAurora 12s ease-in-out infinite;
+          mix-blend-mode: screen;
+        }
+
+        .banner-vignette {
+          background: radial-gradient(ellipse at center, transparent 40%, rgba(17, 34, 80, 0.55) 100%);
+          pointer-events: none;
+        }
+
+        @keyframes bannerParticleFloat {
+          0%   { transform: translateY(0) translateX(0); opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 1; }
+          100% { transform: translateY(-320px) translateX(20px); opacity: 0; }
+        }
+        .banner-particle {
+          position: absolute;
+          background: radial-gradient(circle, rgba(191, 219, 254, 0.9), rgba(96, 165, 250, 0.4));
+          border-radius: 9999px;
+          animation-name: bannerParticleFloat;
+          animation-timing-function: linear;
+          animation-iteration-count: infinite;
+          pointer-events: none;
+          filter: blur(0.5px);
+        }
+
+        .banner-cursor-glow {
+          width: 320px;
+          height: 320px;
+          margin-left: -160px;
+          margin-top: -160px;
+          background: radial-gradient(circle, rgba(96, 165, 250, 0.25), transparent 65%);
+          border-radius: 9999px;
+          transition: left 0.15s ease-out, top 0.15s ease-out;
+          mix-blend-mode: screen;
+        }
+
+        @keyframes bannerRingFill {
+          from { stroke-dashoffset: 94.2; }
+          to   { stroke-dashoffset: 0; }
+        }
+        .banner-ring-progress {
+          animation-name: bannerRingFill;
+          animation-timing-function: linear;
+          animation-fill-mode: forwards;
+        }
+        .banner-dot:hover svg circle:first-child {
+          stroke: rgba(255, 255, 255, 0.6);
+        }
+
+        @keyframes bannerFloat {
+          0%, 100% { transform: translate(0, 0); }
+          50%      { transform: translate(10px, -10px); }
+        }
+        .banner-float { animation: bannerFloat 6s ease-in-out infinite; }
+        .banner-float-delayed { animation: bannerFloat 6s ease-in-out 2s infinite; }
+
+        @keyframes bannerIconPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50%      { transform: scale(1.15); opacity: 0.8; }
+        }
+        .banner-icon-pulse { animation: bannerIconPulse 2.5s ease-in-out infinite; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .banner-anim,
+          .banner-kenburns,
+          .banner-aurora,
+          .banner-particle,
+          .banner-ring-progress,
+          .banner-title-reveal > span,
+          .banner-float,
+          .banner-float-delayed,
+          .banner-icon-pulse {
+            animation: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
 
-const NotificationItem = ({ notif }) => {
-  return (
-    <div className="flex min-w-0 items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/50 p-3 transition-colors hover:bg-blue-50">
-      <div className="rounded-lg bg-white p-1.5 text-blue-600 shadow-sm">
-        <Bell className="h-3.5 w-3.5" />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-bold text-[#112250]">
-          {notif.title || 'Notifikasi'}
-        </p>
-
-        <p className="break-words text-[11px] font-medium leading-relaxed text-slate-500">
-          {notif.message || notif.description || ''}
-        </p>
-
-        <p className="mt-1 text-[10px] font-semibold text-blue-400">
-          {formatDate(notif.created_at)}
-        </p>
-      </div>
+const NotificationItem = ({ notif }) => (
+  <div className="flex min-w-0 items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/50 p-3 transition-colors hover:bg-blue-50">
+    <div className="rounded-lg bg-white p-1.5 text-blue-600 shadow-sm">
+      <Bell className="h-3.5 w-3.5" />
     </div>
-  );
-};
+
+    <div className="min-w-0 flex-1">
+      <p className="truncate text-xs font-bold text-[#112250]">
+        {notif.title || 'Notifikasi'}
+      </p>
+
+      <p className="break-words text-[11px] font-medium leading-relaxed text-slate-500">
+        {notif.message || notif.description || ''}
+      </p>
+
+      <p className="mt-1 text-[10px] font-semibold text-blue-400">
+        {formatDate(notif.created_at)}
+      </p>
+    </div>
+  </div>
+);
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -733,12 +998,73 @@ export default function DashboardPage() {
     }
   }, [router]);
 
+  const fetchEventDetails = useCallback(async (event) => {
+    const eventId = event?.id ?? event?.event_id;
+
+    if (!eventId) return event;
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/events/${eventId}`,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        }
+      );
+
+      if (!response.ok) {
+        console.error(
+          `Gagal mengambil detail event ${eventId}:`,
+          response.status
+        );
+
+        return {
+          ...event,
+          price: getStartingPrice(event),
+        };
+      }
+
+      const data = await response.json();
+
+      const detail = data?.event || data?.data?.event || {};
+
+      const mergedEvent = {
+        ...event,
+        ...detail,
+        id: eventId,
+        ticket_categories:
+          detail.ticket_categories ||
+          detail.ticketCategories ||
+          event.ticket_categories ||
+          event.ticketCategories ||
+          [],
+      };
+
+      return {
+        ...mergedEvent,
+        price: getStartingPrice(mergedEvent),
+      };
+    } catch (err) {
+      console.error(`EVENT DETAIL ERROR ${eventId}:`, err);
+
+      return {
+        ...event,
+        price: getStartingPrice(event),
+      };
+    }
+  }, []);
+
   const fetchBanners = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/api/banners/home`, {
         method: 'GET',
         cache: 'no-store',
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+        },
       });
 
       if (!response.ok) return;
@@ -756,7 +1082,13 @@ export default function DashboardPage() {
           if (status === undefined || status === null) return true;
 
           return [
-            true, 1, '1', 'true', 'active', 'aktif', 'published',
+            true,
+            1,
+            '1',
+            'true',
+            'active',
+            'aktif',
+            'published',
           ].includes(
             typeof status === 'string'
               ? status.toLowerCase()
@@ -810,6 +1142,7 @@ export default function DashboardPage() {
     fetchBanners();
 
     const interval = setInterval(fetchBanners, 15000);
+
     const onFocus = () => fetchBanners();
 
     window.addEventListener('focus', onFocus);
@@ -851,23 +1184,42 @@ export default function DashboardPage() {
 
         if (!mounted) return;
 
-        const profile = profileRes?.user || profileRes?.data?.user;
+        const profile =
+          profileRes?.user ||
+          profileRes?.data?.user;
 
         if (!profileRes?.success || !profile) {
           throw new Error(
-            profileRes?.message || 'Gagal mengambil profil pengguna.'
+            profileRes?.message ||
+            'Gagal mengambil profil pengguna.'
           );
         }
 
         setUser(profile);
-        localStorage.setItem('user', JSON.stringify(profile));
+
+        localStorage.setItem(
+          'user',
+          JSON.stringify(profile)
+        );
 
         const eventList = extractList(eventsRes, ['events']);
         const orderList = extractList(ordersRes, ['orders']);
         const ticketList = extractList(ticketsRes, ['tickets']);
         const paymentList = extractList(paymentsRes, ['payments']);
 
-        setEvents(eventList);
+        const recommendationEvents = await Promise.all(
+          eventList.slice(0, 10).map((event) =>
+            fetchEventDetails(event)
+          )
+        );
+
+        if (!mounted) return;
+
+        setEvents([
+          ...recommendationEvents,
+          ...eventList.slice(10),
+        ]);
+
         setOrders(orderList);
         setTickets(ticketList);
         setPayments(paymentList);
@@ -897,7 +1249,9 @@ export default function DashboardPage() {
           !ticketsRes ||
           !paymentsRes
         ) {
-          setError('Sebagian data dashboard gagal dimuat. Silakan coba kembali.');
+          setError(
+            'Sebagian data dashboard gagal dimuat. Silakan coba kembali.'
+          );
         }
       } catch (err) {
         console.error('Dashboard error:', err);
@@ -906,7 +1260,9 @@ export default function DashboardPage() {
           setError(err.message || 'Gagal memuat dashboard.');
         }
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -915,7 +1271,7 @@ export default function DashboardPage() {
     return () => {
       mounted = false;
     };
-  }, [fetchWithAuth, router]);
+  }, [fetchWithAuth, fetchEventDetails, router]);
 
   const activeTickets = useMemo(() => {
     return tickets
@@ -926,8 +1282,10 @@ export default function DashboardPage() {
 
         const eventDate = new Date(ticket.event_date);
 
-        return !Number.isNaN(eventDate.getTime()) &&
-          eventDate.getTime() >= Date.now();
+        return (
+          !Number.isNaN(eventDate.getTime()) &&
+          eventDate.getTime() >= Date.now()
+        );
       })
       .map((ticket) => ({
         ...ticket,
@@ -965,12 +1323,15 @@ export default function DashboardPage() {
 
         const eventDate = new Date(event.event_date);
 
-        return !Number.isNaN(eventDate.getTime()) &&
-          eventDate.getTime() >= Date.now();
+        return (
+          !Number.isNaN(eventDate.getTime()) &&
+          eventDate.getTime() >= Date.now()
+        );
       })
       .slice(0, 10)
       .map((event) => {
         const eventId = event.id ?? event.event_id;
+
         const wishlistItem = wishlistMap.get(Number(eventId));
 
         return {
@@ -981,18 +1342,27 @@ export default function DashboardPage() {
             event.category_name ||
             event.category ||
             'Event',
-          venue: event.venue_name || event.venue || '-',
-          date: event.event_date || event.date,
-          time: event.event_time || event.time,
-          price:
-            Number(event.min_price) ||
-            Number(event.price) ||
-            Number(event.starting_price) ||
-            Number(event.ticket_price) ||
-            0,
+          venue:
+            event.venue_name ||
+            event.venue ||
+            '-',
+          date:
+            event.event_date ||
+            event.date,
+          time:
+            event.event_time ||
+            event.time,
+
+          price: getStartingPrice(event),
+
           image: getEventPoster(event),
+
           isWishlisted: Boolean(wishlistItem),
-          wishlistId: wishlistItem?.id || wishlistItem?.wishlist_id || null,
+
+          wishlistId:
+            wishlistItem?.id ||
+            wishlistItem?.wishlist_id ||
+            null,
         };
       });
   }, [events, wishlist]);
@@ -1023,11 +1393,13 @@ export default function DashboardPage() {
     return orders
       .map((order) => {
         const relatedTickets = tickets.filter(
-          (ticket) => Number(ticket.order_id) === Number(order.id)
+          (ticket) =>
+            Number(ticket.order_id) === Number(order.id)
         );
 
         const relatedPayment = payments.find(
-          (payment) => Number(payment.order_id) === Number(order.id)
+          (payment) =>
+            Number(payment.order_id) === Number(order.id)
         );
 
         const firstTicket = relatedTickets[0];
@@ -1038,22 +1410,27 @@ export default function DashboardPage() {
 
         return {
           id: order.id,
+
           event_name:
             firstTicket?.event_name ||
             order.event_name ||
             'Pesanan Tiket',
+
           event_date:
             firstTicket?.event_date ||
             order.event_date ||
             null,
+
           quantity:
             relatedTickets.length ||
             Number(order.quantity) ||
             0,
+
           total:
             Number(order.total_price) ||
             Number(relatedPayment?.amount) ||
             0,
+
           status: isPaid(status)
             ? 'confirmed'
             : ['cancelled', 'canceled', 'dibatalkan'].includes(status)
@@ -1064,7 +1441,11 @@ export default function DashboardPage() {
       .sort((a, b) => Number(b.id) - Number(a.id));
   }, [orders, tickets, payments]);
 
-  const handleWishlistChange = (eventId, isAdded, wishlistItem) => {
+  const handleWishlistChange = (
+    eventId,
+    isAdded,
+    wishlistItem
+  ) => {
     setWishlist((current) => {
       if (isAdded) {
         const newWishlistId =
@@ -1075,7 +1456,8 @@ export default function DashboardPage() {
 
         return [
           ...current.filter(
-            (item) => Number(item.event_id) !== Number(eventId)
+            (item) =>
+              Number(item.event_id) !== Number(eventId)
           ),
           {
             ...(wishlistItem || {}),
@@ -1086,7 +1468,8 @@ export default function DashboardPage() {
       }
 
       return current.filter(
-        (item) => Number(item.event_id) !== Number(eventId)
+        (item) =>
+          Number(item.event_id) !== Number(eventId)
       );
     });
   };
@@ -1110,6 +1493,7 @@ export default function DashboardPage() {
       <div className="flex min-h-[70vh] items-center justify-center">
         <div className="text-center">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-[3px] border-blue-100 border-t-blue-600" />
+
           <p className="mt-4 text-sm font-medium text-slate-500">
             Memuat dashboard...
           </p>
@@ -1141,6 +1525,7 @@ export default function DashboardPage() {
 
   return (
     <div className="w-full min-w-0">
+
       <Banner banners={banners} />
 
       {error && (
@@ -1267,6 +1652,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="mb-6 grid min-w-0 grid-cols-1 gap-4 sm:mb-8 xl:grid-cols-3">
+
         <div className="min-w-0 xl:col-span-1">
           <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm shadow-blue-900/5 sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-2">
@@ -1291,6 +1677,7 @@ export default function DashboardPage() {
               {notifications.length === 0 && (
                 <div className="py-8 text-center">
                   <Bell className="mx-auto h-8 w-8 text-blue-200" />
+
                   <p className="mt-2 text-xs font-medium text-slate-500">
                     Belum ada notifikasi.
                   </p>
@@ -1305,7 +1692,10 @@ export default function DashboardPage() {
             <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="flex min-w-0 items-center gap-2 text-base font-bold text-[#112250]">
                 <Sparkles className="h-4.5 w-4.5 flex-shrink-0 text-blue-500" />
-                <span className="truncate">Rekomendasi Untukmu</span>
+
+                <span className="truncate">
+                  Rekomendasi Untukmu
+                </span>
               </h3>
 
               <div className="flex flex-shrink-0 items-center gap-1.5">
@@ -1385,7 +1775,10 @@ export default function DashboardPage() {
 
               <tbody className="divide-y divide-blue-50">
                 {bookings.slice(0, 5).map((booking) => (
-                  <tr key={booking.id} className="transition-colors hover:bg-blue-50/50">
+                  <tr
+                    key={booking.id}
+                    className="transition-colors hover:bg-blue-50/50"
+                  >
                     <td className="max-w-[180px] truncate px-3 py-3.5 text-sm font-bold text-[#112250]">
                       {booking.event_name}
                     </td>
@@ -1426,6 +1819,7 @@ export default function DashboardPage() {
                   <tr>
                     <td colSpan="5" className="py-12 text-center">
                       <History className="mx-auto h-8 w-8 text-blue-200" />
+
                       <p className="mt-2 text-sm font-medium text-slate-500">
                         Belum ada riwayat pemesanan.
                       </p>
@@ -1439,6 +1833,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
+
         <div className="min-w-0 xl:col-span-2">
           <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm shadow-blue-900/5 sm:p-6">
             <div className="flex items-center justify-between gap-3">
@@ -1456,40 +1851,57 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-blue-50/50 p-3.5 border border-blue-50">
+
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-blue-50 bg-blue-50/50 p-3.5">
                 <Mail className="h-4 w-4 flex-shrink-0 text-blue-600" />
+
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Email</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Email
+                  </p>
+
                   <p className="truncate text-xs font-semibold text-[#112250]">
                     {user.email || 'Belum diisi'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-blue-50/50 p-3.5 border border-blue-50">
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-blue-50 bg-blue-50/50 p-3.5">
                 <Phone className="h-4 w-4 flex-shrink-0 text-blue-600" />
+
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Nomor HP</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Nomor HP
+                  </p>
+
                   <p className="truncate text-xs font-semibold text-[#112250]">
                     {user.phone || 'Belum diisi'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-blue-50/50 p-3.5 border border-blue-50">
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-blue-50 bg-blue-50/50 p-3.5">
                 <User className="h-4 w-4 flex-shrink-0 text-blue-600" />
+
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Jenis Kelamin</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Jenis Kelamin
+                  </p>
+
                   <p className="truncate text-xs font-semibold text-[#112250]">
                     {user.gender || 'Belum diisi'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-blue-50/50 p-3.5 border border-blue-50">
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-blue-50 bg-blue-50/50 p-3.5">
                 <Calendar className="h-4 w-4 flex-shrink-0 text-blue-600" />
+
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tanggal Bergabung</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Tanggal Bergabung
+                  </p>
+
                   <p className="truncate text-xs font-semibold text-[#112250]">
                     {formatDate(user.created_at)}
                   </p>
@@ -1499,7 +1911,7 @@ export default function DashboardPage() {
 
             <Link
               href="/profile"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#112250] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-blue-800 shadow-sm"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#112250] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800"
             >
               <Pencil className="h-3.5 w-3.5" />
               Edit Profil
@@ -1544,22 +1956,26 @@ export default function DashboardPage() {
             </p>
 
             <div className="mt-5 space-y-2 border-t border-blue-50 pt-5">
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-blue-50/50 p-3 text-left border border-blue-50">
+
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-blue-50 bg-blue-50/50 p-3 text-left">
                 <Mail className="h-4 w-4 flex-shrink-0 text-blue-500" />
+
                 <span className="truncate text-xs font-medium text-slate-600">
                   {user.email || 'Belum diisi'}
                 </span>
               </div>
 
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-blue-50/50 p-3 text-left border border-blue-50">
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-blue-50 bg-blue-50/50 p-3 text-left">
                 <Phone className="h-4 w-4 flex-shrink-0 text-blue-500" />
+
                 <span className="truncate text-xs font-medium text-slate-600">
                   {user.phone || 'Belum diisi'}
                 </span>
               </div>
 
-              <div className="flex min-w-0 items-center gap-3 rounded-xl bg-blue-50/50 p-3 text-left border border-blue-50">
+              <div className="flex min-w-0 items-center gap-3 rounded-xl border border-blue-50 bg-blue-50/50 p-3 text-left">
                 <User className="h-4 w-4 flex-shrink-0 text-blue-500" />
+
                 <span className="truncate text-xs font-medium text-slate-600">
                   {user.gender || 'Belum diisi'}
                 </span>
@@ -1568,7 +1984,7 @@ export default function DashboardPage() {
 
             <Link
               href="/profile"
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 py-3 text-sm font-bold text-white transition hover:bg-blue-600 shadow-sm shadow-blue-500/20"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 py-3 text-sm font-bold text-white shadow-sm shadow-blue-500/20 transition hover:bg-blue-600"
             >
               <Pencil className="h-3.5 w-3.5" />
               Edit Profil
@@ -1587,6 +2003,7 @@ export default function DashboardPage() {
           scrollbar-width: none;
         }
       `}</style>
+
     </div>
   );
 }

@@ -3,7 +3,6 @@ const jwt = require("jsonwebtoken");
 
 const verifyToken = (req, res, next) => {
   try {
-    // Pastikan JWT_SECRET tersedia
     if (!process.env.JWT_SECRET) {
       console.error("JWT_SECRET belum dikonfigurasi di file .env");
 
@@ -13,7 +12,6 @@ const verifyToken = (req, res, next) => {
       });
     }
 
-    // Ambil token dari Authorization Header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -32,10 +30,8 @@ const verifyToken = (req, res, next) => {
       });
     }
 
-    // Verifikasi JWT
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Validasi payload JWT
     if (!decoded.id || !decoded.role) {
       return res.status(401).json({
         success: false,
@@ -43,7 +39,6 @@ const verifyToken = (req, res, next) => {
       });
     }
 
-    // Simpan informasi user untuk controller
     req.user = {
       id: decoded.id,
       email: decoded.email,

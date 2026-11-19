@@ -1,70 +1,102 @@
+
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   UserRound,
-  Building2,
   Mail,
   Phone,
   MapPin,
+  Building2,
   CalendarDays,
-  ShieldCheck,
-  ShieldAlert,
+  Camera,
   Pencil,
   Save,
   X,
   Loader2,
-  RefreshCw,
   Ticket,
-  CheckCircle2,
-  XCircle,
-  Hourglass,
-  ArrowUpRight,
-  AtSign,
-  Camera,
+  Wallet,
+  CalendarCheck,
+  ImagePlus,
   AlertCircle,
-  Sparkles,
+  CheckCircle2,
+  RefreshCw,
+  Clock,
   ChevronRight,
-  Layers,
+  ShieldCheck,
 } from "lucide-react";
 
-const RAW_API_URL =
+// ============================================================
+// API CONFIGURATION
+// Bisa menggunakan:
+// http://localhost:5000
+// atau http://localhost:5000/api
+// ============================================================
+
+const API_URL_RAW =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-const API_URL = RAW_API_URL.replace(/\/+$/, "").endsWith("/api")
-  ? RAW_API_URL.replace(/\/+$/, "")
-  : `${RAW_API_URL.replace(/\/+$/, "")}/api`;
+const API_BASE = API_URL_RAW.replace(/\/+$/, "").endsWith("/api")
+  ? API_URL_RAW.replace(/\/+$/, "")
+  : `${API_URL_RAW.replace(/\/+$/, "")}/api`;
+
+const API_ORIGIN = API_BASE.replace(/\/api\/?$/, "");
+
+const easePremium = [0.22, 1, 0.36, 1];
 
 const initialForm = {
   fullname: "",
+  email: "",
   phone: "",
+  gender: "",
+  birth_date: "",
   address: "",
   organization_name: "",
-  avatar: "",
 };
 
-const inputClass =
-  "h-10 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]";
+// ============================================================
+// HELPER
+// ============================================================
 
 function getToken() {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("token") || "";
+  if (typeof window === "undefined") return null;
+
+  return (
+    localStorage.getItem("token") ||
+    localStorage.getItem("accessToken") ||
+    localStorage.getItem("access_token")
+  );
 }
 
-function getImageUrl(path) {
-  if (!path) return "";
+function getImageUrl(photo) {
+  if (!photo || typeof photo !== "string") return null;
+
+  const value = photo.trim();
 
   if (
-    path.startsWith("http://") ||
-    path.startsWith("https://") ||
-    path.startsWith("data:")
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:") ||
+    value.startsWith("blob:")
   ) {
-    return path;
+    return value;
   }
 
-  const base = API_URL.replace(/\/api\/?$/, "");
-  return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+  return `${API_ORIGIN}/${value.replace(/^\/+/, "")}`;
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("id-ID");
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 }
 
 function formatDate(value) {
@@ -81,13 +113,6 @@ function formatDate(value) {
   });
 }
 
-function formatNumber(value) {
-  const number = Number(value);
-  return new Intl.NumberFormat("id-ID").format(
-    Number.isFinite(number) ? number : 0
-  );
-}
-
 function getInitials(name) {
   if (!name) return "EO";
 
@@ -100,181 +125,207 @@ function getInitials(name) {
     .toUpperCase();
 }
 
-function getApprovalStyle(status) {
+function buildForm(profile) {
+  return {
+    fullname: profile?.fullname || "",
+    email: profile?.email || "",
+    phone: profile?.phone || "",
+    gender: profile?.gender || "",
+    birth_date: profile?.birth_date
+      ? String(profile.birth_date).slice(0, 10)
+      : "",
+    address: profile?.address || "",
+    organization_name: profile?.organization_name || "",
+  };
+}
+
+function getEventStatus(status) {
   const value = String(status || "").toLowerCase();
 
-  if (value === "approved") {
+  if (["available", "active", "published"].includes(value)) {
     return {
-      label: "Disetujui",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      icon: CheckCircle2,
+      label: "Tersedia",
+      className: "bg-sky-50 text-sky-700",
     };
   }
 
-  if (value === "rejected") {
+  if (["limited", "almost_sold"].includes(value)) {
     return {
-      label: "Ditolak",
-      className: "bg-rose-50 text-rose-700 border-rose-200",
-      icon: XCircle,
+      label: "Tiket Terbatas",
+      className: "bg-amber-50 text-amber-700",
     };
   }
 
-  if (value === "draft") {
+  if (["sold_out", "soldout"].includes(value)) {
     return {
-      label: "Draft",
-      className: "bg-slate-50 text-slate-600 border-slate-200",
-      icon: Pencil,
+      label: "Sold Out",
+      className: "bg-slate-900 text-white",
+    };
+  }
+
+  if (["cancelled", "canceled"].includes(value)) {
+    return {
+      label: "Dibatalkan",
+      className: "bg-rose-50 text-rose-700",
+    };
+  }
+
+  if (["completed", "ended"].includes(value)) {
+    return {
+      label: "Selesai",
+      className: "bg-slate-100 text-slate-600",
     };
   }
 
   return {
-    label: "Menunggu Persetujuan",
-    className: "bg-amber-50 text-amber-700 border-amber-200",
-    icon: Hourglass,
+    label: status || "Belum tersedia",
+    className: "bg-slate-100 text-slate-600",
   };
 }
 
-function StatCard({ label, value, hint, icon: Icon }) {
-  return (
-    <div className="group relative overflow-hidden rounded-2xl border border-sky-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition duration-300 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_8px_24px_rgba(14,165,233,0.10)]">
-      <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-sky-300/30 opacity-0 blur-2xl transition duration-500 group-hover:opacity-100" />
-      <div className="relative flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-slate-400">
-            {label}
-          </p>
-          <p className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.02em] text-[#0B1220]">
-            {formatNumber(value)}
-          </p>
-          <p className="mt-1.5 text-[12px] font-medium text-slate-500">
-            {hint}
-          </p>
-        </div>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600 ring-1 ring-sky-100 transition group-hover:scale-110">
-          <Icon size={18} />
-        </div>
-      </div>
-      <div className="absolute bottom-0 left-0 h-[2.5px] w-full bg-gradient-to-r from-[#0B1220] to-sky-500 opacity-0 transition group-hover:opacity-100" />
-    </div>
-  );
-}
-
-function InfoItem({ icon: Icon, label, value }) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg border border-sky-100 bg-sky-50/50 px-3.5 py-3 transition hover:border-sky-200">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-sky-600 shadow-sm ring-1 ring-sky-100">
-        <Icon size={16} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-          {label}
-        </p>
-        <p className="mt-0.5 break-words text-[13px] font-semibold text-slate-800">
-          {value || "-"}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function SectionCard({ icon: Icon, title, description, children }) {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-sky-200/80 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      <div className="flex items-center justify-between border-b border-sky-100 bg-gradient-to-b from-sky-50/50 to-white px-5 py-4">
-        <div>
-          <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-[#0B1220]">
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-sky-50 text-sky-600 ring-1 ring-sky-100">
-              <Icon size={13} />
-            </span>
-            {title}
-          </h2>
-          {description && (
-            <p className="mt-0.5 text-[12.5px] text-slate-500">
-              {description}
-            </p>
-          )}
-        </div>
-      </div>
-      <div className="p-5">{children}</div>
-    </section>
-  );
-}
+// ============================================================
+// MAIN PAGE
+// ============================================================
 
 export default function OrganizerProfilePage() {
+  const fileInputRef = useRef(null);
+  const isEditingRef = useRef(false);
+
   const [profile, setProfile] = useState(null);
-  const [stats, setStats] = useState({});
+  const [stats, setStats] = useState(null);
   const [events, setEvents] = useState([]);
 
+  const [form, setForm] = useState(initialForm);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
+
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [uploadError, setUploadError] = useState("");
 
-  const [form, setForm] = useState(initialForm);
+  const [activeTab, setActiveTab] = useState("profile");
 
-  const request = useCallback(async (endpoint, options = {}) => {
+  // ============================================================
+  // AUTH FETCH
+  // ============================================================
+
+  const authFetch = useCallback(async (url, options = {}) => {
     const token = getToken();
 
     if (!token) {
-      throw new Error("Sesi login tidak ditemukan. Silakan login kembali.");
+      throw new Error(
+        "Sesi login tidak ditemukan. Silakan login kembali."
+      );
     }
 
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    const response = await fetch(url, {
       ...options,
       headers: {
+        ...(options.headers || {}),
         Authorization: `Bearer ${token}`,
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...options.headers,
       },
     });
 
-    const result = await response.json().catch(() => ({}));
+    const result = await response.json().catch(() => null);
 
-    if (!response.ok || result.success === false) {
+    if (!response.ok) {
       throw new Error(
-        result.message || `Permintaan gagal (${response.status}).`
+        result?.message || `Request gagal (${response.status}).`
       );
+    }
+
+    if (result?.success === false) {
+      throw new Error(result.message || "Request gagal.");
     }
 
     return result;
   }, []);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  // ============================================================
+  // LOAD PROFILE
+  // ============================================================
 
-    try {
-      const [profileResult, statsResult, eventsResult] = await Promise.all([
-        request("/organizer/profile"),
-        request("/organizer/stats"),
-        request("/organizer/events"),
-      ]);
+  const loadData = useCallback(
+    async (showRefresh = false, forceUpdateForm = false) => {
+      if (showRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-      const organizer = profileResult.organizer;
+      setError("");
 
-      setProfile(organizer);
-      setForm({
-        fullname: organizer?.fullname || "",
-        phone: organizer?.phone || "",
-        address: organizer?.address || "",
-        organization_name: organizer?.organization_name || "",
-        avatar: organizer?.avatar || "",
-      });
+      try {
+        const [profileResult, statsResult, eventsResult] =
+          await Promise.all([
+            authFetch(`${API_BASE}/organizer/profile`),
+            authFetch(`${API_BASE}/organizer/stats`),
+            authFetch(`${API_BASE}/organizer/events`),
+          ]);
 
-      setStats(statsResult.stats || {});
-      setEvents(Array.isArray(eventsResult.events) ? eventsResult.events : []);
-    } catch (err) {
-      setError(err.message || "Gagal mengambil data profil.");
-    } finally {
-      setLoading(false);
-    }
-  }, [request]);
+        const profileData = profileResult?.data || {};
+        const statsData = statsResult?.data || {};
+
+        const eventsData = Array.isArray(eventsResult?.data)
+          ? eventsResult.data
+          : [];
+
+        setProfile(profileData);
+        setStats(statsData);
+        setEvents(eventsData);
+
+        // Update form hanya jika tidak sedang mengedit
+        // atau memang dipaksa setelah berhasil menyimpan.
+        if (!isEditingRef.current || forceUpdateForm) {
+          setForm(buildForm(profileData));
+        }
+
+        setPhotoLoadError(false);
+      } catch (err) {
+        setError(
+          err.message || "Gagal mengambil data dari server."
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [authFetch]
+  );
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ============================================================
+  // PREVIEW PHOTO
+  // ============================================================
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewImage(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(selectedFile);
+
+    setPreviewImage(objectUrl);
+    setPhotoLoadError(false);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedFile]);
+
+  // ============================================================
+  // FORM CHANGE
+  // ============================================================
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -285,7 +336,67 @@ export default function OrganizerProfilePage() {
     }));
   };
 
-  const handleSave = async (event) => {
+  // ============================================================
+  // SELECT PHOTO
+  // ============================================================
+
+  const handleSelectPhoto = (event) => {
+    const file = event.target.files?.[0];
+
+    setUploadError("");
+
+    if (!file) return;
+
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError(
+        "Foto harus berformat JPG, PNG, atau WEBP."
+      );
+
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("Ukuran foto maksimal 5 MB.");
+
+      event.target.value = "";
+      return;
+    }
+
+    setSelectedFile(file);
+    setPhotoLoadError(false);
+  };
+
+  // ============================================================
+  // CANCEL EDIT
+  // ============================================================
+
+  const handleCancelEdit = () => {
+    isEditingRef.current = false;
+
+    setForm(buildForm(profile));
+    setSelectedFile(null);
+    setUploadError("");
+    setEditing(false);
+    setError("");
+    setPhotoLoadError(false);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // ============================================================
+  // SAVE PROFILE
+  // ============================================================
+
+  const handleSaveProfile = async (event) => {
     event.preventDefault();
 
     if (!form.fullname.trim()) {
@@ -296,689 +407,762 @@ export default function OrganizerProfilePage() {
     setSaving(true);
     setError("");
     setSuccess("");
+    setUploadError("");
 
     try {
-      const result = await request("/organizer/profile", {
-        method: "PUT",
-        body: JSON.stringify({
-          fullname: form.fullname,
-          phone: form.phone,
-          address: form.address,
-          organization_name: form.organization_name,
-          avatar: form.avatar,
-        }),
-      });
+      const formData = new FormData();
 
-      setProfile(result.organizer);
-      setForm({
-        fullname: result.organizer.fullname || "",
-        phone: result.organizer.phone || "",
-        address: result.organizer.address || "",
-        organization_name: result.organizer.organization_name || "",
-        avatar: result.organizer.avatar || "",
-      });
+      formData.append("fullname", form.fullname.trim());
+      formData.append("phone", form.phone || "");
+      formData.append("gender", form.gender || "");
+      formData.append("birth_date", form.birth_date || "");
 
+      // Field ini dikirim agar bisa diproses
+      // jika backend sudah mendukung organizer_profiles.
+      formData.append("address", form.address || "");
+      formData.append(
+        "organization_name",
+        form.organization_name || ""
+      );
+
+      // Harus sama dengan uploadProfile.single("avatar")
+      if (selectedFile) {
+        formData.append("avatar", selectedFile);
+      }
+
+      const result = await authFetch(
+        `${API_BASE}/organizer/profile`,
+        {
+          method: "PUT",
+          body: formData,
+        }
+      );
+
+      // Ambil data terbaru dari database.
+      const updatedProfile = result?.data;
+
+      if (updatedProfile) {
+        setProfile(updatedProfile);
+      }
+
+      // Hapus preview lokal setelah server berhasil menerima file.
+      setSelectedFile(null);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      // Matikan mode edit sebelum load ulang.
+      isEditingRef.current = false;
       setEditing(false);
-      setSuccess(result.message || "Profil berhasil diperbarui.");
 
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
+      // GET ulang agar foto berasal dari database.
+      await loadData(false, true);
+
+      setSuccess(
+        result?.message || "Profil berhasil diperbarui."
+      );
     } catch (err) {
-      setError(err.message || "Gagal menyimpan profil.");
+      setError(
+        err.message || "Gagal menyimpan profil."
+      );
     } finally {
       setSaving(false);
     }
   };
 
-  const cancelEdit = () => {
-    setForm({
-      fullname: profile?.fullname || "",
-      phone: profile?.phone || "",
-      address: profile?.address || "",
-      organization_name: profile?.organization_name || "",
-      avatar: profile?.avatar || "",
-    });
+  // ============================================================
+  // PHOTO URL
+  // ============================================================
 
-    setEditing(false);
-    setError("");
-  };
+  const savedPhoto = getImageUrl(
+    profile?.photo || profile?.avatar
+  );
 
-  const approvalCounts = useMemo(() => {
-    return events.reduce(
-      (result, event) => {
-        const status = String(
-          event.approval_status || "Pending"
-        ).toLowerCase();
+  const currentPhoto = previewImage || savedPhoto;
 
-        if (status === "approved") result.approved += 1;
-        else if (status === "rejected") result.rejected += 1;
-        else if (status === "draft") result.draft += 1;
-        else result.pending += 1;
+  // ============================================================
+  // STATISTICS
+  // ============================================================
 
-        return result;
-      },
-      { approved: 0, rejected: 0, pending: 0, draft: 0 }
-    );
-  }, [events]);
+  const statCards = [
+    {
+      label: "Total Event",
+      value: formatNumber(stats?.total_events),
+      description: "Event yang dibuat",
+      icon: CalendarCheck,
+    },
+    {
+      label: "Event Mendatang",
+      value: formatNumber(stats?.upcoming_events),
+      description: "Event yang akan datang",
+      icon: CalendarDays,
+    },
+    {
+      label: "Tiket Terjual",
+      value: formatNumber(stats?.sold_tickets),
+      description: "Total tiket terjual",
+      icon: Ticket,
+    },
+    {
+      label: "Total Pendapatan",
+      value: formatCurrency(stats?.total_revenue),
+      description: "Pendapatan event",
+      icon: Wallet,
+    },
+  ];
 
-  if (loading) {
+  // ============================================================
+  // LOADING
+  // ============================================================
+
+  if (loading && !profile) {
     return (
-      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-4">
-        <div className="relative">
-          <div className="absolute inset-0 animate-ping rounded-xl bg-[#0B1220]/10" />
-          <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-[#0B1220]/[0.06]">
-            <Loader2 size={22} className="animate-spin text-[#0B1220]" />
-          </div>
-        </div>
+      <div className="flex min-h-[70vh] items-center justify-center">
         <div className="text-center">
-          <p className="text-[13.5px] font-semibold text-slate-800">
+          <Loader2 className="mx-auto h-9 w-9 animate-spin text-sky-600" />
+
+          <p className="mt-3 text-sm font-semibold text-slate-700">
             Memuat profil organizer...
-          </p>
-          <p className="mt-0.5 text-[12px] text-slate-400">
-            Mengambil data akun dan aktivitas event
           </p>
         </div>
       </div>
     );
   }
+
+  // ============================================================
+  // ERROR PAGE
+  // ============================================================
 
   if (!profile && error) {
     return (
-      <div className="mx-auto max-w-3xl py-10">
-        <div className="rounded-2xl border border-sky-200 bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-          <div className="flex items-center gap-3 text-[#0B1220]">
-            <AlertCircle size={20} />
-            <h2 className="text-[15px] font-semibold">
-              Profil tidak dapat dimuat
-            </h2>
-          </div>
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+        <AlertCircle className="h-8 w-8 text-rose-500" />
 
-          <p className="mt-2 text-[13px] text-slate-600">{error}</p>
+        <h2 className="mt-4 text-lg font-semibold text-slate-900">
+          Profil tidak dapat dimuat
+        </h2>
 
-          <button
-            onClick={loadData}
-            className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942]"
-          >
-            <RefreshCw size={14} />
-            Coba Lagi
-          </button>
-        </div>
+        <p className="mt-2 text-sm text-slate-500">
+          {error}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => loadData()}
+          className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+        >
+          Coba Lagi
+        </button>
       </div>
     );
   }
 
-  const verified =
-    profile?.verified === 1 ||
-    profile?.verified === true ||
-    profile?.verified === "1";
+  // ============================================================
+  // MAIN UI
+  // ============================================================
 
   return (
-    <div className="w-full min-w-0 text-[#0B1220]">
-      <div className="relative mb-6 overflow-hidden rounded-2xl border border-white/60 bg-gradient-to-br from-[#0B1220] via-[#1B2942] to-[#2F3F63] p-6 shadow-[0_8px_32px_rgba(11,18,32,0.18)] sm:p-8">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 left-1/3 h-56 w-56 rounded-full bg-sky-400/15 blur-3xl" />
-
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.06]"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
-            backgroundSize: "32px 32px",
-          }}
-        />
-
-        <div className="relative">
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="w-full min-w-0 space-y-6"
+    >
+      {/* HEADER */}
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
             <span>Organizer</span>
-            <ChevronRight size={12} className="text-white/30" />
-            <span className="text-white/90">Profil</span>
+            <span>/</span>
+            <span className="text-sky-600">Profil Saya</span>
           </div>
 
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-medium text-white/80 backdrop-blur">
-                <Sparkles size={12} className="text-sky-300" />
-                Organizer Account
-              </div>
-              <h1 className="mt-3 text-[26px] font-semibold leading-tight tracking-[-0.02em] text-white sm:text-[32px]">
-                Profil Event Organizer
-              </h1>
-              <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-white/60">
-                Kelola informasi akun, pantau status verifikasi, dan lihat
-                ringkasan aktivitas event Anda dalam satu dashboard.
-              </p>
-            </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+            Profil Saya
+          </h1>
 
-            <div className="flex items-center gap-2.5">
-              <button
-                type="button"
-                onClick={loadData}
-                disabled={loading}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.08] px-3.5 text-[13px] font-semibold text-white backdrop-blur transition hover:bg-white/[0.14] disabled:opacity-60"
-              >
-                <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-                <span className="hidden sm:inline">Refresh</span>
-              </button>
-
-              {!editing && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    setSuccess("");
-                    setEditing(true);
-                  }}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-white px-4 text-[13px] font-semibold text-[#0B1220] shadow-lg shadow-black/10 transition hover:bg-slate-100"
-                >
-                  <Pencil size={15} />
-                  Edit Profil
-                </button>
-              )}
-            </div>
-          </div>
+          <p className="mt-2 text-sm text-slate-500">
+            Kelola informasi akun dan profil organizer kamu.
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => loadData(true)}
+          disabled={refreshing}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+        >
+          <RefreshCw
+            size={15}
+            className={refreshing ? "animate-spin" : ""}
+          />
+
+          {refreshing ? "Memuat..." : "Refresh"}
+        </button>
       </div>
 
-      {error && (
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
-          <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-600" />
-          <p className="text-[12.5px] leading-5 text-rose-700">{error}</p>
+      {/* ALERT */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+          >
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p>{error}</p>
+          </motion.div>
+        )}
+
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
+          >
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            <p>{success}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PROFILE HERO */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="relative h-32 overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-sky-900 sm:h-40">
+          <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-sky-400/20 blur-3xl" />
+          <div className="absolute -bottom-16 left-1/4 h-48 w-48 rounded-full bg-sky-500/20 blur-3xl" />
         </div>
-      )}
 
-      {success && (
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-          <CheckCircle2
-            size={16}
-            className="mt-0.5 shrink-0 text-emerald-600"
-          />
-          <p className="text-[12.5px] leading-5 text-emerald-700">{success}</p>
-        </div>
-      )}
-
-      <div className="relative mb-6 overflow-hidden rounded-2xl border border-sky-200/80 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-        <div className="h-24 bg-gradient-to-r from-[#0B1220] via-[#1B2942] to-[#2F3F63] sm:h-28" />
-
-        <div className="px-5 pb-5 sm:px-7">
-          <div className="-mt-12 flex flex-col gap-5 md:-mt-14 md:flex-row md:items-end md:justify-between">
+        <div className="px-5 pb-6 sm:px-8">
+          <div className="-mt-14 flex flex-col gap-5 sm:-mt-16 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-[#0B1220]/[0.06] text-2xl font-bold text-[#0B1220] shadow-md">
-                {profile?.avatar ? (
+              <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl border-4 border-white bg-slate-100 shadow-lg sm:h-32 sm:w-32">
+                {currentPhoto && !photoLoadError ? (
                   <img
-                    src={getImageUrl(profile.avatar)}
+                    key={currentPhoto}
+                    src={currentPhoto}
                     alt="Foto profil organizer"
                     className="h-full w-full object-cover"
-                    onError={(event) => {
-                      event.currentTarget.style.display = "none";
-                    }}
+                    onError={() => setPhotoLoadError(true)}
                   />
                 ) : (
-                  getInitials(profile?.fullname)
+                  <div className="flex h-full w-full items-center justify-center bg-slate-100 text-3xl font-bold text-slate-600">
+                    {getInitials(profile?.fullname)}
+                  </div>
+                )}
+
+                {editing && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition hover:opacity-100"
+                    title="Ganti foto profil"
+                  >
+                    <Camera size={25} />
+                  </button>
                 )}
               </div>
 
               <div className="pb-1">
-                <h2 className="text-[18px] font-semibold tracking-[-0.01em] text-[#0B1220] sm:text-[20px]">
-                  {profile?.fullname || "Event Organizer"}
+                <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">
+                  {profile?.fullname || "Organizer"}
                 </h2>
 
-                <p className="mt-0.5 text-[12.5px] text-slate-500">
-                  {profile?.organization_name ||
-                    "Nama organisasi belum diatur"}
+                <p className="mt-1 text-sm text-slate-500">
+                  {profile?.email || "-"}
                 </p>
 
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10.5px] font-semibold text-sky-700">
-                    <UserRound size={12} />
-                    Event Organizer
-                  </span>
-
-                  {verified ? (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-700">
-                      <ShieldCheck size={12} />
-                      Terverifikasi
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-semibold text-amber-700">
-                      <ShieldAlert size={12} />
-                      Belum Terverifikasi
-                    </span>
-                  )}
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                  <ShieldCheck size={13} />
+                  Event Organizer
                 </div>
               </div>
             </div>
+
+            {!editing && (
+              <button
+                type="button"
+                onClick={() => {
+                  isEditingRef.current = true;
+
+                  setEditing(true);
+                  setError("");
+                  setSuccess("");
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                <Pencil size={15} />
+                Edit Profil
+              </button>
+            )}
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleSelectPhoto}
+            className="hidden"
+          />
+
+          {editing && (
+            <div className="mt-5 rounded-xl border border-dashed border-sky-200 bg-sky-50/50 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-white p-2.5 text-sky-600">
+                    <ImagePlus size={20} />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Foto Profil
+                    </p>
+
+                    <p className="text-xs text-slate-500">
+                      JPG, PNG, WEBP. Maksimal 5 MB.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-lg border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                >
+                  Pilih Foto
+                </button>
+              </div>
+
+              {selectedFile && (
+                <p className="mt-3 text-xs font-medium text-sky-700">
+                  Foto dipilih: {selectedFile.name}
+                </p>
+              )}
+
+              {uploadError && (
+                <p className="mt-2 text-xs text-rose-600">
+                  {uploadError}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Total Event"
-          value={stats.totalEvents ?? events.length}
-          hint="Seluruh event terdaftar"
-          icon={Ticket}
-        />
-        <StatCard
-          label="Event Mendatang"
-          value={stats.upcoming}
-          hint="Event dengan tanggal mendatang"
-          icon={CalendarDays}
-        />
-        <StatCard
-          label="Menunggu Persetujuan"
-          value={stats.pending ?? approvalCounts.pending}
-          hint="Dalam review Super Admin"
-          icon={Hourglass}
-        />
-        <StatCard
-          label="Event Disetujui"
-          value={stats.approved ?? approvalCounts.approved}
-          hint="Event yang telah disetujui"
-          icon={CheckCircle2}
-        />
+      {/* STATISTICS */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <motion.div
+              key={item.label}
+              whileHover={{ y: -3 }}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-600">
+                <Icon size={20} />
+              </div>
+
+              <p className="mt-4 text-xs font-medium uppercase tracking-wide text-slate-400">
+                {item.label}
+              </p>
+
+              <h3 className="mt-1 break-words text-xl font-bold text-slate-900">
+                {item.value}
+              </h3>
+
+              <p className="mt-1 text-xs text-slate-400">
+                {item.description}
+              </p>
+            </motion.div>
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <SectionCard
-            icon={UserRound}
-            title="Informasi Profil"
-            description="Informasi akun dan organisasi Anda."
+      {/* TABS */}
+      <div className="border-b border-slate-200">
+        <div className="flex gap-6">
+          <button
+            type="button"
+            onClick={() => setActiveTab("profile")}
+            className={`border-b-2 pb-3 text-sm font-semibold ${
+              activeTab === "profile"
+                ? "border-sky-600 text-sky-700"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
           >
-            {editing ? (
-              <form onSubmit={handleSave} className="space-y-5">
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div>
-                    <label className="mb-1.5 block text-[12.5px] font-semibold text-slate-700">
-                      Nama Lengkap <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      name="fullname"
-                      value={form.fullname}
-                      onChange={handleChange}
-                      required
-                      maxLength={150}
-                      placeholder="Masukkan nama lengkap"
-                      className={inputClass}
-                    />
-                  </div>
+            Informasi Profil
+          </button>
 
-                  <div>
-                    <label className="mb-1.5 block text-[12.5px] font-semibold text-slate-700">
-                      Nama Organisasi
-                    </label>
-                    <input
-                      name="organization_name"
-                      value={form.organization_name}
-                      onChange={handleChange}
-                      maxLength={150}
-                      placeholder="Nama perusahaan/organisasi"
-                      className={inputClass}
-                    />
-                  </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab("events")}
+            className={`border-b-2 pb-3 text-sm font-semibold ${
+              activeTab === "events"
+                ? "border-sky-600 text-sky-700"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Event Saya ({events.length})
+          </button>
+        </div>
+      </div>
 
-                  <div>
-                    <label className="mb-1.5 block text-[12.5px] font-semibold text-slate-700">
-                      Nomor Telepon
-                    </label>
-                    <input
-                      name="phone"
-                      value={form.phone}
-                      onChange={handleChange}
-                      maxLength={30}
-                      placeholder="Contoh: 081234567890"
-                      className={inputClass}
-                    />
-                  </div>
+      {/* PROFILE FORM */}
+      {activeTab === "profile" && (
+        <form onSubmit={handleSaveProfile}>
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+            <div className="mb-6">
+              <h3 className="text-base font-semibold text-slate-900">
+                Informasi Pribadi
+              </h3>
 
-                  <div>
-                    <label className="mb-1.5 block text-[12.5px] font-semibold text-slate-700">
-                      Email Akun
-                    </label>
-                    <input
-                      value={profile?.email || ""}
-                      disabled
-                      className="h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-50 px-3.5 text-[13px] text-slate-500"
-                    />
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      Email akun tidak dapat diubah dari halaman ini.
-                    </p>
-                  </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Informasi akun dan identitas organizer.
+              </p>
+            </div>
 
-                  <div className="md:col-span-2">
-                    <label className="mb-1.5 block text-[12.5px] font-semibold text-slate-700">
-                      Alamat
-                    </label>
-                    <textarea
-                      name="address"
-                      value={form.address}
-                      onChange={handleChange}
-                      rows={3}
-                      maxLength={500}
-                      placeholder="Masukkan alamat organisasi"
-                      className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-[#0B1220]/40 focus:ring-4 focus:ring-[#0B1220]/[0.06]"
-                    />
-                  </div>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <FormField
+                label="Nama Lengkap"
+                icon={<UserRound size={16} />}
+              >
+                <input
+                  type="text"
+                  name="fullname"
+                  value={form.fullname}
+                  onChange={handleChange}
+                  disabled={!editing}
+                  required
+                  placeholder="Masukkan nama lengkap"
+                  className={inputClass}
+                />
+              </FormField>
 
-                  <div className="md:col-span-2">
-                    <label className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-700">
-                      <Camera size={13} />
-                      URL Foto Profil
-                    </label>
-                    <input
-                      name="avatar"
-                      type="url"
-                      value={form.avatar}
-                      onChange={handleChange}
-                      placeholder="https://example.com/foto.jpg"
-                      className={inputClass}
-                    />
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      Masukkan URL gambar yang dapat diakses publik.
-                    </p>
+              <FormField
+                label="Email"
+                icon={<Mail size={16} />}
+              >
+                <input
+                  type="email"
+                  value={form.email}
+                  disabled
+                  className={`${inputClass} bg-slate-50`}
+                />
 
-                    {form.avatar && (
-                      <div className="mt-3 flex items-center gap-3">
-                        <img
-                          src={getImageUrl(form.avatar)}
-                          alt="Preview avatar"
-                          className="h-12 w-12 rounded-lg border border-slate-200 object-cover"
-                        />
-                        <span className="text-[11.5px] text-slate-500">
-                          Preview foto profil
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  Email akun tidak dapat diubah.
+                </p>
+              </FormField>
+
+              <FormField
+                label="Nomor Telepon"
+                icon={<Phone size={16} />}
+              >
+                <input
+                  type="tel"
+                  name="phone"
+                  value={form.phone}
+                  onChange={handleChange}
+                  disabled={!editing}
+                  placeholder="Contoh: 081234567890"
+                  className={inputClass}
+                />
+              </FormField>
+
+              <FormField
+                label="Jenis Kelamin"
+                icon={<UserRound size={16} />}
+              >
+                <select
+                  name="gender"
+                  value={form.gender}
+                  onChange={handleChange}
+                  disabled={!editing}
+                  className={inputClass}
+                >
+                  <option value="">Pilih jenis kelamin</option>
+                  <option value="Laki-laki">Laki-laki</option>
+                  <option value="Perempuan">Perempuan</option>
+                </select>
+              </FormField>
+
+              <FormField
+                label="Tanggal Lahir"
+                icon={<CalendarDays size={16} />}
+              >
+                <input
+                  type="date"
+                  name="birth_date"
+                  value={form.birth_date}
+                  onChange={handleChange}
+                  disabled={!editing}
+                  className={inputClass}
+                />
+              </FormField>
+
+              <FormField
+                label="Nama Organisasi"
+                icon={<Building2 size={16} />}
+              >
+                <input
+                  type="text"
+                  name="organization_name"
+                  value={form.organization_name}
+                  onChange={handleChange}
+                  disabled={!editing}
+                  placeholder="Nama organisasi atau perusahaan"
+                  className={inputClass}
+                />
+              </FormField>
+
+              <div className="md:col-span-2">
+                <label className="mb-2 block text-xs font-semibold text-slate-700">
+                  Alamat
+                </label>
+
+                <div className="relative">
+                  <MapPin
+                    size={16}
+                    className="absolute left-3 top-3 text-slate-400"
+                  />
+
+                  <textarea
+                    name="address"
+                    value={form.address}
+                    onChange={handleChange}
+                    disabled={!editing}
+                    rows={3}
+                    placeholder="Masukkan alamat lengkap"
+                    className={`${inputClass} resize-none`}
+                  />
                 </div>
+              </div>
+            </div>
 
-                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={cancelEdit}
-                    disabled={saving}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
-                  >
-                    <X size={14} />
-                    Batal
-                  </button>
+            <div className="mt-8 border-t border-slate-100 pt-6">
+              <h3 className="text-base font-semibold text-slate-900">
+                Informasi Akun
+              </h3>
 
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#0B1220] px-3.5 text-[13px] font-semibold text-white transition hover:bg-[#1B2942] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {saving ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin" />
-                        Menyimpan...
-                      </>
-                    ) : (
-                      <>
-                        <Save size={14} />
-                        Simpan Perubahan
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <InfoItem
-                  icon={UserRound}
-                  label="Nama Lengkap"
-                  value={profile?.fullname}
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <InfoBox
+                  label="Role Akun"
+                  value={String(
+                    profile?.role || "event_organizer"
+                  ).replace(/_/g, " ")}
                 />
-                <InfoItem
-                  icon={AtSign}
-                  label="Username"
-                  value={profile?.username}
-                />
-                <InfoItem icon={Mail} label="Email" value={profile?.email} />
-                <InfoItem
-                  icon={Phone}
-                  label="Nomor Telepon"
-                  value={profile?.phone}
-                />
-                <InfoItem
-                  icon={Building2}
-                  label="Nama Organisasi"
-                  value={profile?.organization_name}
-                />
-                <InfoItem
-                  icon={MapPin}
-                  label="Alamat"
-                  value={profile?.address}
-                />
-                <InfoItem
-                  icon={CalendarDays}
+
+                <InfoBox
                   label="Bergabung Sejak"
                   value={formatDate(profile?.created_at)}
                 />
-                <InfoItem
-                  icon={ShieldCheck}
-                  label="Status Akun"
-                  value={verified ? "Terverifikasi" : "Belum Terverifikasi"}
-                />
+              </div>
+            </div>
+
+            {editing && (
+              <div className="mt-8 flex flex-col-reverse justify-end gap-3 border-t border-slate-100 pt-6 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <X size={15} />
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2
+                        size={15}
+                        className="animate-spin"
+                      />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      Simpan Perubahan
+                    </>
+                  )}
+                </button>
               </div>
             )}
-          </SectionCard>
-        </div>
+          </div>
+        </form>
+      )}
 
-        <aside className="space-y-6">
-          <SectionCard icon={ShieldCheck} title="Status Organizer">
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-11 w-11 items-center justify-center rounded-lg ring-1 ${
-                  verified
-                    ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
-                    : "bg-amber-50 text-amber-600 ring-amber-100"
-                }`}
-              >
-                {verified ? (
-                  <ShieldCheck size={20} />
-                ) : (
-                  <ShieldAlert size={20} />
-                )}
-              </div>
+      {/* EVENTS */}
+      {activeTab === "events" && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+          <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">
+                Event Saya
+              </h3>
 
-              <div>
-                <p className="text-[13px] font-semibold text-slate-900">
-                  {verified ? "Akun Terverifikasi" : "Belum Terverifikasi"}
-                </p>
-                <p className="mt-0.5 text-[11.5px] text-slate-500">
-                  Status verifikasi dari sistem.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-lg border border-sky-100 bg-sky-50/50 p-3">
-              <p className="text-[11.5px] leading-5 text-slate-600">
-                {verified
-                  ? "Akun organizer Anda telah terverifikasi. Anda dapat mengelola event dan mengajukan penerbitan ke publik."
-                  : "Lengkapi informasi organisasi dan ikuti proses verifikasi yang ditetapkan administrator."}
+              <p className="mt-1 text-xs text-slate-400">
+                Daftar event yang telah kamu buat.
               </p>
             </div>
-          </SectionCard>
-
-          <SectionCard icon={Ticket} title="Ringkasan Persetujuan">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2.5">
-                <span className="flex items-center gap-2 text-[12px] font-semibold text-emerald-700">
-                  <CheckCircle2 size={14} />
-                  Disetujui
-                </span>
-                <strong className="text-[15px] font-semibold text-emerald-800">
-                  {formatNumber(stats.approved ?? approvalCounts.approved)}
-                </strong>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50/60 px-3 py-2.5">
-                <span className="flex items-center gap-2 text-[12px] font-semibold text-amber-700">
-                  <Hourglass size={14} />
-                  Menunggu
-                </span>
-                <strong className="text-[15px] font-semibold text-amber-800">
-                  {formatNumber(stats.pending ?? approvalCounts.pending)}
-                </strong>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-rose-100 bg-rose-50/60 px-3 py-2.5">
-                <span className="flex items-center gap-2 text-[12px] font-semibold text-rose-700">
-                  <XCircle size={14} />
-                  Ditolak
-                </span>
-                <strong className="text-[15px] font-semibold text-rose-800">
-                  {formatNumber(stats.rejected ?? approvalCounts.rejected)}
-                </strong>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                <span className="flex items-center gap-2 text-[12px] font-semibold text-slate-600">
-                  <Pencil size={14} />
-                  Draft
-                </span>
-                <strong className="text-[15px] font-semibold text-slate-700">
-                  {formatNumber(approvalCounts.draft)}
-                </strong>
-              </div>
-            </div>
 
             <Link
-              href="/organizer/event"
-              className="mt-4 flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#0B1220] px-3.5 text-[12.5px] font-semibold text-white transition hover:bg-[#1B2942]"
+              href="/organizer/events"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800"
             >
               Kelola Event
-              <ArrowUpRight size={14} />
+              <ChevronRight size={14} />
             </Link>
-          </SectionCard>
-        </aside>
-      </div>
-
-      <section className="mt-6 overflow-hidden rounded-2xl border border-sky-200/80 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-        <div className="flex flex-col justify-between gap-3 border-b border-sky-100 bg-gradient-to-b from-sky-50/50 to-white px-5 py-4 sm:flex-row sm:items-center">
-          <div>
-            <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-[#0B1220]">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-sky-50 text-sky-600 ring-1 ring-sky-100">
-                <Layers size={13} />
-              </span>
-              Event Saya
-            </h2>
-            <p className="mt-0.5 text-[12.5px] text-slate-500">
-              Daftar event yang dibuat menggunakan akun ini.
-            </p>
           </div>
 
-          <Link
-            href="/organizer/event"
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#0B1220] px-3.5 text-[12.5px] font-semibold text-white transition hover:bg-[#1B2942]"
-          >
-            Lihat Semua Event
-            <ArrowUpRight size={14} />
-          </Link>
-        </div>
+          {events.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 px-5 py-14 text-center">
+              <Ticket size={30} className="text-slate-400" />
 
-        {events.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-sky-50 text-sky-600 ring-1 ring-sky-100">
-              <Sparkles size={22} />
+              <h4 className="mt-4 text-sm font-semibold text-slate-800">
+                Belum Ada Event
+              </h4>
+
+              <p className="mt-2 text-xs text-slate-400">
+                Event yang kamu buat akan ditampilkan di halaman ini.
+              </p>
+
+              <Link
+                href="/organizer/events/create"
+                className="mt-5 rounded-xl bg-slate-900 px-5 py-2.5 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                Buat Event
+              </Link>
             </div>
+          ) : (
+            <div className="space-y-3">
+              {events.map((event) => {
+                const status = getEventStatus(event.status);
 
-            <h3 className="mt-4 text-[15px] font-semibold text-slate-900">
-              Belum Ada Event
-            </h3>
-
-            <p className="mt-1.5 max-w-sm text-[13px] leading-relaxed text-slate-500">
-              Event yang Anda buat akan ditampilkan di sini. Mulai dengan
-              membuat event pertama Anda.
-            </p>
-
-            <Link
-              href="/organizer/event/tambah"
-              className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-[#0B1220] px-4 text-[13px] font-semibold text-white transition hover:bg-[#1B2942]"
-            >
-              Buat Event
-              <ArrowUpRight size={14} />
-            </Link>
-          </div>
-        ) : (
-          <div className="divide-y divide-sky-100">
-            {events.slice(0, 5).map((event) => {
-              const approval = getApprovalStyle(event.approval_status);
-              const ApprovalIcon = approval.icon;
-
-              return (
-                <div
-                  key={event.id}
-                  className="flex flex-col gap-3 px-5 py-4 transition hover:bg-sky-50/40 md:flex-row md:items-center md:justify-between"
-                >
-                  <div className="flex min-w-0 items-center gap-3.5">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-sky-50 ring-1 ring-sky-100">
+                return (
+                  <div
+                    key={event.id}
+                    className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 transition hover:border-sky-200 sm:flex-row"
+                  >
+                    <div className="h-36 w-full shrink-0 overflow-hidden rounded-xl bg-slate-100 sm:h-28 sm:w-40">
                       {event.poster ? (
                         <img
                           src={getImageUrl(event.poster)}
-                          alt={event.event_name}
+                          alt={event.event_name || "Poster event"}
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <Ticket size={20} className="text-sky-500" />
+                        <div className="flex h-full items-center justify-center text-slate-400">
+                          <Ticket size={28} />
+                        </div>
                       )}
                     </div>
 
-                    <div className="min-w-0">
-                      <h3 className="truncate text-[13.5px] font-semibold text-[#0B1220]">
-                        {event.event_name}
-                      </h3>
+                    <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-sm font-semibold text-slate-900">
+                            {event.event_name || "Tanpa Nama"}
+                          </h4>
 
-                      <p className="mt-0.5 truncate text-[11.5px] text-slate-500">
-                        {event.category_name || "Tanpa kategori"}
-                        {" · "}
-                        {event.venue_name || "Venue belum ditentukan"}
-                      </p>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${status.className}`}
+                          >
+                            {status.label}
+                          </span>
+                        </div>
 
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2.5 text-[11px] text-slate-500">
-                        <span className="inline-flex items-center gap-1">
-                          <CalendarDays size={12} />
-                          {formatDate(event.event_date)}
+                        <p className="mt-2 line-clamp-2 text-xs text-slate-500">
+                          {event.description ||
+                            "Tidak ada deskripsi event."}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-500">
+                          <span className="inline-flex items-center gap-1.5">
+                            <CalendarDays size={13} />
+                            {formatDate(event.event_date)}
+                          </span>
+
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock size={13} />
+                            {event.event_time || "-"}
+                          </span>
+
+                          <span className="inline-flex items-center gap-1.5">
+                            <MapPin size={13} />
+                            {event.venue_name || event.city || "-"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+                        <span>
+                          Tiket terjual:{" "}
+                          <strong className="text-slate-800">
+                            {formatNumber(event.sold_tickets)}
+                          </strong>
                         </span>
 
-                        {event.city && (
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin size={12} />
-                            {event.city}
-                          </span>
-                        )}
+                        <span>
+                          Sisa tiket:{" "}
+                          <strong className="text-slate-800">
+                            {formatNumber(event.remaining_ticket)}
+                          </strong>
+                        </span>
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}
 
-                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10.5px] font-semibold ${approval.className}`}
-                    >
-                      <ApprovalIcon size={12} />
-                      {approval.label}
-                    </span>
+// ============================================================
+// FORM COMPONENTS
+// ============================================================
 
-                    <Link
-                      href={`/organizer/event/${event.id}`}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11.5px] font-semibold text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
-                    >
-                      Detail
-                      <ArrowUpRight size={12} />
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+const inputClass =
+  "w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-[12.5px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-500";
 
-      <p className="pb-2 pt-6 text-center text-[11px] text-slate-400">
-        TicketVerse · Organizer Dashboard
+function FormField({ icon, label, children }) {
+  return (
+    <div>
+      <label className="mb-2 block text-xs font-semibold text-slate-700">
+        {label}
+      </label>
+
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          {icon}
+        </span>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function InfoBox({ label, value }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+      <p className="text-xs text-slate-400">{label}</p>
+
+      <p className="mt-1 text-sm font-semibold capitalize text-slate-800">
+        {value}
       </p>
     </div>
   );

@@ -206,11 +206,7 @@ export default function SidebarSuperAdmin() {
     {
       title: "Interaksi & Informasi",
       items: [
-        {
-          label: "Ulasan Konser",
-          href: "/superadmin/kelola-ulasan",
-          icon: Star,
-        },
+       
         {
           label: "Notifikasi",
           href: "/superadmin/kelola-notif",

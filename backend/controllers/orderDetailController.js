@@ -1,8 +1,6 @@
 const db = require("../config/db");
 
-// ===============================
-// GET SEMUA ORDER DETAILS
-// ===============================
+
 const getAllOrderDetails = async (req, res) => {
   try {
     const [rows] = await db.query(`
@@ -49,9 +47,7 @@ const getAllOrderDetails = async (req, res) => {
   }
 };
 
-// ===============================
-// GET ORDER DETAIL BERDASARKAN ID
-// ===============================
+
 const getOrderDetailById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -116,9 +112,7 @@ WHERE od.id = ?
   }
 };
 
-// ===============================
-// POST ORDER DETAIL
-// ===============================
+
 const createOrderDetail = async (req, res) => {
   try {
     const {
@@ -127,7 +121,6 @@ const createOrderDetail = async (req, res) => {
       quantity,
     } = req.body;
 
-    // Validasi
     if (
       !order_id ||
       !ticket_category_id ||
@@ -240,9 +233,7 @@ const createOrderDetail = async (req, res) => {
   }
 };
 
-// ===============================
-// UPDATE ORDER DETAIL
-// ===============================
+
 const updateOrderDetail = async (req, res) => {
   try {
     const { id } = req.params;
@@ -253,7 +244,6 @@ const updateOrderDetail = async (req, res) => {
       quantity,
     } = req.body;
 
-    // Cek detail
     const [details] = await db.query(
       `
       SELECT *
@@ -418,9 +408,7 @@ const updateOrderDetail = async (req, res) => {
   }
 };
 
-// ===============================
-// DELETE ORDER DETAIL
-// ===============================
+
 const deleteOrderDetail = async (req, res) => {
   try {
     const { id } = req.params;

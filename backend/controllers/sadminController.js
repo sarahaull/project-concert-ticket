@@ -1,7 +1,6 @@
 const db = require("../config/db");
 const bcrypt = require("bcryptjs");
 
-// Semua endpoint manajemen akun hanya boleh dipanggil super_admin.
 const getPlatformSummary = async (req, res) => {
   try {
     const [[users]] = await db.query(`
@@ -360,9 +359,7 @@ const getRecentTransactions = async (req, res) => {
   }
 };
 
-// ============================================================
-// DAFTAR EVENT UNTUK REVIEW SUPER ADMIN
-// ============================================================
+
 
 const getEventApprovals = async (req, res) => {
   try {
@@ -437,9 +434,7 @@ const getEventApprovals = async (req, res) => {
   }
 };
 
-// ============================================================
-// APPROVE / REJECT EVENT
-// ============================================================
+
 
 const reviewEvent = async (req, res) => {
   try {
@@ -542,9 +537,6 @@ const reviewEvent = async (req, res) => {
   }
 };
 
-// ============================================================
-// LAPORAN TRANSAKSI SUPER ADMIN
-// ============================================================
 
 const getReports = async (req, res) => {
   try {

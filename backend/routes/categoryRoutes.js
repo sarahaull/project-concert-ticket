@@ -10,19 +10,14 @@ const {
   deleteCategory,
 } = require("../controllers/categoryController");
 
-// Ambil semua kategori
 router.get("/", getCategories);
 
-// Ambil kategori berdasarkan ID
 router.get("/:id", getCategoryById);
 
-// Tambah kategori
 router.post("/", createCategory);
 
-// Update kategori
 router.put("/:id", updateCategory);
 
-// Hapus kategori
 router.delete("/:id", deleteCategory);
 
 module.exports = router;
