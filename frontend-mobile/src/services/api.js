@@ -5,7 +5,7 @@ import * as SecureStore from "expo-secure-store";
 
 export const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
-  "http://localhost:5000/api"
+  "http://192.168.1.8:5000/api"
 ).replace(/\/+$/, "");
 
 console.log("TICKETVERSE API:", API_BASE_URL);

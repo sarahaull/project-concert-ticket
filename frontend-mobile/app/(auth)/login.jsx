@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,11 +9,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Keyboard,
   Animated,
   Easing,
   Dimensions,
-  TouchableWithoutFeedback,
-  Keyboard,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,28 +22,44 @@ import { loginCustomer } from "../../src/services/auth.service";
 
 const { width, height } = Dimensions.get("window");
 
-/* ================= PREMIUM PALETTE ================= */
-const PREMIUM = {
-  midnight: "#0B132B",
-  midnightLight: "#1C2541",
-  royal: "#2563EB",
-  royalLight: "#EFF6FF",
-  platinum: "#F8FAFC",
-  silver: "#94A3B8",
-  silverLight: "#E2E8F0",
-  charcoal: "#1E293B",
+const COLORS = {
+  primary: "#1E3A8A",
+  primaryMid: "#1E40AF",
+  primaryBright: "#2563EB",
+  primaryGlow: "#3B82F6",
+  primarySoft: "#EFF6FF",
+  primaryRing: "#DBEAFE",
+
+  bg: "#FFFFFF",
+  bgSoft: "#F8FAFC",
+  bgTint: "#F1F5FB",
+
+  border: "#E5E9F0",
+  borderFocus: "#2563EB",
+
+  text: "#0F172A",
+  textMuted: "#64748B",
+  textSoft: "#94A3B8",
+  textOnDark: "#FFFFFF",
+  textOnDarkSoft: "rgba(255,255,255,0.75)",
+
   danger: "#DC2626",
+  dangerBg: "#FEF2F2",
+  dangerBorder: "#FECACA",
+
   white: "#FFFFFF",
 };
 
-/* ================= ANIMATION HELPERS ================= */
-function Reveal({ delay = 0, distance = 20, style, children }) {
-  const v = useRef(new Animated.Value(0)).current;
+const INPUT_HEIGHT = 56;
+const HERO_HEIGHT = height * 0.42;
+
+function FadeInOnser({ delay = 0, offset = 20, duration = 650, style, children }) {
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(v, {
+    Animated.timing(progress, {
       toValue: 1,
-      duration: 800,
+      duration,
       delay,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
@@ -56,12 +71,12 @@ function Reveal({ delay = 0, distance = 20, style, children }) {
       style={[
         style,
         {
-          opacity: v,
+          opacity: progress,
           transform: [
             {
-              translateY: v.interpolate({
+              translateY: progress.interpolate({
                 inputRange: [0, 1],
-                outputRange: [distance, 0],
+                outputRange: [offset, 0],
               }),
             },
           ],
@@ -73,63 +88,93 @@ function Reveal({ delay = 0, distance = 20, style, children }) {
   );
 }
 
-// Animasi Hujan Tiket
-function FallingTicket({ delay, startX, duration, size, rotationDir }) {
-  const translateY = useRef(new Animated.Value(-100)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+function ScaleIn({ delay = 0, duration = 500, style, children }) {
+  const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const fall = Animated.loop(
-      Animated.timing(translateY, {
-        toValue: height + 100,
-        duration: duration,
-        delay: delay,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    const spin = Animated.loop(
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: duration * 1.5,
-        delay: delay,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    fall.start();
-    spin.start();
-
-    return () => {
-      fall.stop();
-      spin.stop();
-    };
+    Animated.timing(progress, {
+      toValue: 1,
+      duration,
+      delay,
+      easing: Easing.out(Easing.back(1.4)),
+      useNativeDriver: true,
+    }).start();
   }, []);
 
-  const spin = rotateAnim.interpolate({
+  return (
+    <Animated.View
+      style={[
+        style,
+        {
+          opacity: progress.interpolate({
+            inputRange: [0, 0.5, 1],
+            outputRange: [0, 1, 1],
+          }),
+          transform: [
+            {
+              scale: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.85, 1],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+function FloatingOrb({ size, startX, startY, color, duration, delay }) {
+  const float = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(float, {
+          toValue: 1,
+          duration,
+          delay,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(float, {
+          toValue: 0,
+          duration,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const translateY = float.interpolate({
     inputRange: [0, 1],
-    outputRange: ["0deg", rotationDir === "right" ? "360deg" : "-360deg"],
+    outputRange: [0, -16],
   });
 
   return (
     <Animated.View
       pointerEvents="none"
       style={[
-        styles.fallingTicket,
+        styles.orb,
         {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: color,
           left: startX,
-          transform: [{ translateY }, { rotate: spin }],
+          top: startY,
+          transform: [{ translateY }],
         },
       ]}
-    >
-      <Ionicons name="ticket" size={size} color="rgba(37, 99, 235, 0.08)" />
-    </Animated.View>
+    />
   );
 }
 
-/* ================= MAIN SCREEN ================= */
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -139,16 +184,57 @@ export default function LoginPage() {
   const [isEmailFocused, setIsEmailFocused] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
-  const scaleValue = useRef(new Animated.Value(1)).current;
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
+
+  const emailFocus = useRef(new Animated.Value(0)).current;
+  const passwordFocus = useRef(new Animated.Value(0)).current;
+  const buttonScale = useRef(new Animated.Value(1)).current;
+
+  const animateFocus = (value, toValue) => {
+    Animated.timing(value, {
+      toValue,
+      duration: 200,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleEmailFocus = () => {
+    setIsEmailFocused(true);
+    animateFocus(emailFocus, 1);
+  };
+  const handleEmailBlur = () => {
+    setIsEmailFocused(false);
+    animateFocus(emailFocus, 0);
+  };
+  const handlePasswordFocus = () => {
+    setIsPasswordFocused(true);
+    animateFocus(passwordFocus, 1);
+  };
+  const handlePasswordBlur = () => {
+    setIsPasswordFocused(false);
+    animateFocus(passwordFocus, 0);
+  };
 
   const handlePressIn = () => {
-    Animated.spring(scaleValue, { toValue: 0.96, useNativeDriver: true }).start();
+    Animated.spring(buttonScale, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 4,
+    }).start();
   };
   const handlePressOut = () => {
-    Animated.spring(scaleValue, { toValue: 1, useNativeDriver: true }).start();
+    Animated.spring(buttonScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 6,
+    }).start();
   };
 
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     setError("");
     Keyboard.dismiss();
 
@@ -199,410 +285,593 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [email, password]);
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={styles.container}>
-        {/* 1. ANIMASI HUJAN TIKET */}
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-          <FallingTicket delay={0} startX={width * 0.1} duration={7000} size={30} rotationDir="right" />
-          <FallingTicket delay={1500} startX={width * 0.8} duration={9000} size={40} rotationDir="left" />
-          <FallingTicket delay={3000} startX={width * 0.4} duration={8000} size={25} rotationDir="right" />
-          <FallingTicket delay={5000} startX={width * 0.7} duration={10000} size={35} rotationDir="left" />
-        </View>
-
-        {/* 2. ORNAMEN BACKGROUND */}
-        <LinearGradient
-          colors={["#FFFFFF", PREMIUM.platinum, "#E2E8F0"]}
-          style={StyleSheet.absoluteFillObject}
-          pointerEvents="none"
-        />
-
-        <View style={styles.bgOrnament1} pointerEvents="none" />
-        <View style={styles.bgOrnament2} pointerEvents="none" />
-
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode="interactive"
-          >
-            <Reveal delay={100}>
-              <Pressable style={styles.back} onPress={() => router.replace("/")}>
-                <View style={styles.backCircle}>
-                  <Ionicons name="arrow-back" size={20} color={PREMIUM.midnight} />
-                </View>
-              </Pressable>
-            </Reveal>
+          <View style={styles.hero}>
+            <LinearGradient
+              colors={[COLORS.primary, COLORS.primaryMid, COLORS.primaryBright]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
 
-            <Reveal delay={200} style={styles.headerContainer}>
-              <LinearGradient
-                colors={[PREMIUM.midnight, PREMIUM.royal, "#3B82F6"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logo}
+            <FloatingOrb
+              size={150}
+              startX={-50}
+              startY={-40}
+              color="rgba(255,255,255,0.08)"
+              duration={3800}
+              delay={0}
+            />
+            <FloatingOrb
+              size={110}
+              startX={width - 120}
+              startY={30}
+              color="rgba(255,255,255,0.1)"
+              duration={4200}
+              delay={400}
+            />
+            <FloatingOrb
+              size={70}
+              startX={width * 0.5}
+              startY={-20}
+              color="rgba(96,165,250,0.4)"
+              duration={3400}
+              delay={800}
+            />
+
+            <View style={styles.heroCurve} pointerEvents="none" />
+
+            <FadeInOnser delay={0} offset={8}>
+              <Pressable
+                style={styles.back}
+                onPress={() => router.replace("/")}
+                hitSlop={12}
               >
-                <Ionicons name="ticket" size={32} color={PREMIUM.white} />
-              </LinearGradient>
-              <Text style={styles.title}>Welcome Back</Text>
-              <Text style={styles.subtitle}>
-                Masuk ke akun TicketVerse untuk melanjutkan pengalaman event-mu.
-              </Text>
-            </Reveal>
-
-            {/* ================= FORM CARD ================= */}
-            <Reveal delay={250} style={styles.formCardWrapper}>
-              <View style={styles.formCard}>
-                <View style={styles.form}>
-                  
-                  {/* INPUT EMAIL */}
-                  <Reveal delay={300}>
-                    <Text style={styles.label}>Email Address</Text>
-                    <View
-                      style={[
-                        styles.inputWrapper,
-                        isEmailFocused && styles.inputWrapperFocused,
-                      ]}
-                    >
-                      <Ionicons
-                        name="mail-outline"
-                        size={20}
-                        color={isEmailFocused ? PREMIUM.royal : PREMIUM.silver}
-                      />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Masukkan email"
-                        placeholderTextColor="#9CA3AF"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        editable={!loading}
-                        onFocus={() => setIsEmailFocused(true)}
-                        onBlur={() => setIsEmailFocused(false)}
-                      />
-                    </View>
-                  </Reveal>
-
-                  {/* INPUT PASSWORD */}
-                  <Reveal delay={350}>
-                    <Text style={styles.label}>Password</Text>
-                    <View
-                      style={[
-                        styles.inputWrapper,
-                        isPasswordFocused && styles.inputWrapperFocused,
-                      ]}
-                    >
-                      <Ionicons
-                        name="lock-closed-outline"
-                        size={20}
-                        color={isPasswordFocused ? PREMIUM.royal : PREMIUM.silver}
-                      />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Masukkan password"
-                        placeholderTextColor="#9CA3AF"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={!showPassword}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        autoComplete="password"
-                        textContentType="password"
-                        editable={!loading}
-                        onFocus={() => setIsPasswordFocused(true)}
-                        onBlur={() => setIsPasswordFocused(false)}
-                      />
-                      <Pressable
-                        onPress={() => setShowPassword(!showPassword)}
-                        disabled={loading}
-                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-                      >
-                        <Ionicons
-                          name={showPassword ? "eye-off-outline" : "eye-outline"}
-                          size={22}
-                          color={isPasswordFocused ? PREMIUM.royal : PREMIUM.silver}
-                        />
-                      </Pressable>
-                    </View>
-                  </Reveal>
-
-                  <Reveal delay={400}>
-                    <Pressable
-                      style={styles.forgot}
-                      onPress={() => router.push("/(auth)/forgot-password")}
-                    >
-                      <Text style={styles.forgotText}>Lupa password?</Text>
-                    </Pressable>
-                  </Reveal>
-
-                  {error ? (
-                    <Reveal delay={0} distance={10}>
-                      <View style={styles.errorBox}>
-                        <Ionicons name="alert-circle" size={18} color={PREMIUM.danger} />
-                        <Text style={styles.errorText}>{error}</Text>
-                      </View>
-                    </Reveal>
-                  ) : null}
-
-                  <Reveal delay={450}>
-                    <Animated.View style={{ transform: [{ scale: scaleValue }], marginTop: 24 }}>
-                      <Pressable
-                        onPressIn={handlePressIn}
-                        onPressOut={handlePressOut}
-                        onPress={handleLogin}
-                        disabled={loading}
-                      >
-                        <LinearGradient
-                          colors={loading ? ["#94A3B8", "#64748B"] : [PREMIUM.midnight, PREMIUM.royal]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={styles.button}
-                        >
-                          {loading ? (
-                            <ActivityIndicator color={PREMIUM.white} />
-                          ) : (
-                            <>
-                              <Text style={styles.buttonText}>Masuk</Text>
-                              <Ionicons name="arrow-forward" size={20} color={PREMIUM.white} />
-                            </>
-                          )}
-                        </LinearGradient>
-                      </Pressable>
-                    </Animated.View>
-                  </Reveal>
-
+                <View style={styles.backCircle}>
+                  <Ionicons name="arrow-back" size={20} color={COLORS.white} />
                 </View>
-              </View>
-            </Reveal>
-
-            <Reveal delay={600} style={styles.registerRow}>
-              <Text style={styles.registerText}>Belum memiliki akun? </Text>
-              <Pressable onPress={() => router.push("/(auth)/register")}>
-                <Text style={styles.registerLink}>Daftar sekarang</Text>
               </Pressable>
-            </Reveal>
+            </FadeInOnser>
 
-            <Reveal delay={700}>
-              <Text style={styles.footer}>© 2026 TicketVerse. All rights reserved.</Text>
-            </Reveal>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-    </TouchableWithoutFeedback>
+            <FadeInOnser delay={120} offset={22}>
+              <View style={styles.heroContent}>
+                <View style={styles.brandRow}>
+                  <ScaleIn delay={180} duration={500}>
+                    <View style={styles.brandIcon}>
+                      <Ionicons
+                        name="ticket"
+                        size={22}
+                        color={COLORS.primaryBright}
+                      />
+                    </View>
+                  </ScaleIn>
+                  <Text style={styles.brandText}>TicketVerse</Text>
+                </View>
+
+                <Text style={styles.heroTitle}>Selamat datang kembali</Text>
+                <Text style={styles.heroSubtitle}>
+                  Masuk untuk melanjutkan perjalanan event-mu.
+                </Text>
+              </View>
+            </FadeInOnser>
+          </View>
+
+          <View style={styles.cardWrap}>
+            <FadeInOnser delay={220} offset={40} duration={720}>
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>Masuk</Text>
+                  <View style={styles.secureBadge}>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={12}
+                      color={COLORS.primaryBright}
+                    />
+                    <Text style={styles.secureText}>Aman</Text>
+                  </View>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Email</Text>
+                  <Animated.View
+                    style={[
+                      styles.inputWrapper,
+                      {
+                        borderColor: emailFocus.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [COLORS.border, COLORS.borderFocus],
+                        }),
+                        backgroundColor: emailFocus.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [COLORS.bgSoft, COLORS.white],
+                        }),
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="mail-outline"
+                      size={18}
+                      color={
+                        isEmailFocused ? COLORS.primaryMid : COLORS.textSoft
+                      }
+                    />
+                    <TextInput
+                      ref={emailRef}
+                      style={styles.input}
+                      placeholder="nama@email.com"
+                      placeholderTextColor={COLORS.textSoft}
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      onFocus={handleEmailFocus}
+                      onBlur={handleEmailBlur}
+                      selectionColor={COLORS.primaryMid}
+                      cursorColor={COLORS.primaryMid}
+                      underlineColorAndroid="transparent"
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => passwordRef.current?.focus()}
+                      autoComplete="email"
+                      textContentType="emailAddress"
+                      importantForAutofill="no"
+                      allowFontScaling={false}
+                      testID="login-email-input"
+                    />
+                  </Animated.View>
+                </View>
+
+                <View style={styles.field}>
+                  <View style={styles.labelRow}>
+                    <Text style={styles.label}>Password</Text>
+                    <Pressable
+                      onPress={() => router.push("/(auth)/forgot-password")}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.labelLink}>Lupa?</Text>
+                    </Pressable>
+                  </View>
+                  <Animated.View
+                    style={[
+                      styles.inputWrapper,
+                      {
+                        borderColor: passwordFocus.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [COLORS.border, COLORS.borderFocus],
+                        }),
+                        backgroundColor: passwordFocus.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [COLORS.bgSoft, COLORS.white],
+                        }),
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="lock-closed-outline"
+                      size={18}
+                      color={
+                        isPasswordFocused ? COLORS.primaryMid : COLORS.textSoft
+                      }
+                    />
+                    <TextInput
+                      ref={passwordRef}
+                      style={styles.input}
+                      placeholder="Masukkan password"
+                      placeholderTextColor={COLORS.textSoft}
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      onFocus={handlePasswordFocus}
+                      onBlur={handlePasswordBlur}
+                      selectionColor={COLORS.primaryMid}
+                      cursorColor={COLORS.primaryMid}
+                      underlineColorAndroid="transparent"
+                      returnKeyType="done"
+                      blurOnSubmit={false}
+                      onSubmitEditing={handleLogin}
+                      autoComplete="password"
+                      textContentType="password"
+                      importantForAutofill="no"
+                      allowFontScaling={false}
+                      testID="login-password-input"
+                    />
+                    <Pressable
+                      onPress={() => setShowPassword((v) => !v)}
+                      hitSlop={12}
+                    >
+                      <Ionicons
+                        name={showPassword ? "eye-off-outline" : "eye-outline"}
+                        size={20}
+                        color={COLORS.textSoft}
+                      />
+                    </Pressable>
+                  </Animated.View>
+                </View>
+
+                {error ? (
+                  <View style={styles.errorBox}>
+                    <Ionicons
+                      name="alert-circle"
+                      size={16}
+                      color={COLORS.danger}
+                    />
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                ) : null}
+
+                <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
+                  <Pressable
+                    onPress={handleLogin}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    disabled={loading}
+                  >
+                    <LinearGradient
+                      colors={
+                        loading
+                          ? ["#93C5FD", "#60A5FA"]
+                          : [
+                              COLORS.primaryMid,
+                              COLORS.primaryBright,
+                              COLORS.primaryGlow,
+                            ]
+                      }
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.button}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color={COLORS.white} />
+                      ) : (
+                        <>
+                          <Text style={styles.buttonText}>Masuk</Text>
+                          <Ionicons
+                            name="arrow-forward"
+                            size={18}
+                            color={COLORS.white}
+                          />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </Pressable>
+                </Animated.View>
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.divider} />
+                  <Text style={styles.dividerText}>atau</Text>
+                  <View style={styles.divider} />
+                </View>
+
+                <Pressable
+                  onPress={() => router.push("/(auth)/register")}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={styles.secondaryText}>
+                    Belum punya akun?{" "}
+                    <Text style={styles.secondaryLink}>Daftar</Text>
+                  </Text>
+                </Pressable>
+              </View>
+            </FadeInOnser>
+          </View>
+
+          <FadeInOnser delay={420} offset={12}>
+            <View style={styles.trustRow}>
+              <Ionicons
+                name="lock-closed"
+                size={11}
+                color={COLORS.textSoft}
+              />
+              <Text style={styles.trustText}>
+                Data kamu terenkripsi & aman
+              </Text>
+            </View>
+            <Text style={styles.copyright}>© 2026 TicketVerse</Text>
+          </FadeInOnser>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: PREMIUM.platinum,
-  },
-  keyboardView: {
-    flex: 1,
+    backgroundColor: COLORS.bg,
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
-    paddingTop: 60, 
-    paddingBottom: 120, // Padding bawah diperbesar agar form bisa naik saat keyboard muncul
-    justifyContent: "flex-start", 
+    paddingBottom: 60,
   },
 
-  fallingTicket: {
+  hero: {
+    height: HERO_HEIGHT,
+    minHeight: 260,
+    paddingHorizontal: 24,
+    paddingTop: 52,
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+    overflow: "hidden",
+    position: "relative",
+  },
+  heroCurve: {
     position: "absolute",
-    top: -100,
-    zIndex: 0,
-  },
-
-  bgOrnament1: {
-    position: "absolute",
-    top: -100,
-    right: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: "rgba(37, 99, 235, 0.04)",
-  },
-  bgOrnament2: {
-    position: "absolute",
-    bottom: -50,
-    left: -80,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: "rgba(11, 19, 43, 0.03)",
-  },
-
-  back: { marginBottom: 24, alignSelf: "flex-start" },
-  backCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: PREMIUM.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: PREMIUM.silverLight,
-  },
-  
-  headerContainer: { marginBottom: 30 },
-  logo: {
-    width: 72,
-    height: 72,
-    borderRadius: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 24,
-    shadowColor: PREMIUM.royal,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  title: { 
-    fontSize: 34, 
-    color: PREMIUM.midnight, 
-    fontWeight: "900", 
-    letterSpacing: -1.2,
-    lineHeight: 42,
-  },
-  subtitle: { 
-    fontSize: 15, 
-    lineHeight: 24, 
-    color: "#64748B", 
-    marginTop: 12,
-    maxWidth: 320,
-    fontWeight: "500",
-  },
-
-  formCardWrapper: {
-    shadowColor: PREMIUM.midnight,
-    shadowOffset: { width: 0, height: 24 },
-    shadowOpacity: 0.06,
-    shadowRadius: 32,
-    elevation: 10,
-    zIndex: 2,
-  },
-  formCard: {
-    backgroundColor: PREMIUM.white,
-    borderRadius: 32,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: "#F1F5F9",
-  },
-
-  form: { marginTop: -5 },
-  label: { 
-    fontSize: 13, 
-    fontWeight: "800", 
-    color: PREMIUM.midnight, 
-    marginBottom: 10, 
-    marginTop: 18, 
-    letterSpacing: 0.3,
-  },
-  inputWrapper: {
+    bottom: -30,
+    left: -40,
+    right: -40,
     height: 60,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    borderRadius: 18,
-    paddingHorizontal: 18,
-    flexDirection: "row",
+    borderTopLeftRadius: 200,
+    borderTopRightRadius: 200,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  orb: {
+    position: "absolute",
+  },
+
+  back: {
+    alignSelf: "flex-start",
+    marginBottom: 16,
+  },
+  backCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
-    gap: 14,
-    backgroundColor: "#F8FAFC",
+    justifyContent: "center",
   },
-  inputWrapperFocused: {
-    borderColor: PREMIUM.royal,
-    backgroundColor: PREMIUM.white,
-    shadowColor: PREMIUM.royal,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
+
+  heroContent: {
+    marginTop: 6,
   },
-  input: { 
-    flex: 1, 
-    color: PREMIUM.midnight, 
-    fontSize: 15, 
-    height: "100%",
-    paddingVertical: 0,
-    // PENTING UNTUK ANDROID:
-    textAlignVertical: "center", 
-    includeFontPadding: false, 
-    // Catatan: fontWeight sengaja TIDAK DIGUNAKAN di sini agar secureTextEntry tidak bug
-  },
-  
-  forgot: { alignSelf: "flex-end", marginTop: 16, marginBottom: 8 },
-  forgotText: { color: PREMIUM.royal, fontSize: 13, fontWeight: "800" },
-  
-  errorBox: {
+  brandRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    padding: 16,
-    marginTop: 20,
-    borderRadius: 14,
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
+    marginBottom: 18,
   },
-  errorText: { flex: 1, color: "#B91C1C", fontSize: 13, lineHeight: 20, fontWeight: "600" },
+  brandIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  brandText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: COLORS.white,
+    letterSpacing: -0.4,
+  },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: COLORS.white,
+    letterSpacing: -0.6,
+    lineHeight: 32,
+    maxWidth: 280,
+  },
+  heroSubtitle: {
+    fontSize: 13.5,
+    color: COLORS.textOnDarkSoft,
+    marginTop: 8,
+    lineHeight: 20,
+    maxWidth: 300,
+    fontWeight: "500",
+  },
+
+  cardWrap: {
+    marginTop: -36,
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.primaryMid,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.14,
+    shadowRadius: 32,
+    elevation: 10,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 18,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: COLORS.text,
+    letterSpacing: -0.5,
+  },
+  secureBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryRing,
+  },
+  secureText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.primaryBright,
+    letterSpacing: 0.3,
+  },
+
+  field: {
+    marginBottom: 14,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  labelLink: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: COLORS.primaryBright,
+  },
+
+  inputWrapper: {
+    height: INPUT_HEIGHT,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  input: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 15,
+    height: INPUT_HEIGHT,
+    marginLeft: 10,
+    paddingTop: 0,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+    textAlignVertical: "center",
+    includeFontPadding: false,
+  },
+
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    marginBottom: 14,
+    borderRadius: 10,
+    backgroundColor: COLORS.dangerBg,
+    borderWidth: 1,
+    borderColor: COLORS.dangerBorder,
+  },
+  errorText: {
+    flex: 1,
+    color: COLORS.danger,
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: "500",
+    marginLeft: 8,
+  },
 
   button: {
-    height: 62,
-    borderRadius: 18,
+    height: INPUT_HEIGHT,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 12,
-    shadowColor: PREMIUM.royal,
+    gap: 8,
+    marginTop: 4,
+    shadowColor: COLORS.primaryMid,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
     elevation: 8,
   },
-  buttonText: { 
-    color: PREMIUM.white, 
-    fontWeight: "900", 
-    fontSize: 17, 
+  buttonText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 16,
+    gap: 10,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerText: {
+    fontSize: 11,
+    color: COLORS.textSoft,
+    fontWeight: "600",
     letterSpacing: 0.5,
   },
 
-  registerRow: { 
-    flexDirection: "row", 
-    justifyContent: "center", 
-    marginTop: 40,
-    zIndex: 2,
+  secondaryButton: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.bgSoft,
   },
-  registerText: { 
-    color: "#64748B", 
-    fontSize: 14,
+  secondaryText: {
+    fontSize: 13.5,
+    color: COLORS.textMuted,
     fontWeight: "500",
   },
-  registerLink: { 
-    color: PREMIUM.royal, 
-    fontWeight: "900", 
-    fontSize: 14,
+  secondaryLink: {
+    color: COLORS.primaryBright,
+    fontWeight: "800",
   },
-  footer: { 
-    color: "#94A3B8", 
-    fontSize: 12, 
-    textAlign: "center", 
-    marginTop: 40, 
+
+  trustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 24,
+  },
+  trustText: {
+    fontSize: 11,
+    color: COLORS.textSoft,
     fontWeight: "500",
+    letterSpacing: 0.2,
+  },
+  copyright: {
+    fontSize: 11,
+    color: COLORS.textSoft,
+    textAlign: "center",
+    marginTop: 12,
     letterSpacing: 0.3,
-    zIndex: 2,
   },
 });

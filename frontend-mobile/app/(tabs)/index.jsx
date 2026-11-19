@@ -441,7 +441,7 @@ export default function CustomerDashboard() {
         api.get("/events"),
         api.get("/tickets"),
         api.get("/orders"),
-        api.get("/user/profile"),
+        api.get("/profile"),
       ]);
 
       const [

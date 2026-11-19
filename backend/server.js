@@ -1,4 +1,3 @@
-
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -8,12 +7,14 @@ dotenv.config();
 
 const app = express();
 
-
+const PORT = process.env.PORT || 5000;
+const HOST = "0.0.0.0";
 
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:8081",
   "http://127.0.0.1:8081",
+  "http://192.168.1.8:8081",
 ];
 
 app.use(
@@ -31,8 +32,6 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-
 
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -60,8 +59,6 @@ const uploadRoutes = require("./routes/uploadRoutes");
 const midtransRoutes = require("./routes/midtransRoutes");
 const seatRoutes = require("./routes/seatRoutes");
 const bannerRoutes = require("./routes/bannerRoutes");
-
-
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -91,14 +88,10 @@ app.use("/api/seats", seatRoutes);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/midtrans", midtransRoutes);
 
-
-
 app.use(
   "/uploads",
   express.static(path.join(process.cwd(), "uploads"))
 );
-
-
 
 app.get("/", (req, res) => {
   res.status(200).json({
@@ -114,8 +107,6 @@ app.get("/api/auth/test", (req, res) => {
   });
 });
 
-
-
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -123,12 +114,9 @@ app.use((req, res) => {
   });
 });
 
-
-
 app.use((err, req, res, next) => {
   console.error("SERVER ERROR:", err);
 
-  // Error CORS
   if (err.message && err.message.startsWith("CORS blocked:")) {
     return res.status(403).json({
       success: false,
@@ -142,19 +130,16 @@ app.use((err, req, res, next) => {
   });
 });
 
-
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log("");
   console.log("========================================");
   console.log("       TICKETVERSE BACKEND");
   console.log("========================================");
   console.log(`Server : http://localhost:${PORT}`);
-  console.log(`Auth   : http://localhost:${PORT}/api/auth`);
-  console.log(`Organizer : http://localhost:${PORT}/api/organizer`);
-  console.log(`Super Admin : http://localhost:${PORT}/api/sadmin`);
+  console.log(`Mobile : http://192.168.1.8:${PORT}`);
+  console.log(`Auth   : http://192.168.1.8:${PORT}/api/auth`);
+  console.log(`Organizer : http://192.168.1.8:${PORT}/api/organizer`);
+  console.log(`Super Admin : http://192.168.1.8:${PORT}/api/sadmin`);
   console.log("========================================");
 
   console.log("AUTH ENDPOINTS:");
